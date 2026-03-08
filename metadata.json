@@ -1,7 +1,0 @@
-{
-  "name": "CONCORDIA",
-  "description": "A voice-first, multi-agent AI workspace for human friction professionals.",
-  "requestFramePermissions": [
-    "microphone"
-  ]
-}

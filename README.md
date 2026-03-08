@@ -2,77 +2,155 @@
 
 **AI-Powered Live Mediation Platform**
 
-Concordia is a real-time conflict resolution application that guides two parties through structured mediation. It uses live audio conversation with an AI mediator to extract psychological indicators, map conflict primitives, identify common ground, and suggest actionable resolution pathways — all in real time as the parties speak.
+Created by **Giulio Catanzariti** — Team [TACITUS.me](https://tacitus.me)
 
-## What It Does
+---
 
-1. **Live Mediation Session** — Two parties sit in front of the app. The AI mediator (via live audio) guides a structured conversation, addressing each party individually, asking targeted questions, and de-escalating tension.
+## What is CONCORDIA?
 
-2. **Real-Time Case Structuring** — As parties speak, the system extracts Claims, Interests, Constraints, Leverage, Commitments, and Events and maps them to each party.
+CONCORDIA is a real-time AI mediation platform that guides two parties through structured conflict resolution using live audio conversation. An AI mediator listens, speaks, and adapts in real time — extracting psychological indicators, mapping conflict primitives, identifying common ground, and proposing actionable resolution pathways as the parties talk.
 
-3. **Psychological Indicators** — The system tracks emotional states (anxiety, defensiveness, openness, cooperativeness), communication styles, and engagement levels for each party in real time.
+The system is built on the **TACITUS ontology** for conflict representation, combining six structured primitive types (Claims, Interests, Constraints, Leverage, Commitments, Events) with real-time psychological profiling to give mediators and parties a live, evolving picture of the dispute.
 
-4. **Resolution Pathways** — After the discovery phase, the system identifies common ground, generates critical questions, and proposes structured resolution pathways drawing on established mediation frameworks (Principled Negotiation, Transformative, Narrative).
+## How It Works
+
+### Live Mediation Session
+
+Two parties sit in front of the app. The AI mediator guides a structured conversation through six phases:
+
+1. **Opening** — Welcome, ground rules, introductions
+2. **Discovery** — Individual statements from each party (one at a time)
+3. **Exploration** — Cross-referencing perspectives, identifying patterns and triggers
+4. **Negotiation** — Brainstorming options, exploring flexibility
+5. **Resolution** — Narrowing down viable pathways, testing agreements
+6. **Agreement** — Summarizing outcomes, confirming next steps
+
+### Real-Time Intelligence
+
+As the conversation progresses, the system provides:
+
+- **Psychological Profiles** — Emotional state, engagement level, communication style, cooperativeness, defensiveness, key needs, and risk factors for each party
+- **Case Structure** — Claims, Interests, Constraints, Leverage, Commitments, and Events extracted and attributed to each party
+- **Common Ground & Tension Points** — Automatically identified areas of agreement and disagreement
+- **Resolution Pathways** — Concrete proposals with trade-off analysis drawn from established mediation frameworks
+
+### Multi-Agent Architecture
+
+| Agent | Role |
+|-------|------|
+| **Listener** | Real-time voice I/O via Gemini Live Audio API. Maintains conversational flow, calls tools to update the workspace UI. |
+| **Profiler** | Assesses psychological indicators and emotional state of each party in real time. |
+| **Extractor** | Parses transcripts into structured JSON primitives (TACITUS ontology). |
+| **Advisor** | Analyzes the case graph to generate pathways, critical questions, and common ground. |
+
+### Additional Tools
+
+- **Advisor Chat** — Ask the Advisor Agent strategic questions about any conflict
+- **Audio Transcription** — Record and transcribe audio using Gemini
+- **Speech Engine** — Generate natural speech from text for advisor responses
+- **Resolution Library** — Reference established mediation frameworks (Principled Negotiation, Transformative, Narrative)
 
 ## Architecture
 
-- **Listener Agent** (Live Audio API) — Real-time voice I/O, maintains conversational flow, calls tools to update UI state
-- **Extraction Agent** — Parses transcripts into structured JSON primitives (TACITUS ontology)
-- **Advisor Agent** — Analyzes the case graph to generate pathways, critical questions, and common ground
-- **Profiler Agent** — Assesses psychological indicators and emotional state of each party
+```
+┌─────────────────────────────────────┐
+│           React Frontend            │
+│  (Workspace, Chat, TTS, Transcribe) │
+│         ↕ REST + WebSocket          │
+├─────────────────────────────────────┤
+│         Express.js Backend          │
+│   API routes + WebSocket proxy      │
+│         ↕ Vertex AI SDK             │
+├─────────────────────────────────────┤
+│      Google Cloud Vertex AI         │
+│  Gemini Live Audio, Flash, TTS      │
+└─────────────────────────────────────┘
+```
+
+All AI calls are server-side. The frontend communicates with the backend via REST API (`/api/*`) and WebSocket (`/api/live` for live audio sessions). Credentials never reach the browser.
+
+## Tech Stack
+
+- **Frontend:** React 19, TypeScript, Tailwind CSS 4, Framer Motion
+- **Backend:** Express.js with WebSocket support (ws)
+- **AI:** Google Gemini via Vertex AI (Live Audio, Flash, TTS)
+- **Deployment:** Docker, Google Cloud Run
+- **State:** Client-side with localStorage persistence
 
 ## Run Locally
 
-**Prerequisites:** Node.js 18+
+**Prerequisites:** Node.js 18+, a Google Cloud service account with Vertex AI API enabled.
 
 ```bash
 npm install
 ```
 
-Create a `.env.local` file with your Gemini API key:
+Create a `.env.local` file:
 
-```
-GEMINI_API_KEY=your-api-key-here
+```bash
+# Paste your full service account JSON (single line)
+GOOGLE_SERVICE_ACCOUNT_JSON='{"type":"service_account","project_id":"your-project",...}'
+GOOGLE_CLOUD_PROJECT=your-project-id
+GOOGLE_CLOUD_LOCATION=us-central1
 ```
 
-Start the development server:
+Start the backend server (required for API calls):
+
+```bash
+npx tsx server.ts
+```
+
+In a separate terminal, start the frontend dev server:
 
 ```bash
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Open [http://localhost:3000](http://localhost:3000). The Vite dev server proxies `/api/*` requests to the backend on port 8080.
+
+## Deploy with Docker
+
+```bash
+docker build -t concordia .
+
+docker run -p 8080:8080 \
+  -e GOOGLE_SERVICE_ACCOUNT_JSON='{"type":"service_account",...}' \
+  -e GOOGLE_CLOUD_PROJECT=your-project-id \
+  -e GOOGLE_CLOUD_LOCATION=us-central1 \
+  concordia
+```
 
 ## Deploy to Google Cloud Run
 
-### Using the Dockerfile
-
 ```bash
-# Build the container (pass your API key as a build arg)
-gcloud builds submit --tag gcr.io/YOUR_PROJECT/concordia \
-  --build-arg GEMINI_API_KEY=your-api-key
+# Build and push
+gcloud builds submit --tag gcr.io/YOUR_PROJECT/concordia
 
-# Deploy to Cloud Run
+# Deploy (pass credentials as env var)
 gcloud run deploy concordia \
   --image gcr.io/YOUR_PROJECT/concordia \
   --platform managed \
   --region us-central1 \
-  --allow-unauthenticated
+  --allow-unauthenticated \
+  --set-env-vars "GOOGLE_CLOUD_PROJECT=YOUR_PROJECT,GOOGLE_CLOUD_LOCATION=us-central1" \
+  --set-secrets "GOOGLE_SERVICE_ACCOUNT_JSON=concordia-sa-key:latest"
 ```
 
-### Using Docker locally
+## Environment Variables
 
-```bash
-docker build --build-arg GEMINI_API_KEY=your-api-key -t concordia .
-docker run -p 8080:8080 concordia
-```
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | Yes* | Full JSON content of your GCP service account key |
+| `GOOGLE_CLOUD_PROJECT` | Yes* | Google Cloud project ID |
+| `GOOGLE_CLOUD_LOCATION` | No | Vertex AI region (default: `us-central1`) |
+| `USE_VERTEX_AI` | No | Set to `false` to use a Gemini API key instead |
+| `GEMINI_API_KEY` | No | Required only if `USE_VERTEX_AI=false` |
+| `MODEL_LIVE` | No | Live audio model (default: `gemini-2.0-flash-live-001`) |
+| `MODEL_TEXT` | No | Text/chat model (default: `gemini-2.0-flash`) |
+| `MODEL_TTS` | No | TTS model (default: `gemini-2.5-flash-preview-tts`) |
+| `MODEL_TRANSCRIBE` | No | Transcription model (default: `gemini-2.0-flash`) |
 
-## Tech Stack
-
-- **Frontend:** React 19, TypeScript, Tailwind CSS 4, Framer Motion
-- **AI:** Gemini Live Audio API, Gemini Pro (extraction, analysis, pathways)
-- **Deployment:** Docker, Google Cloud Run
-- **State:** Client-side with localStorage persistence
+\* Not required if `USE_VERTEX_AI=false` and `GEMINI_API_KEY` is provided.
 
 ## License
 
