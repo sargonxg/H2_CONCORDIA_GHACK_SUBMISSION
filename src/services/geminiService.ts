@@ -61,7 +61,7 @@ export const getLiveSession = (
             sendRealtimeInput: (input: any) => {
               if (ws.readyState === WebSocket.OPEN) {
                 ws.send(
-                  JSON.stringify({ type: "audio", media: input.media }),
+                  JSON.stringify({ type: "audio", audio: input.audio }),
                 );
               }
             },

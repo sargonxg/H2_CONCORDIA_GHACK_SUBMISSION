@@ -232,7 +232,7 @@ wss.on("connection", (ws: WebSocket) => {
         if (!liveSession) return; // Session not ready yet, drop frame
         try {
           liveSession.sendRealtimeInput({
-            media: msg.media,
+            audio: msg.audio,
           });
         } catch (e) {
           // Session may have closed

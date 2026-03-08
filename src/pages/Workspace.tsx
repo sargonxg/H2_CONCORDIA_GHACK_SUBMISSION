@@ -571,7 +571,7 @@ export default function Workspace() {
         if (isSessionOpen()) {
           try {
             sessionRef.current.sendRealtimeInput({
-              media: { data: base64, mimeType: "audio/pcm;rate=16000" },
+              audio: { data: base64, mimeType: "audio/pcm;rate=16000" },
             });
           } catch (e) {
             // Session closed mid-send, ignore
