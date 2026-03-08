@@ -14,90 +14,138 @@ export const getLiveSession = (
 ): Promise<any> => {
   return new Promise((resolve, reject) => {
     const protocol = location.protocol === "https:" ? "wss:" : "ws:";
-    const ws = new WebSocket(`${protocol}//${location.host}/api/live`);
+    const wsUrl = `${protocol}//${location.host}/api/live`;
 
+    let ws: WebSocket;
     let resolved = false;
+    let intentionallyClosed = false;
+    let reconnectAttempts = 0;
+    const MAX_RECONNECT_ATTEMPTS = 5;
 
-    ws.onopen = () => {
-      ws.send(
-        JSON.stringify({
-          type: "start",
-          context,
-          mediatorProfile,
-          partyNames,
-        }),
-      );
-    };
+    // The session handle returned to the caller — wraps the WebSocket
+    let sessionHandle: any = null;
 
-    ws.onmessage = (event: MessageEvent) => {
-      try {
-        const msg = JSON.parse(event.data);
+    const connectWs = () => {
+      ws = new WebSocket(wsUrl);
 
-        if (msg.type === "open" && !resolved) {
-          resolved = true;
-          callbacks.onopen?.();
-          resolve({
-            sendRealtimeInput: (input: any) => {
-              if (ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type: "audio", media: input.media }));
-              }
-            },
-            sendToolResponse: (resp: any) => {
-              if (ws.readyState === WebSocket.OPEN) {
-                ws.send(
-                  JSON.stringify({
-                    type: "toolResponse",
-                    functionResponses: resp.functionResponses,
-                  }),
-                );
-              }
-            },
-            close: () => {
-              if (ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type: "close" }));
-              }
-              ws.close();
-            },
-          });
-        } else if (msg.type === "message") {
-          callbacks.onmessage?.(msg.data);
-        } else if (msg.type === "goAway") {
-          // Server is about to disconnect but will reconnect automatically
-          console.log("[Live] Server sent goAway, reconnection in progress...");
-          callbacks.onreconnecting?.();
-        } else if (msg.type === "reconnecting") {
-          // Server is reconnecting with session resumption
-          console.log("[Live] Server is reconnecting session...");
-          callbacks.onreconnecting?.();
-        } else if (msg.type === "error") {
-          if (!resolved) {
+      ws.onopen = () => {
+        reconnectAttempts = 0; // Reset on successful connection
+        ws.send(
+          JSON.stringify({
+            type: "start",
+            context,
+            mediatorProfile,
+            partyNames,
+          }),
+        );
+      };
+
+      ws.onmessage = (event: MessageEvent) => {
+        try {
+          const msg = JSON.parse(event.data);
+
+          if (msg.type === "open" && !resolved) {
             resolved = true;
-            reject(new Error(msg.error));
+            callbacks.onopen?.();
+            sessionHandle = {
+              sendRealtimeInput: (input: any) => {
+                if (ws.readyState === WebSocket.OPEN) {
+                  ws.send(
+                    JSON.stringify({ type: "audio", media: input.media }),
+                  );
+                }
+              },
+              sendToolResponse: (resp: any) => {
+                if (ws.readyState === WebSocket.OPEN) {
+                  ws.send(
+                    JSON.stringify({
+                      type: "toolResponse",
+                      functionResponses: resp.functionResponses,
+                    }),
+                  );
+                }
+              },
+              close: () => {
+                intentionallyClosed = true;
+                if (ws.readyState === WebSocket.OPEN) {
+                  ws.send(JSON.stringify({ type: "close" }));
+                }
+                ws.close();
+              },
+            };
+            resolve(sessionHandle);
+          } else if (msg.type === "reconnected") {
+            // Server successfully reconnected the Gemini session
+            console.log("[Live] Server reconnected session successfully");
+            callbacks.onreconnected?.();
+          } else if (msg.type === "message") {
+            callbacks.onmessage?.(msg.data);
+          } else if (msg.type === "goAway") {
+            console.log(
+              "[Live] Server sent goAway, reconnection in progress...",
+            );
+            callbacks.onreconnecting?.();
+          } else if (msg.type === "reconnecting") {
+            console.log("[Live] Server is reconnecting session...");
+            callbacks.onreconnecting?.();
+          } else if (msg.type === "error") {
+            if (!resolved) {
+              resolved = true;
+              reject(new Error(msg.error));
+            }
+            // Don't call onerror for recoverable errors — the server may reconnect
+            console.error("[Live] Server error:", msg.error);
+          } else if (msg.type === "close") {
+            callbacks.onclose?.();
           }
-          callbacks.onerror?.(new Error(msg.error));
-        } else if (msg.type === "close") {
+        } catch (e) {
+          console.error("WebSocket message parse error:", e);
+        }
+      };
+
+      ws.onerror = (err: Event) => {
+        console.error("[Live] WebSocket error:", err);
+        if (!resolved) {
+          resolved = true;
+          reject(new Error("WebSocket connection failed"));
+        }
+        // Don't call callbacks.onerror here — onclose will fire next and handle reconnection
+      };
+
+      ws.onclose = () => {
+        if (intentionallyClosed) {
+          // User explicitly stopped the session
+          callbacks.onclose?.();
+          return;
+        }
+
+        if (!resolved) {
+          resolved = true;
+          reject(new Error("WebSocket closed before session started"));
+          return;
+        }
+
+        // Unexpected close — attempt client-side WebSocket reconnection
+        if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+          reconnectAttempts++;
+          const delay = Math.min(1000 * Math.pow(2, reconnectAttempts - 1), 8000);
+          console.log(
+            `[Live] WebSocket closed unexpectedly, reconnecting in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`,
+          );
+          callbacks.onreconnecting?.();
+          setTimeout(() => {
+            if (!intentionallyClosed) {
+              connectWs();
+            }
+          }, delay);
+        } else {
+          console.error("[Live] Max reconnection attempts reached");
           callbacks.onclose?.();
         }
-      } catch (e) {
-        console.error("WebSocket message parse error:", e);
-      }
+      };
     };
 
-    ws.onerror = (err: Event) => {
-      if (!resolved) {
-        resolved = true;
-        reject(new Error("WebSocket connection failed"));
-      }
-      callbacks.onerror?.(err);
-    };
-
-    ws.onclose = () => {
-      if (!resolved) {
-        resolved = true;
-        reject(new Error("WebSocket closed before session started"));
-      }
-      callbacks.onclose?.();
-    };
+    connectWs();
   });
 };
 
