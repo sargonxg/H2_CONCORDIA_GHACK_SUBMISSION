@@ -285,7 +285,11 @@ export default function Workspace() {
     tensionPoints: string[];
   } | null>(null);
 
+  const [demoMode, setDemoMode] = useState(false);
+  const demoTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
   const sessionRef = useRef<any>(null);
+  const sessionClosingRef = useRef(false);
   const audioContextRef = useRef<AudioContext | null>(null);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
@@ -335,9 +339,14 @@ export default function Workspace() {
     );
   };
 
+  const isSessionOpen = () => {
+    return sessionRef.current && !sessionClosingRef.current;
+  };
+
   const startSession = async () => {
     try {
       setStatus("CONNECTING");
+      sessionClosingRef.current = false;
 
       const currentGraphContext = JSON.stringify(
         {
@@ -356,6 +365,8 @@ export default function Workspace() {
             startAudioCapture();
           },
           onmessage: async (message: any) => {
+            if (sessionClosingRef.current) return;
+
             const base64Audio =
               message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
             if (base64Audio) {
@@ -434,21 +445,27 @@ export default function Workspace() {
                   };
                 });
 
-                if (sessionRef.current) {
-                  sessionRef.current.sendToolResponse({
-                    functionResponses: responses,
-                  });
+                if (isSessionOpen()) {
+                  try {
+                    sessionRef.current.sendToolResponse({
+                      functionResponses: responses,
+                    });
+                  } catch (e) {
+                    console.warn("Failed to send tool response:", e);
+                  }
                 }
               }
             }
           },
           onclose: () => {
+            sessionClosingRef.current = true;
             setStatus("DISCONNECTED");
             setIsRecording(false);
             stopAudioCapture();
           },
           onerror: (err: any) => {
             console.error("Live API Error:", err);
+            sessionClosingRef.current = true;
             setStatus("ERROR");
             setIsRecording(false);
             stopAudioCapture();
@@ -469,13 +486,21 @@ export default function Workspace() {
   };
 
   const stopSession = () => {
+    sessionClosingRef.current = true;
+    stopAudioCapture();
     if (sessionRef.current) {
-      sessionRef.current.close();
+      try {
+        sessionRef.current.close();
+      } catch (e) {
+        console.warn("Error closing session:", e);
+      }
       sessionRef.current = null;
     }
+    demoTimersRef.current.forEach(clearTimeout);
+    demoTimersRef.current = [];
     setIsRecording(false);
+    setDemoMode(false);
     setStatus("IDLE");
-    stopAudioCapture();
 
     if (activeCase?.transcript) {
       handleSimulateExtraction();
@@ -514,10 +539,15 @@ export default function Workspace() {
 
         const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
 
-        if (sessionRef.current) {
-          sessionRef.current.sendRealtimeInput({
-            media: { data: base64, mimeType: "audio/pcm;rate=16000" },
-          });
+        if (isSessionOpen()) {
+          try {
+            sessionRef.current.sendRealtimeInput({
+              media: { data: base64, mimeType: "audio/pcm;rate=16000" },
+            });
+          } catch (e) {
+            // Session closed mid-send, stop audio capture
+            stopAudioCapture();
+          }
         }
       };
     } catch (err) {
@@ -567,6 +597,418 @@ export default function Workspace() {
     } catch (err) {
       console.error("Error playing audio:", err);
     }
+  };
+
+  const startDemoSession = () => {
+    setDemoMode(true);
+    setIsRecording(true);
+    setStatus("DEMO");
+
+    const partyA = activeCase?.partyAName || "Party A";
+    const partyB = activeCase?.partyBName || "Party B";
+
+    const demoScript = [
+      {
+        delay: 0,
+        transcript: `[Concordia]: Welcome to this mediation session. I'm here to help ${partyA} and ${partyB} work through your concerns in a safe, structured environment. Let me start by setting some ground rules: we'll maintain mutual respect, one person speaks at a time, and everything discussed here is confidential.`,
+        state: {
+          phase: "Opening",
+          targetActor: "Both",
+          currentAction: "Setting ground rules and establishing safe space",
+          missingItems: [
+            `${partyA}'s opening statement`,
+            `${partyB}'s opening statement`,
+            "Core dispute details",
+            "Timeline of events",
+          ],
+          structuredItems: [],
+          partyProfiles: {
+            partyA: {
+              emotionalState: "Guarded",
+              engagementLevel: "Medium",
+              communicationStyle: "Assertive",
+              cooperativeness: 45,
+              defensiveness: 55,
+              keyNeeds: ["Recognition", "Fairness"],
+              riskFactors: ["Fixed position"],
+            },
+            partyB: {
+              emotionalState: "Anxious",
+              engagementLevel: "Medium",
+              communicationStyle: "Passive",
+              cooperativeness: 50,
+              defensiveness: 60,
+              keyNeeds: ["Security", "Autonomy"],
+              riskFactors: ["Withdrawal risk"],
+            },
+          },
+          commonGround: [],
+          tensionPoints: [],
+        },
+      },
+      {
+        delay: 4000,
+        transcript: `[Concordia]: ${partyA}, could you please start by telling me, in your own words, what brought you here today?`,
+        state: {
+          phase: "Discovery",
+          targetActor: partyA,
+          currentAction: `Inviting ${partyA} to share their perspective first`,
+          missingItems: [
+            `${partyA}'s narrative`,
+            `${partyB}'s narrative`,
+            "Emotional dimensions",
+            "History of resolution attempts",
+          ],
+          structuredItems: [
+            {
+              topic: "Session opened",
+              summary: "Ground rules established, both parties present",
+              actor: "Concordia",
+            },
+          ],
+          partyProfiles: {
+            partyA: {
+              emotionalState: "Guarded",
+              engagementLevel: "High",
+              communicationStyle: "Assertive",
+              cooperativeness: 48,
+              defensiveness: 52,
+              keyNeeds: ["Recognition", "Fairness"],
+              riskFactors: ["Fixed position"],
+            },
+            partyB: {
+              emotionalState: "Anxious",
+              engagementLevel: "Medium",
+              communicationStyle: "Passive",
+              cooperativeness: 50,
+              defensiveness: 60,
+              keyNeeds: ["Security", "Autonomy"],
+              riskFactors: ["Withdrawal risk"],
+            },
+          },
+          commonGround: [],
+          tensionPoints: [],
+        },
+      },
+      {
+        delay: 8000,
+        transcript: `[Speaker]: The main issue is that we had an agreement about responsibilities, but it hasn't been honored. I feel like my contributions are being overlooked and the terms we initially set have shifted without my input.`,
+        state: {
+          phase: "Discovery",
+          targetActor: partyA,
+          currentAction: `Processing ${partyA}'s opening statement, identifying claims and emotions`,
+          missingItems: [
+            `${partyB}'s perspective`,
+            "Specific agreement details",
+            "Timeline of changes",
+            "Impact assessment",
+          ],
+          structuredItems: [
+            {
+              topic: "Session opened",
+              summary: "Ground rules established",
+              actor: "Concordia",
+            },
+            {
+              topic: "Broken agreement",
+              summary: `${partyA} claims responsibilities agreement not honored`,
+              actor: partyA,
+            },
+            {
+              topic: "Feeling overlooked",
+              summary: `${partyA} feels contributions are not recognized`,
+              actor: partyA,
+            },
+          ],
+          partyProfiles: {
+            partyA: {
+              emotionalState: "Frustrated",
+              engagementLevel: "High",
+              communicationStyle: "Assertive",
+              cooperativeness: 42,
+              defensiveness: 65,
+              keyNeeds: ["Recognition", "Fairness", "Respect"],
+              riskFactors: ["Escalation tendency", "Fixed position"],
+            },
+            partyB: {
+              emotionalState: "Anxious",
+              engagementLevel: "Medium",
+              communicationStyle: "Passive",
+              cooperativeness: 50,
+              defensiveness: 60,
+              keyNeeds: ["Security", "Autonomy"],
+              riskFactors: ["Withdrawal risk"],
+            },
+          },
+          commonGround: [],
+          tensionPoints: [
+            "Disputed agreement terms",
+            "Perceived lack of recognition",
+          ],
+        },
+      },
+      {
+        delay: 13000,
+        transcript: `[Concordia]: I hear you, ${partyA}. It sounds like you're feeling frustrated because commitments that were important to you haven't been upheld. That's a valid concern. ${partyB}, I'd like to hear your perspective. How do you see the situation?`,
+        state: {
+          phase: "Discovery",
+          targetActor: partyB,
+          currentAction: `Validated ${partyA}'s emotions, pivoting to ${partyB} for their narrative`,
+          missingItems: [
+            `${partyB}'s full perspective`,
+            "Specific agreement details from both sides",
+            "What resolution attempts were made",
+          ],
+          structuredItems: [
+            {
+              topic: "Session opened",
+              summary: "Ground rules established",
+              actor: "Concordia",
+            },
+            {
+              topic: "Broken agreement",
+              summary: `${partyA} claims responsibilities agreement not honored`,
+              actor: partyA,
+            },
+            {
+              topic: "Feeling overlooked",
+              summary: `${partyA} feels contributions are not recognized`,
+              actor: partyA,
+            },
+            {
+              topic: "Emotional validation",
+              summary: `Concordia acknowledged ${partyA}'s frustration`,
+              actor: "Concordia",
+            },
+          ],
+          partyProfiles: {
+            partyA: {
+              emotionalState: "Frustrated",
+              engagementLevel: "High",
+              communicationStyle: "Assertive",
+              cooperativeness: 48,
+              defensiveness: 58,
+              keyNeeds: ["Recognition", "Fairness", "Respect"],
+              riskFactors: ["Escalation tendency"],
+            },
+            partyB: {
+              emotionalState: "Anxious",
+              engagementLevel: "High",
+              communicationStyle: "Passive",
+              cooperativeness: 52,
+              defensiveness: 55,
+              keyNeeds: ["Security", "Autonomy"],
+              riskFactors: ["Withdrawal risk", "Avoidance"],
+            },
+          },
+          commonGround: [
+            "Both parties acknowledge an agreement existed",
+          ],
+          tensionPoints: [
+            "Disputed agreement terms",
+            "Perceived lack of recognition",
+          ],
+        },
+      },
+      {
+        delay: 18000,
+        transcript: `[Speaker]: I understand their frustration, but the situation changed. New constraints came up that made the original plan unworkable. I tried to adapt, but I didn't know how to bring it up without causing conflict. I do value what they contribute.`,
+        state: {
+          phase: "Exploration",
+          targetActor: "Both",
+          currentAction: "Cross-referencing both narratives, identifying shared values and communication gaps",
+          missingItems: [
+            "Nature of the new constraints",
+            "Why communication broke down",
+            "What a workable arrangement looks like for both",
+          ],
+          structuredItems: [
+            {
+              topic: "Session opened",
+              summary: "Ground rules established",
+              actor: "Concordia",
+            },
+            {
+              topic: "Broken agreement",
+              summary: `${partyA} claims responsibilities agreement not honored`,
+              actor: partyA,
+            },
+            {
+              topic: "Feeling overlooked",
+              summary: `${partyA} feels contributions are not recognized`,
+              actor: partyA,
+            },
+            {
+              topic: "Changed circumstances",
+              summary: `${partyB} says new constraints made original plan unworkable`,
+              actor: partyB,
+            },
+            {
+              topic: "Communication gap",
+              summary: `${partyB} feared raising the issue would cause conflict`,
+              actor: partyB,
+            },
+            {
+              topic: "Mutual value",
+              summary: `${partyB} explicitly values ${partyA}'s contributions`,
+              actor: partyB,
+            },
+          ],
+          partyProfiles: {
+            partyA: {
+              emotionalState: "Open",
+              engagementLevel: "High",
+              communicationStyle: "Analytical",
+              cooperativeness: 62,
+              defensiveness: 40,
+              keyNeeds: ["Recognition", "Fairness", "Communication"],
+              riskFactors: ["May fixate on original terms"],
+            },
+            partyB: {
+              emotionalState: "Hopeful",
+              engagementLevel: "High",
+              communicationStyle: "Collaborative",
+              cooperativeness: 68,
+              defensiveness: 35,
+              keyNeeds: ["Autonomy", "Flexibility", "Harmony"],
+              riskFactors: ["Conflict avoidance may mask issues"],
+            },
+          },
+          commonGround: [
+            "Both acknowledge an agreement existed",
+            `${partyB} values ${partyA}'s contributions`,
+            "Both want a workable arrangement going forward",
+          ],
+          tensionPoints: [
+            "Communication breakdown around changing terms",
+            "Unilateral decision-making",
+          ],
+        },
+      },
+      {
+        delay: 24000,
+        transcript: `[Concordia]: This is very promising. I'm noticing that you both actually share a core value here: you both want a fair arrangement that works. The challenge seems to be around communication when circumstances change. ${partyA}, how would you feel about establishing a process where changes are discussed before they're implemented?`,
+        state: {
+          phase: "Negotiation",
+          targetActor: partyA,
+          currentAction: "Testing a process-based solution that addresses both parties' needs",
+          missingItems: [
+            "Specific process for handling changes",
+            "Frequency of check-ins",
+            "How to handle urgent changes",
+          ],
+          structuredItems: [
+            {
+              topic: "Session opened",
+              summary: "Ground rules established",
+              actor: "Concordia",
+            },
+            {
+              topic: "Broken agreement",
+              summary: `${partyA} claims responsibilities agreement not honored`,
+              actor: partyA,
+            },
+            {
+              topic: "Changed circumstances",
+              summary: `${partyB} says new constraints made original plan unworkable`,
+              actor: partyB,
+            },
+            {
+              topic: "Communication gap",
+              summary: `${partyB} feared raising the issue would cause conflict`,
+              actor: partyB,
+            },
+            {
+              topic: "Mutual value",
+              summary: `${partyB} explicitly values ${partyA}'s contributions`,
+              actor: partyB,
+            },
+            {
+              topic: "Shared value identified",
+              summary: "Both want fairness and a workable arrangement",
+              actor: "Both",
+            },
+            {
+              topic: "Process proposal",
+              summary: "Concordia suggests a change-discussion protocol",
+              actor: "Concordia",
+            },
+          ],
+          partyProfiles: {
+            partyA: {
+              emotionalState: "Hopeful",
+              engagementLevel: "High",
+              communicationStyle: "Collaborative",
+              cooperativeness: 72,
+              defensiveness: 28,
+              keyNeeds: ["Process", "Transparency", "Recognition"],
+              riskFactors: [],
+            },
+            partyB: {
+              emotionalState: "Hopeful",
+              engagementLevel: "High",
+              communicationStyle: "Collaborative",
+              cooperativeness: 75,
+              defensiveness: 25,
+              keyNeeds: ["Flexibility", "Harmony", "Structure"],
+              riskFactors: [],
+            },
+          },
+          commonGround: [
+            "Both want a fair, workable arrangement",
+            `${partyB} values ${partyA}'s contributions`,
+            "Both open to establishing a communication process",
+            "Both want to prevent future misunderstandings",
+          ],
+          tensionPoints: ["Details of implementation still to be negotiated"],
+        },
+      },
+    ];
+
+    let stepIndex = 0;
+    const runStep = () => {
+      if (stepIndex >= demoScript.length) {
+        demoTimersRef.current.forEach(clearTimeout);
+        demoTimersRef.current = [];
+        return;
+      }
+      const step = demoScript[stepIndex];
+      if (activeCaseIdRef.current) {
+        setCases((prev) =>
+          prev.map((c) =>
+            c.id === activeCaseIdRef.current
+              ? {
+                  ...c,
+                  transcript:
+                    c.transcript +
+                    (c.transcript ? "\n\n" : "") +
+                    step.transcript,
+                }
+              : c,
+          ),
+        );
+      }
+      setLiveMediationState(step.state as any);
+      stepIndex++;
+    };
+
+    // Run first step immediately
+    runStep();
+
+    // Schedule remaining steps
+    demoTimersRef.current = [];
+    demoScript.slice(1).forEach((step) => {
+      const timer = setTimeout(() => {
+        runStep();
+      }, step.delay);
+      demoTimersRef.current.push(timer);
+    });
+
+    // Auto-stop after the last step
+    const endTimer = setTimeout(() => {
+      setStatus("DEMO COMPLETE");
+    }, demoScript[demoScript.length - 1].delay + 2000);
+    demoTimersRef.current.push(endTimer);
   };
 
   const handleSimulateExtraction = async () => {
@@ -873,31 +1315,45 @@ export default function Workspace() {
           <div className="flex items-center gap-2 text-sm font-mono bg-[var(--color-bg)] px-3 py-1.5 rounded-md border border-[var(--color-border)]">
             <span
               className={`w-2 h-2 rounded-full ${
-                isRecording
-                  ? "bg-red-500 animate-pulse"
-                  : status === "ANALYZING"
-                    ? "bg-amber-500 animate-pulse"
-                    : "bg-gray-500"
+                demoMode
+                  ? "bg-amber-500 animate-pulse"
+                  : isRecording
+                    ? "bg-red-500 animate-pulse"
+                    : status === "ANALYZING"
+                      ? "bg-amber-500 animate-pulse"
+                      : "bg-gray-500"
               }`}
             ></span>
             {status}
           </div>
 
-          <button
-            onClick={isRecording ? stopSession : startSession}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium transition-all ${
-              isRecording
-                ? "bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 shadow-lg shadow-red-500/10"
-                : "bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] shadow-lg shadow-[var(--color-accent)]/20"
-            }`}
-          >
-            {isRecording ? (
+          {isRecording ? (
+            <button
+              onClick={stopSession}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium transition-all bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 shadow-lg shadow-red-500/10"
+            >
               <Square className="w-4 h-4" />
-            ) : (
-              <Mic className="w-4 h-4" />
-            )}
-            {isRecording ? "End Session" : "Start Live Session"}
-          </button>
+              End Session
+            </button>
+          ) : (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={startSession}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium transition-all bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] shadow-lg shadow-[var(--color-accent)]/20"
+              >
+                <Mic className="w-4 h-4" />
+                Start Live Session
+              </button>
+              <button
+                onClick={startDemoSession}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-all bg-amber-500/10 text-amber-400 border border-amber-500/30 hover:bg-amber-500/20 text-sm"
+                title="Run a simulated demo session"
+              >
+                <Activity className="w-4 h-4" />
+                Demo
+              </button>
+            </div>
+          )}
         </div>
       </header>
 
