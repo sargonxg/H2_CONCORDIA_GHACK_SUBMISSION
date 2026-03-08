@@ -470,6 +470,10 @@ export default function Workspace() {
             setIsRecording(false);
             stopAudioCapture();
           },
+          onreconnecting: () => {
+            // Server is auto-reconnecting via session resumption — keep UI alive
+            setStatus("RECONNECTING");
+          },
         },
         currentGraphContext,
         mediatorProfile,
@@ -1317,11 +1321,13 @@ export default function Workspace() {
               className={`w-2 h-2 rounded-full ${
                 demoMode
                   ? "bg-amber-500 animate-pulse"
-                  : isRecording
-                    ? "bg-red-500 animate-pulse"
-                    : status === "ANALYZING"
-                      ? "bg-amber-500 animate-pulse"
-                      : "bg-gray-500"
+                  : status === "RECONNECTING"
+                    ? "bg-yellow-500 animate-pulse"
+                    : isRecording
+                      ? "bg-red-500 animate-pulse"
+                      : status === "ANALYZING"
+                        ? "bg-amber-500 animate-pulse"
+                        : "bg-gray-500"
               }`}
             ></span>
             {status}

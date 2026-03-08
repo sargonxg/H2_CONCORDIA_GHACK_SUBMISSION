@@ -96,6 +96,106 @@ const wss = new WebSocketServer({ server, path: "/api/live" });
 wss.on("connection", (ws: WebSocket) => {
   let liveSession: any = null;
   let sessionClosing = false;
+  let latestResumptionHandle: string | null = null;
+  // Store params for reconnection
+  let sessionParams: {
+    context: string;
+    mediatorProfile: any;
+    partyNames: any;
+  } | null = null;
+
+  const connectLiveSession = async (resumptionHandle?: string) => {
+    const params = sessionParams!;
+    try {
+      liveSession = await createLiveSession(
+        {
+          onopen: () => {
+            console.log("[Live] Session opened");
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: "open" }));
+            }
+          },
+          onmessage: (message: any) => {
+            if (sessionClosing) return;
+
+            // Track session resumption handles for reconnection
+            if (message.sessionResumptionUpdate) {
+              latestResumptionHandle =
+                message.sessionResumptionUpdate.newHandle || null;
+            }
+
+            // Handle goAway: server is about to disconnect, reconnect proactively
+            if (message.goAway) {
+              console.log("[Live] Received goAway, will reconnect");
+              if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: "goAway" }));
+              }
+              // Reconnect automatically with resumption handle
+              if (latestResumptionHandle) {
+                setTimeout(() => {
+                  if (!sessionClosing) {
+                    console.log("[Live] Reconnecting after goAway...");
+                    connectLiveSession(latestResumptionHandle!);
+                  }
+                }, 500);
+              }
+              return;
+            }
+
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: "message", data: message }));
+            }
+          },
+          onerror: (err: any) => {
+            console.error("[Live] Session error:", err);
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(
+                JSON.stringify({
+                  type: "error",
+                  error: String(err?.message || err),
+                  resumptionHandle: latestResumptionHandle,
+                }),
+              );
+            }
+          },
+          onclose: () => {
+            console.log("[Live] Session closed by server");
+            // If not intentionally closing, try to reconnect
+            if (!sessionClosing && latestResumptionHandle) {
+              console.log("[Live] Unexpected close, attempting reconnect...");
+              if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: "reconnecting" }));
+              }
+              setTimeout(() => {
+                if (!sessionClosing) {
+                  connectLiveSession(latestResumptionHandle!);
+                }
+              }, 1000);
+              return;
+            }
+            sessionClosing = true;
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: "close" }));
+            }
+          },
+        },
+        params.context,
+        params.mediatorProfile,
+        params.partyNames,
+        resumptionHandle,
+      );
+    } catch (err: any) {
+      console.error("[Live] Failed to create session:", err);
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(
+          JSON.stringify({
+            type: "error",
+            error: `Failed to connect to Live API: ${err?.message || err}`,
+          }),
+        );
+      }
+    }
+  };
 
   ws.on("message", async (raw: Buffer) => {
     try {
@@ -103,43 +203,19 @@ wss.on("connection", (ws: WebSocket) => {
 
       if (msg.type === "start") {
         sessionClosing = false;
-        const { context, mediatorProfile, partyNames } = msg;
-
-        liveSession = await createLiveSession(
-          {
-            onopen: () => {
-              if (ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type: "open" }));
-              }
-            },
-            onmessage: (message: any) => {
-              if (sessionClosing) return;
-              if (ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type: "message", data: message }));
-              }
-            },
-            onerror: (err: any) => {
-              console.error("Live session error:", err);
-              if (ws.readyState === WebSocket.OPEN) {
-                ws.send(
-                  JSON.stringify({
-                    type: "error",
-                    error: String(err?.message || err),
-                  }),
-                );
-              }
-            },
-            onclose: () => {
-              sessionClosing = true;
-              if (ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type: "close" }));
-              }
-            },
+        latestResumptionHandle = null;
+        sessionParams = {
+          context: msg.context || "",
+          mediatorProfile: msg.mediatorProfile || {
+            voice: "Zephyr",
+            approach: "Facilitative",
           },
-          context || "",
-          mediatorProfile || { voice: "Zephyr", approach: "Facilitative" },
-          partyNames || { partyA: "Party A", partyB: "Party B" },
-        );
+          partyNames: msg.partyNames || {
+            partyA: "Party A",
+            partyB: "Party B",
+          },
+        };
+        await connectLiveSession(msg.resumptionHandle);
       } else if (msg.type === "audio" && liveSession && !sessionClosing) {
         try {
           liveSession.sendRealtimeInput({

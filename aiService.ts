@@ -25,8 +25,10 @@ const aiConfig: any = useVertexAI
 const ai = new GoogleGenAI(aiConfig);
 
 // Model names — configurable via env vars
+// NOTE: gemini-2.0-flash-live-001 was shut down Dec 2025.
+// gemini-live-2.5-flash-native-audio is the current GA Live API model.
 const MODEL_LIVE =
-  process.env.MODEL_LIVE || "gemini-2.0-flash-live-001";
+  process.env.MODEL_LIVE || "gemini-live-2.5-flash-native-audio";
 const MODEL_TEXT = process.env.MODEL_TEXT || "gemini-2.0-flash";
 const MODEL_TTS =
   process.env.MODEL_TTS || "gemini-2.5-flash-preview-tts";
@@ -183,7 +185,13 @@ export const createLiveSession = (
     partyA: "Party A",
     partyB: "Party B",
   },
+  resumptionHandle?: string,
 ) => {
+  console.log(
+    `[Live] Connecting to ${MODEL_LIVE}` +
+      (resumptionHandle ? " (resuming session)" : " (new session)"),
+  );
+
   return ai.live.connect({
     model: MODEL_LIVE,
     callbacks,
@@ -202,6 +210,14 @@ export const createLiveSession = (
       ),
       inputAudioTranscription: {},
       outputAudioTranscription: {},
+      // Enable session resumption so we can reconnect if the WebSocket drops
+      sessionResumption: {
+        ...(resumptionHandle ? { handle: resumptionHandle } : {}),
+      },
+      // Enable context window compression for sessions longer than 15 min
+      contextWindowCompression: {
+        slidingWindow: {},
+      },
     },
   });
 };
