@@ -1,4 +1,4 @@
-import { GoogleGenAI, Type, Modality } from "@google/genai";
+import { GoogleGenAI, Type, Modality, Behavior } from "@google/genai";
 import fs from "fs";
 import path from "path";
 
@@ -28,7 +28,10 @@ const ai = new GoogleGenAI(aiConfig);
 // NOTE: gemini-2.0-flash-live-001 was shut down Dec 2025.
 // gemini-live-2.5-flash-native-audio is the current GA Live API model.
 const MODEL_LIVE =
-  process.env.MODEL_LIVE || "gemini-live-2.5-flash-native-audio";
+  process.env.MODEL_LIVE ||
+  (useVertexAI
+    ? "gemini-live-2.5-flash-native-audio"
+    : "gemini-2.5-flash-native-audio-preview-12-2025");
 const MODEL_TEXT = process.env.MODEL_TEXT || "gemini-2.0-flash";
 const MODEL_TTS =
   process.env.MODEL_TTS || "gemini-2.5-flash-preview-tts";
@@ -37,10 +40,13 @@ const MODEL_TRANSCRIBE =
 
 // ── Tool declaration for live mediation state updates ──
 
-const updateMediationStateDeclaration = {
+const updateMediationStateDeclaration: any = {
   name: "updateMediationState",
   description:
     "Update the UI state of the mediation process based on the conversation progress. Call this BEFORE every response to keep the UI synchronized with your reasoning.",
+  // NON_BLOCKING prevents the 1008 error by allowing audio to continue during tool calls.
+  // Note: Behavior enum is not supported in Vertex AI, only Gemini Developer API.
+  ...(useVertexAI ? {} : { behavior: Behavior.NON_BLOCKING }),
   parameters: {
     type: Type.OBJECT,
     properties: {
@@ -192,34 +198,36 @@ export const createLiveSession = (
       (resumptionHandle ? " (resuming session)" : " (new session)"),
   );
 
+  const config: any = {
+    responseModalities: [Modality.AUDIO],
+    speechConfig: {
+      voiceConfig: {
+        prebuiltVoiceConfig: { voiceName: mediatorProfile.voice },
+      },
+    },
+    tools: [{ functionDeclarations: [updateMediationStateDeclaration] }],
+    systemInstruction: buildSystemInstruction(
+      mediatorProfile,
+      partyNames,
+      context,
+    ),
+    inputAudioTranscription: {},
+    outputAudioTranscription: {},
+    // Enable context window compression for sessions longer than 15 min
+    contextWindowCompression: {
+      slidingWindow: {},
+    },
+  };
+
+  // Only include session resumption when we have a handle to resume
+  if (resumptionHandle) {
+    config.sessionResumption = { handle: resumptionHandle };
+  }
+
   return ai.live.connect({
     model: MODEL_LIVE,
     callbacks,
-    config: {
-      responseModalities: [Modality.AUDIO],
-      speechConfig: {
-        voiceConfig: {
-          prebuiltVoiceConfig: { voiceName: mediatorProfile.voice },
-        },
-      },
-      tools: [{ functionDeclarations: [updateMediationStateDeclaration] }],
-      systemInstruction: buildSystemInstruction(
-        mediatorProfile,
-        partyNames,
-        context,
-      ),
-      inputAudioTranscription: {},
-      outputAudioTranscription: {},
-      // Enable session resumption so we can reconnect if the WebSocket drops
-      // Note: 'transparent' is NOT supported in @google/genai SDK (throws error)
-      sessionResumption: {
-        ...(resumptionHandle ? { handle: resumptionHandle } : {}),
-      },
-      // Enable context window compression for sessions longer than 15 min
-      contextWindowCompression: {
-        slidingWindow: {},
-      },
-    },
+    config,
   });
 };
 
