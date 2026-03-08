@@ -110,9 +110,15 @@ wss.on("connection", (ws: WebSocket) => {
       liveSession = await createLiveSession(
         {
           onopen: () => {
-            console.log("[Live] Session opened");
+            console.log("[Live] Session opened" + (resumptionHandle ? " (resumed)" : ""));
             if (ws.readyState === WebSocket.OPEN) {
-              ws.send(JSON.stringify({ type: "open" }));
+              // If this is a reconnection (resumptionHandle was provided), send "reconnected"
+              // so the client knows the session is back without re-resolving the promise
+              if (resumptionHandle) {
+                ws.send(JSON.stringify({ type: "reconnected" }));
+              } else {
+                ws.send(JSON.stringify({ type: "open" }));
+              }
             }
           },
           onmessage: (message: any) => {
@@ -148,12 +154,24 @@ wss.on("connection", (ws: WebSocket) => {
           },
           onerror: (err: any) => {
             console.error("[Live] Session error:", err);
+            // On error, attempt reconnection if we have a resumption handle
+            if (!sessionClosing && latestResumptionHandle) {
+              console.log("[Live] Error occurred, attempting reconnect...");
+              if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: "reconnecting" }));
+              }
+              setTimeout(() => {
+                if (!sessionClosing) {
+                  connectLiveSession(latestResumptionHandle!);
+                }
+              }, 1000);
+              return;
+            }
             if (ws.readyState === WebSocket.OPEN) {
               ws.send(
                 JSON.stringify({
                   type: "error",
                   error: String(err?.message || err),
-                  resumptionHandle: latestResumptionHandle,
                 }),
               );
             }

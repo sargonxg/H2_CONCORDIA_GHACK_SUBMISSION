@@ -465,14 +465,21 @@ export default function Workspace() {
           },
           onerror: (err: any) => {
             console.error("Live API Error:", err);
-            sessionClosingRef.current = true;
-            setStatus("ERROR");
-            setIsRecording(false);
-            stopAudioCapture();
+            // Don't kill the session — the server/client reconnection logic will handle it
           },
           onreconnecting: () => {
-            // Server is auto-reconnecting via session resumption — keep UI alive
+            // Server or client is auto-reconnecting — keep UI alive, keep audio capture running
             setStatus("RECONNECTING");
+          },
+          onreconnected: () => {
+            // Session was successfully restored after a disconnect
+            console.log("Session reconnected successfully");
+            setStatus("LIVE");
+            setIsRecording(true);
+            // Restart audio capture if it was stopped
+            if (!processorRef.current) {
+              startAudioCapture();
+            }
           },
         },
         currentGraphContext,
