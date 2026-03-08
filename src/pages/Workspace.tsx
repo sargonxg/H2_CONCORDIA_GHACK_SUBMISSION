@@ -295,6 +295,12 @@ export default function Workspace() {
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
+  // Shared playback AudioContext and queue for sequential audio playback
+  const playbackContextRef = useRef<AudioContext | null>(null);
+  const playbackQueueRef = useRef<Float32Array[]>([]);
+  const isPlayingRef = useRef(false);
+  const playbackTimeRef = useRef(0);
+
   const activeCaseIdRef = useRef<string | null>(null);
   activeCaseIdRef.current = activeCaseId;
 
@@ -373,11 +379,13 @@ export default function Workspace() {
               playAudio(base64Audio);
             }
 
+            // Get transcription text from the outputTranscription or model text parts
             const aiText =
+              message.serverContent?.outputTranscription?.text ||
               message.serverContent?.modelTurn?.parts?.[0]?.text;
+            // Get user's spoken text from input transcription
             const userText =
-              message.clientContent?.turnComplete?.text ||
-              message.serverContent?.clientContent?.turnComplete?.text;
+              message.serverContent?.inputTranscription?.text;
 
             if (aiText && activeCaseIdRef.current) {
               setCases((prev) =>
@@ -518,6 +526,17 @@ export default function Workspace() {
     }
   };
 
+  const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
+    const bytes = new Uint8Array(buffer);
+    let binary = "";
+    // Process in chunks of 8192 to avoid stack overflow from spread operator
+    for (let i = 0; i < bytes.length; i += 8192) {
+      const chunk = bytes.subarray(i, Math.min(i + 8192, bytes.length));
+      binary += String.fromCharCode.apply(null, chunk as unknown as number[]);
+    }
+    return btoa(binary);
+  };
+
   const startAudioCapture = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -525,6 +544,11 @@ export default function Workspace() {
 
       const audioContext = new AudioContext({ sampleRate: 16000 });
       audioContextRef.current = audioContext;
+
+      // Resume AudioContext in case browser suspended it
+      if (audioContext.state === "suspended") {
+        await audioContext.resume();
+      }
 
       const source = audioContext.createMediaStreamSource(stream);
       sourceRef.current = source;
@@ -542,13 +566,7 @@ export default function Workspace() {
           pcm16[i] = Math.max(-1, Math.min(1, inputData[i])) * 0x7fff;
         }
 
-        const buffer = new ArrayBuffer(pcm16.length * 2);
-        const view = new DataView(buffer);
-        for (let i = 0; i < pcm16.length; i++) {
-          view.setInt16(i * 2, pcm16[i], true);
-        }
-
-        const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+        const base64 = arrayBufferToBase64(pcm16.buffer);
 
         if (isSessionOpen()) {
           try {
@@ -556,8 +574,7 @@ export default function Workspace() {
               media: { data: base64, mimeType: "audio/pcm;rate=16000" },
             });
           } catch (e) {
-            // Session closed mid-send, stop audio capture
-            stopAudioCapture();
+            // Session closed mid-send, ignore
           }
         }
       };
@@ -575,6 +592,11 @@ export default function Workspace() {
       sourceRef.current.disconnect();
       sourceRef.current = null;
     }
+    if (playbackContextRef.current) {
+      try { playbackContextRef.current.close(); } catch (_) {}
+      playbackContextRef.current = null;
+      playbackTimeRef.current = 0;
+    }
     if (audioContextRef.current) {
       audioContextRef.current.close();
       audioContextRef.current = null;
@@ -585,7 +607,15 @@ export default function Workspace() {
     }
   };
 
-  const playAudio = async (base64Data: string) => {
+  const getPlaybackContext = () => {
+    if (!playbackContextRef.current || playbackContextRef.current.state === "closed") {
+      playbackContextRef.current = new AudioContext({ sampleRate: 24000 });
+      playbackTimeRef.current = 0;
+    }
+    return playbackContextRef.current;
+  };
+
+  const playAudio = (base64Data: string) => {
     try {
       const binaryString = atob(base64Data);
       const bytes = new Uint8Array(binaryString.length);
@@ -593,18 +623,26 @@ export default function Workspace() {
         bytes[i] = binaryString.charCodeAt(i);
       }
 
-      const audioContext = new AudioContext({ sampleRate: 24000 });
       const pcm16 = new Int16Array(bytes.buffer);
-      const audioBuffer = audioContext.createBuffer(1, pcm16.length, 24000);
-      const channelData = audioBuffer.getChannelData(0);
+      const floatData = new Float32Array(pcm16.length);
       for (let i = 0; i < pcm16.length; i++) {
-        channelData[i] = pcm16[i] / 0x7fff;
+        floatData[i] = pcm16[i] / 0x7fff;
       }
 
-      const source = audioContext.createBufferSource();
+      // Schedule on the shared AudioContext for sequential playback
+      const ctx = getPlaybackContext();
+      const audioBuffer = ctx.createBuffer(1, floatData.length, 24000);
+      audioBuffer.getChannelData(0).set(floatData);
+
+      const source = ctx.createBufferSource();
       source.buffer = audioBuffer;
-      source.connect(audioContext.destination);
-      source.start();
+      source.connect(ctx.destination);
+
+      // Schedule this chunk right after the previous one finishes
+      const now = ctx.currentTime;
+      const startTime = Math.max(now, playbackTimeRef.current);
+      source.start(startTime);
+      playbackTimeRef.current = startTime + audioBuffer.duration;
     } catch (err) {
       console.error("Error playing audio:", err);
     }

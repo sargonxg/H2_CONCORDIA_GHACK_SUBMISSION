@@ -213,6 +213,8 @@ export const createLiveSession = (
       // Enable session resumption so we can reconnect if the WebSocket drops
       sessionResumption: {
         ...(resumptionHandle ? { handle: resumptionHandle } : {}),
+        // Enable transparent reconnection on Vertex AI for lossless session resume
+        ...(useVertexAI ? { transparent: true } : {}),
       },
       // Enable context window compression for sessions longer than 15 min
       contextWindowCompression: {
