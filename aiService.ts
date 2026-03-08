@@ -211,10 +211,9 @@ export const createLiveSession = (
       inputAudioTranscription: {},
       outputAudioTranscription: {},
       // Enable session resumption so we can reconnect if the WebSocket drops
+      // Note: 'transparent' is NOT supported in @google/genai SDK (throws error)
       sessionResumption: {
         ...(resumptionHandle ? { handle: resumptionHandle } : {}),
-        // Enable transparent reconnection on Vertex AI for lossless session resume
-        ...(useVertexAI ? { transparent: true } : {}),
       },
       // Enable context window compression for sessions longer than 15 min
       contextWindowCompression: {
