@@ -61,6 +61,14 @@ export const getLiveSession = (
           });
         } else if (msg.type === "message") {
           callbacks.onmessage?.(msg.data);
+        } else if (msg.type === "goAway") {
+          // Server is about to disconnect but will reconnect automatically
+          console.log("[Live] Server sent goAway, reconnection in progress...");
+          callbacks.onreconnecting?.();
+        } else if (msg.type === "reconnecting") {
+          // Server is reconnecting with session resumption
+          console.log("[Live] Server is reconnecting session...");
+          callbacks.onreconnecting?.();
         } else if (msg.type === "error") {
           if (!resolved) {
             resolved = true;
