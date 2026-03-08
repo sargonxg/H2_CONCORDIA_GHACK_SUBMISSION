@@ -211,6 +211,7 @@ export const createLiveSession = (
       inputAudioTranscription: {},
       outputAudioTranscription: {},
       // Enable session resumption so we can reconnect if the WebSocket drops
+      // Note: 'transparent' is NOT supported in @google/genai SDK (throws error)
       sessionResumption: {
         ...(resumptionHandle ? { handle: resumptionHandle } : {}),
       },

@@ -16,136 +16,122 @@ export const getLiveSession = (
     const protocol = location.protocol === "https:" ? "wss:" : "ws:";
     const wsUrl = `${protocol}//${location.host}/api/live`;
 
-    let ws: WebSocket;
     let resolved = false;
     let intentionallyClosed = false;
-    let reconnectAttempts = 0;
-    const MAX_RECONNECT_ATTEMPTS = 5;
 
-    // The session handle returned to the caller — wraps the WebSocket
-    let sessionHandle: any = null;
+    const ws = new WebSocket(wsUrl);
 
-    const connectWs = () => {
-      ws = new WebSocket(wsUrl);
-
-      ws.onopen = () => {
-        reconnectAttempts = 0; // Reset on successful connection
-        ws.send(
-          JSON.stringify({
-            type: "start",
-            context,
-            mediatorProfile,
-            partyNames,
-          }),
-        );
-      };
-
-      ws.onmessage = (event: MessageEvent) => {
-        try {
-          const msg = JSON.parse(event.data);
-
-          if (msg.type === "open" && !resolved) {
-            resolved = true;
-            callbacks.onopen?.();
-            sessionHandle = {
-              sendRealtimeInput: (input: any) => {
-                if (ws.readyState === WebSocket.OPEN) {
-                  ws.send(
-                    JSON.stringify({ type: "audio", media: input.media }),
-                  );
-                }
-              },
-              sendToolResponse: (resp: any) => {
-                if (ws.readyState === WebSocket.OPEN) {
-                  ws.send(
-                    JSON.stringify({
-                      type: "toolResponse",
-                      functionResponses: resp.functionResponses,
-                    }),
-                  );
-                }
-              },
-              close: () => {
-                intentionallyClosed = true;
-                if (ws.readyState === WebSocket.OPEN) {
-                  ws.send(JSON.stringify({ type: "close" }));
-                }
-                ws.close();
-              },
-            };
-            resolve(sessionHandle);
-          } else if (msg.type === "reconnected") {
-            // Server successfully reconnected the Gemini session
-            console.log("[Live] Server reconnected session successfully");
-            callbacks.onreconnected?.();
-          } else if (msg.type === "message") {
-            callbacks.onmessage?.(msg.data);
-          } else if (msg.type === "goAway") {
-            console.log(
-              "[Live] Server sent goAway, reconnection in progress...",
-            );
-            callbacks.onreconnecting?.();
-          } else if (msg.type === "reconnecting") {
-            console.log("[Live] Server is reconnecting session...");
-            callbacks.onreconnecting?.();
-          } else if (msg.type === "error") {
-            if (!resolved) {
-              resolved = true;
-              reject(new Error(msg.error));
-            }
-            // Don't call onerror for recoverable errors — the server may reconnect
-            console.error("[Live] Server error:", msg.error);
-          } else if (msg.type === "close") {
-            callbacks.onclose?.();
-          }
-        } catch (e) {
-          console.error("WebSocket message parse error:", e);
+    // Keep-alive ping every 25 seconds to prevent proxy/load-balancer timeouts
+    let keepAliveInterval: ReturnType<typeof setInterval> | null = null;
+    const startKeepAlive = () => {
+      keepAliveInterval = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: "ping" }));
         }
-      };
-
-      ws.onerror = (err: Event) => {
-        console.error("[Live] WebSocket error:", err);
-        if (!resolved) {
-          resolved = true;
-          reject(new Error("WebSocket connection failed"));
-        }
-        // Don't call callbacks.onerror here — onclose will fire next and handle reconnection
-      };
-
-      ws.onclose = () => {
-        if (intentionallyClosed) {
-          // User explicitly stopped the session
-          callbacks.onclose?.();
-          return;
-        }
-
-        if (!resolved) {
-          resolved = true;
-          reject(new Error("WebSocket closed before session started"));
-          return;
-        }
-
-        // Unexpected close — attempt client-side WebSocket reconnection
-        if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-          reconnectAttempts++;
-          const delay = Math.min(1000 * Math.pow(2, reconnectAttempts - 1), 8000);
-          console.log(
-            `[Live] WebSocket closed unexpectedly, reconnecting in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`,
-          );
-          callbacks.onreconnecting?.();
-          setTimeout(() => {
-            if (!intentionallyClosed) {
-              connectWs();
-            }
-          }, delay);
-        } else {
-          console.error("[Live] Max reconnection attempts reached");
-          callbacks.onclose?.();
-        }
-      };
+      }, 25000);
+    };
+    const stopKeepAlive = () => {
+      if (keepAliveInterval) {
+        clearInterval(keepAliveInterval);
+        keepAliveInterval = null;
+      }
     };
 
-    connectWs();
+    ws.onopen = () => {
+      console.log("[Live] WebSocket connected to server");
+      ws.send(
+        JSON.stringify({
+          type: "start",
+          context,
+          mediatorProfile,
+          partyNames,
+        }),
+      );
+      startKeepAlive();
+    };
+
+    ws.onmessage = (event: MessageEvent) => {
+      try {
+        const msg = JSON.parse(event.data);
+
+        if (msg.type === "open" && !resolved) {
+          resolved = true;
+          callbacks.onopen?.();
+          resolve({
+            sendRealtimeInput: (input: any) => {
+              if (ws.readyState === WebSocket.OPEN) {
+                ws.send(
+                  JSON.stringify({ type: "audio", audio: input.audio }),
+                );
+              }
+            },
+            sendToolResponse: (resp: any) => {
+              if (ws.readyState === WebSocket.OPEN) {
+                ws.send(
+                  JSON.stringify({
+                    type: "toolResponse",
+                    functionResponses: resp.functionResponses,
+                  }),
+                );
+              }
+            },
+            close: () => {
+              intentionallyClosed = true;
+              stopKeepAlive();
+              if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: "close" }));
+              }
+              ws.close();
+            },
+          });
+        } else if (msg.type === "reconnected") {
+          // Server successfully reconnected the Gemini session via resumption handle
+          console.log("[Live] Server reconnected session successfully");
+          callbacks.onreconnected?.();
+        } else if (msg.type === "message") {
+          callbacks.onmessage?.(msg.data);
+        } else if (msg.type === "goAway" || msg.type === "reconnecting") {
+          console.log(`[Live] Server sent ${msg.type}`);
+          callbacks.onreconnecting?.();
+        } else if (msg.type === "error") {
+          console.error("[Live] Server error:", msg.error);
+          if (!resolved) {
+            resolved = true;
+            stopKeepAlive();
+            reject(new Error(msg.error));
+          }
+          // Don't kill the session — server may auto-reconnect
+        } else if (msg.type === "close") {
+          stopKeepAlive();
+          callbacks.onclose?.();
+        }
+      } catch (e) {
+        console.error("WebSocket message parse error:", e);
+      }
+    };
+
+    ws.onerror = (err: Event) => {
+      console.error("[Live] WebSocket error:", err);
+      if (!resolved) {
+        resolved = true;
+        stopKeepAlive();
+        reject(new Error("WebSocket connection failed"));
+      }
+    };
+
+    ws.onclose = (event: CloseEvent) => {
+      console.log(`[Live] WebSocket closed: code=${event.code} reason=${event.reason}`);
+      stopKeepAlive();
+      if (!resolved) {
+        resolved = true;
+        reject(new Error("WebSocket closed before session started"));
+        return;
+      }
+      if (!intentionallyClosed) {
+        // Unexpected close — notify the UI
+        callbacks.onclose?.();
+      }
+    };
   });
 };
 
