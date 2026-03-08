@@ -290,6 +290,7 @@ export default function Workspace() {
 
   const sessionRef = useRef<any>(null);
   const sessionClosingRef = useRef(false);
+  const toolCallPendingRef = useRef(false);
   const audioContextRef = useRef<AudioContext | null>(null);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
@@ -421,6 +422,7 @@ export default function Workspace() {
             }
 
             if (message.toolCall) {
+              toolCallPendingRef.current = true;
               const functionCalls = message.toolCall.functionCalls;
               if (functionCalls && functionCalls.length > 0) {
                 const responses = functionCalls.map((call: any) => {
@@ -460,8 +462,14 @@ export default function Workspace() {
                     });
                   } catch (e) {
                     console.warn("Failed to send tool response:", e);
+                  } finally {
+                    toolCallPendingRef.current = false;
                   }
+                } else {
+                  toolCallPendingRef.current = false;
                 }
+              } else {
+                toolCallPendingRef.current = false;
               }
             }
           },
@@ -560,6 +568,9 @@ export default function Workspace() {
       processor.connect(audioContext.destination);
 
       processor.onaudioprocess = (e) => {
+        // Skip audio frames while a tool call is pending to prevent 1008 errors
+        if (toolCallPendingRef.current) return;
+
         const inputData = e.inputBuffer.getChannelData(0);
         const pcm16 = new Int16Array(inputData.length);
         for (let i = 0; i < inputData.length; i++) {

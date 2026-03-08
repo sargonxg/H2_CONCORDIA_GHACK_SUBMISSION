@@ -96,6 +96,7 @@ const wss = new WebSocketServer({ server, path: "/api/live" });
 wss.on("connection", (ws: WebSocket) => {
   let liveSession: any = null;
   let sessionClosing = false;
+  let toolCallPending = false;
   let latestResumptionHandle: string | null = null;
   let reconnectAttempts = 0;
   const MAX_RECONNECT_ATTEMPTS = 3;
@@ -137,7 +138,8 @@ wss.on("connection", (ws: WebSocket) => {
         {
           onopen: () => {
             console.log("[Live] Session opened" + (resumptionHandle ? " (resumed)" : ""));
-            reconnectAttempts = 0; // Reset on successful connection
+            reconnectAttempts = 0;
+            toolCallPending = false;
             if (ws.readyState === WebSocket.OPEN) {
               if (resumptionHandle) {
                 ws.send(JSON.stringify({ type: "reconnected" }));
@@ -163,6 +165,20 @@ wss.on("connection", (ws: WebSocket) => {
               tryReconnect("goAway received");
               return;
             }
+
+            // Gate audio when a tool call is pending — prevents 1008 policy violation
+            if (message.toolCall) {
+              console.log("[Live] Tool call received, gating audio input");
+              toolCallPending = true;
+            }
+
+            // Log message types for debugging
+            const types = [];
+            if (message.serverContent) types.push("serverContent");
+            if (message.toolCall) types.push("toolCall");
+            if (message.sessionResumptionUpdate) types.push("sessionResumption");
+            if (message.goAway) types.push("goAway");
+            if (types.length > 0) console.log(`[Live] Gemini msg: ${types.join(", ")}`);
 
             if (ws.readyState === WebSocket.OPEN) {
               ws.send(JSON.stringify({ type: "message", data: message }));
@@ -229,7 +245,8 @@ wss.on("connection", (ws: WebSocket) => {
         };
         await connectLiveSession(msg.resumptionHandle);
       } else if (msg.type === "audio" && !sessionClosing) {
-        if (!liveSession) return; // Session not ready yet, drop frame
+        // Drop audio frames while a tool call is pending to prevent 1008 errors
+        if (!liveSession || toolCallPending) return;
         try {
           liveSession.sendRealtimeInput({
             audio: msg.audio,
@@ -248,6 +265,9 @@ wss.on("connection", (ws: WebSocket) => {
           });
         } catch (e) {
           // Session may have closed
+        } finally {
+          console.log("[Live] Tool response sent, re-enabling audio input");
+          toolCallPending = false;
         }
       } else if (msg.type === "close") {
         sessionClosing = true;
