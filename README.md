@@ -14,6 +14,29 @@ The system is grounded in the **TACITUS Conflict Grammar**: an eight-primitive o
 
 ---
 
+## Improvements Summary (v2)
+
+All improvements were implemented across three development prompts:
+
+| # | Area | Improvement | Files |
+|---|------|-------------|-------|
+| 1.1 | Transcript | Buffered word-by-word fragments, flushed on `turnComplete`/`toolCall` with `[MM:SS]` timestamps | `workspace/page.tsx` |
+| 1.2 | System Instruction | 7-rule turn-taking protocol, 3-round structured Discovery, Exploration cross-referencing, conflict structure announcements | `lib/ai-service.ts` |
+| 1.3 | Auto-Extraction | Background extraction every 3 min, duplicate-aware merge, extraction notice toast | `workspace/page.tsx` |
+| 1.4 | Transcript Panel | Styled live panel with indigo/sky color-coding, auto-scroll, "Scroll to latest" button, editable textarea fallback | `workspace/page.tsx` |
+| 2.1 | Resolution Engine | `analyzePathways()` returns rich `PathwaysResult` with ZOPA, framework fit, executive summary, trade-offs, implementation steps | `lib/ai-service.ts`, `services/gemini-client.ts`, `app/api/analyze/route.ts` |
+| 2.2 | Mediator Styles | Professional / Empathic style selector; style-dependent system instruction preamble; auto-sets voice | `workspace/page.tsx`, `lib/ai-service.ts` |
+| 2.3 | Profiling Toggle | `profilingEnabled` field on Case; toggle in settings; ON shows EnhancedPartyProfile + EscalationMeter, OFF shows simple cards | `workspace/page.tsx`, `lib/types.ts` |
+| 2.4 | Case Summary | `summarizeCase()` in ai-service + `/api/summarize` route + modal with Copy/Export-as-Markdown | `lib/ai-service.ts`, `app/api/summarize/route.ts`, `workspace/page.tsx` |
+| 3.1 | Primitive Management | `PrimitiveCluster` type, Auto-Group, per-primitive Pin/Resolve, Merge Duplicates, primitive count in tab label | `workspace/page.tsx`, `lib/types.ts` |
+| 3.2 | Timeline | `TimelineEntry` type, Timeline tab with type icons, elapsed timestamps, and filter controls | `workspace/page.tsx`, `lib/types.ts` |
+| 3.3 | Export | Export dropdown: JSON, Markdown report, Copy Transcript, Copy Summary | `workspace/page.tsx` |
+| 3.4 | Session Polish | Duration timer, milestone toasts, auto-save every 30s, reconnection overlay with attempt count, rate-limit retry (5s/10s/20s) | `workspace/page.tsx`, `services/gemini-client.ts` |
+| 3.5 | Graph Polish | Zoom controls (+/−/Fit All), highlight-by-party toggle | `components/workspace/ConflictGraph.tsx` |
+| 3.6 | Keyboard Shortcuts | `1-5` switch tabs, `Ctrl+Enter` analyze, `Escape` close modals | `workspace/page.tsx` |
+
+---
+
 ## Architecture
 
 ```
@@ -29,13 +52,42 @@ A single Node.js process (`server.ts` → compiled `server.js`) runs both the Ne
 
 ## Features
 
+### Core Mediation
 - **Live Audio Mediation** — Two-party sessions with a real-time AI mediator voice (Gemini Live Audio API)
-- **Conflict Knowledge Graph** — D3 force-directed graph of all conflict primitives, updated live as the AI speaks
-- **Psychological Profiling** — Per-party emotional state, conflict style (Thomas-Kilmann), trust scores (Mayer/Davis/Schoorman), and risk assessment
+- **7-Rule Turn-Taking Protocol** — Structured 3-round Discovery, phase-aware Exploration cross-referencing, and conflict structure announcements baked into the system instruction
+- **Buffered Transcript** — Word-by-word fragments buffered and flushed on `turnComplete`/`toolCall` with `[MM:SS]` timestamps; color-coded live panel (indigo = Concordia, sky = Speaker)
+- **Continuous Background Extraction** — Auto-extracts TACITUS primitives every 3 minutes during live sessions; duplicate-aware merge; subtle extraction notice toast
 - **TACITUS Conflict Grammar** — 8 primitive types extracted in real time from live transcript
+
+### Analysis & Resolution
+- **Conflict Knowledge Graph** — D3 force-directed graph of all conflict primitives, updated live as the AI speaks; zoom controls (+/−/Fit All); highlight-by-party mode
+- **Psychological Profiling** — Per-party emotional state, conflict style (Thomas-Kilmann), trust scores (Mayer/Davis/Schoorman), and risk assessment (toggleable)
 - **Escalation Meter** — Live semicircle gauge tracking session tension
-- **Resolution Pathways** — AI-generated proposals with trade-off analysis drawn from 30+ mediation frameworks
-- **ZOPA Analysis** — Automatic identification of the Zone of Possible Agreement
+- **Resolution Pathways** — Rich AI-generated proposals with trade-offs per party, feasibility rating, implementation steps, and framework tagging
+- **ZOPA Analysis** — Automatic identification of the Zone of Possible Agreement with visual range bars
+- **Framework Fit Scoring** — Ranks 6+ mediation frameworks (0–100) and lets you re-run analysis locked to a single framework
+- **Psychological Dynamics** — Surface hidden dynamics from the conversation (attribution errors, identity threat, power asymmetries)
+- **Case Summary** — Generate a structured markdown summary with session overview, key claims, core interests, agreements, tensions, and recommended next steps; copyable or exportable as `.md`
+
+### Case Structure
+- **Per-Primitive Pin & Resolve** — Star-pin important primitives (sorted to top); mark resolved (strikethrough); both persisted in case state
+- **Auto-Group** — Clusters primitives by actor + keyword; creates `PrimitiveCluster` records
+- **Merge Duplicates** — Detects near-duplicate primitives (>60% word overlap, same type) and removes them
+- **Primitive Count in Tab Label** — Live count badge: "Case Structure (14)"
+
+### Session Management
+- **Session Duration Timer** — Live `MM:SS` counter in the status bar; milestone toasts at 3 min, 10 min, 15 min
+- **Auto-save** — Writes case state to `localStorage` every 30 seconds during live sessions
+- **Rate Limit Retry** — API calls automatically retry up to 3 times on 429 with exponential backoff (5s, 10s, 20s)
+- **Reconnection Overlay** — Yellow banner with attempt counter shown during WebSocket reconnects
+- **Timeline Tab** — Chronological event log (utterance, extraction, phase-change, escalation, common-ground, reflection) with type icons, elapsed timestamps, and filter controls
+
+### Export
+- **Export Dropdown** — JSON case export, Markdown report, Copy Transcript, Copy Summary — all from a single toolbar button
+
+### UX
+- **Mediator Styles** — Professional (Zephyr voice) or Empathic (Kore voice) — changes system instruction preamble and AI personality
+- **Keyboard Shortcuts** — `1-5` switch tabs; `Ctrl+Enter` → Analyze; `Escape` → close modals
 - **Advisor Chat** — Ask the AI strategic questions about any conflict scenario
 - **Audio Transcription** — Record and transcribe audio via Gemini
 - **Text-to-Speech** — Generate natural mediator voice from text

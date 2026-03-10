@@ -95,6 +95,8 @@ export type Primitive = {
   actorId: string;
   description: string;
   data?: PrimitiveData;
+  pinned?: boolean;
+  resolved?: boolean;
 };
 
 export type PartyProfile = {
@@ -137,6 +139,25 @@ export type LiveMediationState = {
   tensionPoints: string[];
 };
 
+export type PrimitiveCluster = {
+  id: string;
+  label: string;
+  description: string;
+  primitiveIds: string[];
+  phase: string;
+  createdAt: string;
+};
+
+export type TimelineEntry = {
+  id: string;
+  timestamp: string;       // ISO datetime
+  elapsedSeconds: number;  // seconds since session start
+  type: "utterance" | "extraction" | "phase-change" | "escalation" | "common-ground" | "reflection";
+  content: string;
+  actor?: string;
+  phase: string;
+};
+
 export type Case = {
   id: string;
   title: string;
@@ -147,6 +168,8 @@ export type Case = {
   partyAName: string;
   partyBName: string;
   profilingEnabled?: boolean; // default true when undefined
+  clusters?: PrimitiveCluster[];
+  timeline?: TimelineEntry[];
 };
 
 // ── Pathway Analysis Result Types ──

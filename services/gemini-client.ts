@@ -137,17 +137,24 @@ export const getLiveSession = (
 
 // ── REST API helpers ──
 
-async function apiPost(endpoint: string, body: any): Promise<any> {
-  const res = await fetch(endpoint, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error || `API error ${res.status}`);
+async function apiPost(endpoint: string, body: any, retries = 3): Promise<any> {
+  const delays = [5000, 10000, 20000];
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (res.status === 429 && attempt < retries) {
+      await new Promise((r) => setTimeout(r, delays[attempt]));
+      continue;
+    }
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(err.error || `API error ${res.status}`);
+    }
+    return res.json();
   }
-  return res.json();
 }
 
 // ── Transcription ──
