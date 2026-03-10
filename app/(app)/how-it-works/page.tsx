@@ -1,3 +1,5 @@
+"use client";
+
 import { motion } from "motion/react";
 import {
   Info,
@@ -13,6 +15,7 @@ import {
   Heart,
   TrendingUp,
 } from "lucide-react";
+import Link from "next/link";
 
 export default function HowItWorks() {
   return (
@@ -173,12 +176,12 @@ export default function HowItWorks() {
               Create a case and start a live mediation session.
             </p>
           </div>
-          <a
+          <Link
             href="/workspace"
             className="flex items-center gap-2 text-[var(--color-accent)] hover:text-[var(--color-accent-hover)] font-medium transition-colors"
           >
             Go to Workspace <ArrowRight className="w-4 h-4" />
-          </a>
+          </Link>
         </div>
       </div>
     </div>

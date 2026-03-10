@@ -1,3 +1,5 @@
+"use client";
+
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -32,7 +34,7 @@ import {
   extractPrimitives,
   researchGrounding,
   analyzePathways,
-} from "../services/geminiService";
+} from "@/services/gemini-client";
 
 type Actor = { id: string; name: string; role: string };
 type PrimitiveType =

@@ -1,7 +1,9 @@
+"use client";
+
 import { useState, useRef } from "react";
 import { motion } from "motion/react";
 import { Mic, Square, FileAudio, Loader2 } from "lucide-react";
-import { transcribeAudio } from "../services/geminiService";
+import { transcribeAudio } from "@/services/gemini-client";
 
 export default function Transcribe() {
   const [isRecording, setIsRecording] = useState(false);
