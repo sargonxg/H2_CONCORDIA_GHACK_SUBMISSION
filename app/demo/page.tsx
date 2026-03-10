@@ -1,0 +1,1249 @@
+"use client";
+
+import { useState, useEffect, useRef } from "react";
+import { motion, AnimatePresence } from "motion/react";
+import {
+  Play,
+  Pause,
+  RotateCcw,
+  ChevronLeft,
+  ChevronDown,
+  Zap,
+  Shield,
+  Heart,
+  Users,
+  AlertTriangle,
+  CheckCircle,
+  MessageSquare,
+  Target,
+  Clock,
+  TrendingUp,
+  TrendingDown,
+} from "lucide-react";
+import Link from "next/link";
+
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+interface TrustScores {
+  ability: number;
+  benevolence: number;
+  integrity: number;
+}
+
+interface PartyProfile {
+  cooperativeness: number;
+  defensiveness: number;
+  emotionalState: string;
+  conflictStyle: string;
+  escalation: number;
+  emotionalIntensity?: number;
+  trust: TrustScores;
+  withdrawal?: number;
+  badFaith?: number;
+  impasse?: number;
+}
+
+interface PrimitiveCounts {
+  Claim: number;
+  Interest: number;
+  Event: number;
+  Constraint: number;
+  Commitment: number;
+  Agreement: number;
+  Narrative: number;
+  Risk: number;
+}
+
+interface DemoStep {
+  stepNumber: number;
+  phase: string;
+  targetActor: string;
+  transcript: string;
+  annotation: string;
+  sarah: Partial<PartyProfile>;
+  michael: Partial<PartyProfile>;
+  primitivesAdded: Partial<PrimitiveCounts>;
+  commonGround: string[];
+  escalationAlert?: boolean;
+  deEscalation?: boolean;
+}
+
+// ─── Demo Data ────────────────────────────────────────────────────────────────
+
+const PHASES = ["Opening", "Discovery", "Escalation", "De-escalation", "Exploration", "Negotiation", "Resolution", "Agreement"];
+
+const PHASE_COLORS: Record<string, string> = {
+  Opening: "bg-blue-500",
+  Discovery: "bg-purple-500",
+  Escalation: "bg-red-500",
+  "De-escalation": "bg-orange-500",
+  Exploration: "bg-yellow-500",
+  Negotiation: "bg-green-500",
+  Resolution: "bg-teal-500",
+  Agreement: "bg-emerald-500",
+};
+
+const PHASE_TEXT_COLORS: Record<string, string> = {
+  Opening: "text-blue-400",
+  Discovery: "text-purple-400",
+  Escalation: "text-red-400",
+  "De-escalation": "text-orange-400",
+  Exploration: "text-yellow-400",
+  Negotiation: "text-green-400",
+  Resolution: "text-teal-400",
+  Agreement: "text-emerald-400",
+};
+
+const CONFLICT_STYLE_COLORS: Record<string, string> = {
+  Competing: "bg-red-900 text-red-300 border border-red-700",
+  Avoiding: "bg-gray-800 text-gray-300 border border-gray-600",
+  Collaborating: "bg-green-900 text-green-300 border border-green-700",
+  Accommodating: "bg-blue-900 text-blue-300 border border-blue-700",
+  Compromising: "bg-yellow-900 text-yellow-300 border border-yellow-700",
+};
+
+const EMOTIONAL_STATE_COLORS: Record<string, string> = {
+  Guarded: "text-gray-400",
+  Anxious: "text-yellow-400",
+  Frustrated: "text-red-400",
+  Defensive: "text-orange-400",
+  Open: "text-green-400",
+  Calmer: "text-blue-400",
+  Thoughtful: "text-purple-400",
+  Hopeful: "text-teal-400",
+  Relieved: "text-emerald-400",
+};
+
+const STEPS: DemoStep[] = [
+  {
+    stepNumber: 1,
+    phase: "Opening",
+    targetActor: "Both",
+    transcript:
+      "[CONCORDIA]: Welcome, Sarah and Michael. Thank you for being here. I'm CONCORDIA, your AI mediator. Ground rules: mutual respect, one person at a time, confidentiality. Sarah, could you start by telling me what brought you here today?",
+    annotation:
+      "CONCORDIA establishes ground rules and creates a safe container [Fisher & Ury: Separate people from the problem]",
+    sarah: {
+      cooperativeness: 45,
+      defensiveness: 55,
+      emotionalState: "Guarded",
+      conflictStyle: "Competing",
+      escalation: 20,
+      trust: { ability: 40, benevolence: 30, integrity: 35 },
+    },
+    michael: {
+      cooperativeness: 50,
+      defensiveness: 60,
+      emotionalState: "Anxious",
+      conflictStyle: "Avoiding",
+      escalation: 18,
+      trust: { ability: 45, benevolence: 35, integrity: 40 },
+    },
+    primitivesAdded: {},
+    commonGround: [],
+  },
+  {
+    stepNumber: 2,
+    phase: "Discovery",
+    targetActor: "Sarah",
+    transcript:
+      "[Sarah]: The issue is that Michael keeps missing sprint commitments. I've established a clear Agile process — daily standups, velocity tracking — but he treats it like optional bureaucracy. My stakeholders are asking for updates I can't give them.",
+    annotation:
+      "[Narrative Mediation] Sarah frames Michael as 'villain' — detecting grievance narrative. Primary emotion: Frustration (intensity 7/10, escalating)",
+    sarah: {
+      cooperativeness: 42,
+      defensiveness: 65,
+      emotionalState: "Frustrated",
+      conflictStyle: "Competing",
+      emotionalIntensity: 7,
+      escalation: 35,
+      trust: { ability: 35, benevolence: 22, integrity: 28 },
+    },
+    michael: {
+      cooperativeness: 50,
+      defensiveness: 60,
+      emotionalState: "Anxious",
+      conflictStyle: "Avoiding",
+      escalation: 18,
+      trust: { ability: 45, benevolence: 35, integrity: 40 },
+    },
+    primitivesAdded: { Claim: 1, Interest: 1, Event: 1 },
+    commonGround: [],
+  },
+  {
+    stepNumber: 3,
+    phase: "Discovery",
+    targetActor: "Sarah",
+    transcript:
+      "[CONCORDIA]: I hear real frustration here, Sarah. Before I turn to Michael — are there any deadline pressures or organizational constraints I should understand?",
+    annotation:
+      "⚠️ AI detects ontology gap: No Constraints primitive from Sarah. Probing with targeted question [Gap type: primitive_missing, priority: critical]",
+    sarah: {
+      cooperativeness: 42,
+      defensiveness: 65,
+      emotionalState: "Frustrated",
+      conflictStyle: "Competing",
+      emotionalIntensity: 7,
+      escalation: 35,
+      trust: { ability: 35, benevolence: 22, integrity: 28 },
+    },
+    michael: {
+      cooperativeness: 50,
+      defensiveness: 60,
+      emotionalState: "Anxious",
+      conflictStyle: "Avoiding",
+      escalation: 18,
+      trust: { ability: 45, benevolence: 35, integrity: 40 },
+    },
+    primitivesAdded: { Constraint: 1 },
+    commonGround: [],
+  },
+  {
+    stepNumber: 4,
+    phase: "Discovery",
+    targetActor: "Michael",
+    transcript:
+      "[Michael]: With respect, Sarah has turned this into a surveillance operation. Every task has a ticket, every hour is tracked. I do my best work in flow — deep work that doesn't fit into 2-hour sprint slots. I'm not missing commitments, I'm doing them differently.",
+    annotation:
+      "[Glasl Stage 2] Debate stage — polarized thinking, blame language detected. Michael's conflict style: Avoiding→Competing under pressure",
+    sarah: {
+      cooperativeness: 42,
+      defensiveness: 65,
+      emotionalState: "Frustrated",
+      conflictStyle: "Competing",
+      escalation: 35,
+      trust: { ability: 35, benevolence: 22, integrity: 28 },
+    },
+    michael: {
+      cooperativeness: 38,
+      defensiveness: 75,
+      emotionalState: "Defensive",
+      conflictStyle: "Avoiding",
+      emotionalIntensity: 8,
+      escalation: 58,
+      trust: { ability: 38, benevolence: 20, integrity: 25 },
+    },
+    primitivesAdded: { Claim: 1, Interest: 1, Narrative: 1 },
+    commonGround: [],
+  },
+  {
+    stepNumber: 5,
+    phase: "Discovery",
+    targetActor: "Both",
+    transcript:
+      "[Michael]: You micromanage every sprint! I've shipped three major features this quarter but you only see the standup attendance. This process is killing my creativity!",
+    annotation:
+      "🚨 ESCALATION DETECTED — Score: 78 | Level 3 Circuit Break activated. Blame language: 'you micromanage'. Gottman: Contempt detected. Protocol: Name the pattern, suggest pause",
+    sarah: {
+      cooperativeness: 42,
+      defensiveness: 65,
+      emotionalState: "Frustrated",
+      conflictStyle: "Competing",
+      escalation: 62,
+      trust: { ability: 35, benevolence: 22, integrity: 28 },
+    },
+    michael: {
+      cooperativeness: 38,
+      defensiveness: 75,
+      emotionalState: "Defensive",
+      conflictStyle: "Avoiding",
+      emotionalIntensity: 8,
+      escalation: 78,
+      trust: { ability: 38, benevolence: 20, integrity: 25 },
+    },
+    primitivesAdded: {},
+    commonGround: [],
+    escalationAlert: true,
+  },
+  {
+    stepNumber: 6,
+    phase: "Discovery",
+    targetActor: "Both",
+    transcript:
+      "[CONCORDIA]: I'd like to pause for a moment. Michael, I can hear how important creative flow is to you — that's a real and valid need. Sarah, I also hear genuine pressure to deliver stakeholder visibility. Both of these are legitimate concerns. Let's slow down and make sure each of you feels truly heard.",
+    annotation:
+      "[Ury: 'Go to the balcony'] CONCORDIA names the dynamic without blame. Applies reflective listening. De-escalation Level 3 → 2. Both parties visibly stabilize.",
+    sarah: {
+      cooperativeness: 50,
+      defensiveness: 58,
+      emotionalState: "Open",
+      conflictStyle: "Competing",
+      escalation: 42,
+      trust: { ability: 35, benevolence: 22, integrity: 28 },
+    },
+    michael: {
+      cooperativeness: 45,
+      defensiveness: 62,
+      emotionalState: "Calmer",
+      conflictStyle: "Avoiding",
+      escalation: 45,
+      trust: { ability: 38, benevolence: 20, integrity: 25 },
+    },
+    primitivesAdded: {},
+    commonGround: [],
+    deEscalation: true,
+  },
+  {
+    stepNumber: 7,
+    phase: "Exploration",
+    targetActor: "Both",
+    transcript:
+      "[CONCORDIA]: I'm noticing something interesting. Sarah, you need your stakeholders to trust the team's predictability. Michael, you need your manager to trust your judgment. Am I hearing that correctly? Both of you are fundamentally asking for trust?",
+    annotation:
+      "[Fisher & Ury] Reframing from positions to interests. Extracting shared value: TRUST. Zartman Ripeness check: mutually hurting stalemate detected — both parties feel pain.",
+    sarah: {
+      cooperativeness: 58,
+      defensiveness: 45,
+      emotionalState: "Thoughtful",
+      conflictStyle: "Competing",
+      escalation: 30,
+      trust: { ability: 48, benevolence: 38, integrity: 42 },
+    },
+    michael: {
+      cooperativeness: 55,
+      defensiveness: 52,
+      emotionalState: "Thoughtful",
+      conflictStyle: "Avoiding",
+      escalation: 35,
+      trust: { ability: 44, benevolence: 35, integrity: 38 },
+    },
+    primitivesAdded: {},
+    commonGround: ["Both value team productivity", "Both want the Q3 deadline met", "Both are asking for trust from the other"],
+  },
+  {
+    stepNumber: 8,
+    phase: "Exploration",
+    targetActor: "Sarah",
+    transcript:
+      "[Sarah]: ...I hadn't thought of it that way. I suppose I do need to trust that Michael will surface blockers before they become missed deadlines. Not watch him every hour.",
+    annotation:
+      "[Bush & Folger: Recognition] Sarah recognizes Michael's perspective — empowerment moment. Trust scores rising. Glasl stage reverting from Stage 2 toward Stage 1.",
+    sarah: {
+      cooperativeness: 65,
+      defensiveness: 38,
+      emotionalState: "Open",
+      conflictStyle: "Competing",
+      escalation: 22,
+      trust: { ability: 55, benevolence: 50, integrity: 52 },
+    },
+    michael: {
+      cooperativeness: 55,
+      defensiveness: 52,
+      emotionalState: "Thoughtful",
+      conflictStyle: "Avoiding",
+      escalation: 35,
+      trust: { ability: 44, benevolence: 35, integrity: 38 },
+    },
+    primitivesAdded: { Commitment: 1 },
+    commonGround: ["Both value team productivity", "Both want the Q3 deadline met", "Both are asking for trust from the other"],
+  },
+  {
+    stepNumber: 9,
+    phase: "Negotiation",
+    targetActor: "Both",
+    transcript:
+      "[CONCORDIA]: Michael, what would it look like if you had autonomy over *how* you work, but committed to *outcome visibility* twice a week — so Sarah has what she needs for stakeholders?",
+    annotation:
+      "[Fisher & Ury: Golden Bridge] Building a path that gives both parties a face-saving win. Testing hybrid solution: autonomy + transparency. ZOPA identified.",
+    sarah: {
+      cooperativeness: 65,
+      defensiveness: 38,
+      emotionalState: "Open",
+      conflictStyle: "Competing",
+      escalation: 22,
+      trust: { ability: 55, benevolence: 50, integrity: 52 },
+    },
+    michael: {
+      cooperativeness: 70,
+      defensiveness: 32,
+      emotionalState: "Hopeful",
+      conflictStyle: "Collaborating",
+      escalation: 18,
+      trust: { ability: 44, benevolence: 35, integrity: 38 },
+    },
+    primitivesAdded: {},
+    commonGround: [
+      "Both value team productivity",
+      "Both want Q3 met",
+      "Shared need for trust",
+      "Autonomy + outcome visibility can coexist",
+    ],
+  },
+  {
+    stepNumber: 10,
+    phase: "Negotiation",
+    targetActor: "Michael",
+    transcript:
+      "[Michael]: Yes — I could do a Monday outcome summary and Friday blockers call. No task-level tracking, just deliverable status. That I can commit to.",
+    annotation:
+      "Commitment primitive forming: Michael proposes concrete outcome visibility protocol. ZOPA confirmed. Risk scores dropping across all axes.",
+    sarah: {
+      cooperativeness: 65,
+      defensiveness: 38,
+      emotionalState: "Open",
+      conflictStyle: "Competing",
+      escalation: 15,
+      withdrawal: 5,
+      badFaith: 5,
+      impasse: 8,
+      trust: { ability: 55, benevolence: 50, integrity: 52 },
+    },
+    michael: {
+      cooperativeness: 70,
+      defensiveness: 32,
+      emotionalState: "Hopeful",
+      conflictStyle: "Collaborating",
+      escalation: 12,
+      withdrawal: 8,
+      badFaith: 4,
+      impasse: 10,
+      trust: { ability: 44, benevolence: 35, integrity: 38 },
+    },
+    primitivesAdded: { Commitment: 1, Agreement: 1 },
+    commonGround: [
+      "Both value team productivity",
+      "Both want Q3 met",
+      "Shared need for trust",
+      "Autonomy + outcome visibility can coexist",
+    ],
+  },
+  {
+    stepNumber: 11,
+    phase: "Resolution",
+    targetActor: "Sarah",
+    transcript:
+      "[Sarah]: I can work with that. If I know where we stand on Monday and Friday, I can give stakeholders what they need. And Michael... I hear that the tracking felt invasive. I'll adjust the standup format.",
+    annotation:
+      "[Lederach: Transformation] Relationship repair alongside practical agreement. Sarah makes a reciprocal concession — conflict transformed, not just settled.",
+    sarah: {
+      cooperativeness: 78,
+      defensiveness: 22,
+      emotionalState: "Relieved",
+      conflictStyle: "Collaborating",
+      escalation: 10,
+      trust: { ability: 68, benevolence: 62, integrity: 65 },
+    },
+    michael: {
+      cooperativeness: 70,
+      defensiveness: 32,
+      emotionalState: "Hopeful",
+      conflictStyle: "Collaborating",
+      escalation: 12,
+      trust: { ability: 44, benevolence: 35, integrity: 38 },
+    },
+    primitivesAdded: {},
+    commonGround: [
+      "Both value team productivity",
+      "Both want Q3 met",
+      "Shared need for trust",
+      "Autonomy + outcome visibility can coexist",
+    ],
+  },
+  {
+    stepNumber: 12,
+    phase: "Agreement",
+    targetActor: "Both",
+    transcript:
+      "[CONCORDIA]: This is a meaningful breakthrough. You've moved from competing processes to a shared framework built on trust. Let me summarize what you've agreed: Michael provides outcome summaries Monday + Friday. Sarah shifts from task-level tracking to deliverable oversight. Both commit to a monthly check-in on this arrangement. Shall I draft formal terms?",
+    annotation:
+      "🎉 Agreement reached in 12 exchanges. [Fisher & Ury + Lederach + Transformative] Framework synthesis. Conflict primitive counts: 14 extracted. Trust scores: +35% average. Escalation: 78→10.",
+    sarah: {
+      cooperativeness: 78,
+      defensiveness: 22,
+      emotionalState: "Relieved",
+      conflictStyle: "Collaborating",
+      escalation: 10,
+      trust: { ability: 68, benevolence: 62, integrity: 65 },
+    },
+    michael: {
+      cooperativeness: 75,
+      defensiveness: 28,
+      emotionalState: "Hopeful",
+      conflictStyle: "Collaborating",
+      escalation: 10,
+      trust: { ability: 62, benevolence: 58, integrity: 60 },
+    },
+    primitivesAdded: {},
+    commonGround: [
+      "Both value team productivity",
+      "Both want Q3 met",
+      "Shared need for trust",
+      "Autonomy + outcome visibility can coexist",
+      "Monthly check-in as accountability loop",
+    ],
+  },
+];
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function mergeProfile(base: Partial<PartyProfile>, update: Partial<PartyProfile>): PartyProfile {
+  return {
+    cooperativeness: update.cooperativeness ?? base.cooperativeness ?? 50,
+    defensiveness: update.defensiveness ?? base.defensiveness ?? 50,
+    emotionalState: update.emotionalState ?? base.emotionalState ?? "Neutral",
+    conflictStyle: update.conflictStyle ?? base.conflictStyle ?? "Avoiding",
+    escalation: update.escalation ?? base.escalation ?? 0,
+    emotionalIntensity: update.emotionalIntensity ?? base.emotionalIntensity,
+    trust: update.trust ?? base.trust ?? { ability: 50, benevolence: 50, integrity: 50 },
+    withdrawal: update.withdrawal ?? base.withdrawal,
+    badFaith: update.badFaith ?? base.badFaith,
+    impasse: update.impasse ?? base.impasse,
+  };
+}
+
+function getEscalationColor(score: number): string {
+  if (score >= 70) return "bg-red-500";
+  if (score >= 50) return "bg-orange-500";
+  if (score >= 30) return "bg-yellow-500";
+  return "bg-green-500";
+}
+
+function getEscalationLabel(score: number): string {
+  if (score >= 70) return "Critical";
+  if (score >= 50) return "High";
+  if (score >= 30) return "Moderate";
+  return "Low";
+}
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+function AnimatedBar({ value, color, label }: { value: number; color: string; label: string }) {
+  return (
+    <div className="space-y-1">
+      <div className="flex justify-between text-xs text-gray-400">
+        <span>{label}</span>
+        <motion.span
+          key={value}
+          initial={{ scale: 1.3, color: "#fff" }}
+          animate={{ scale: 1, color: "#9ca3af" }}
+          transition={{ duration: 0.4 }}
+        >
+          {value}%
+        </motion.span>
+      </div>
+      <div className="h-1.5 rounded-full bg-gray-700 overflow-hidden">
+        <motion.div
+          className={`h-full rounded-full ${color}`}
+          initial={false}
+          animate={{ width: `${value}%` }}
+          transition={{ duration: 0.6, ease: "easeOut" }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function PartyCard({ name, profile, side }: { name: string; profile: PartyProfile; side: "sarah" | "michael" }) {
+  const avatarColor = side === "sarah" ? "from-violet-600 to-purple-700" : "from-blue-600 to-cyan-700";
+  const initials = side === "sarah" ? "SC" : "MT";
+  const role = side === "sarah" ? "Team Lead" : "Senior Dev";
+
+  return (
+    <div className="bg-gray-800 border border-gray-700 rounded-xl p-4 space-y-3">
+      {/* Header */}
+      <div className="flex items-center gap-3">
+        <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${avatarColor} flex items-center justify-center text-white text-xs font-bold shrink-0`}>
+          {initials}
+        </div>
+        <div>
+          <div className="text-white text-sm font-semibold">{name}</div>
+          <div className="text-gray-400 text-xs">{role}</div>
+        </div>
+      </div>
+
+      {/* Emotional state */}
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-gray-400">State</span>
+        <motion.span
+          key={profile.emotionalState}
+          initial={{ opacity: 0, x: 8 }}
+          animate={{ opacity: 1, x: 0 }}
+          className={`text-xs font-medium ${EMOTIONAL_STATE_COLORS[profile.emotionalState] ?? "text-gray-300"}`}
+        >
+          {profile.emotionalState}
+        </motion.span>
+      </div>
+
+      {/* Conflict style */}
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-gray-400">Style</span>
+        <motion.span
+          key={profile.conflictStyle}
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className={`text-xs px-2 py-0.5 rounded-full font-medium ${CONFLICT_STYLE_COLORS[profile.conflictStyle] ?? "bg-gray-700 text-gray-300"}`}
+        >
+          {profile.conflictStyle}
+        </motion.span>
+      </div>
+
+      {/* Bars */}
+      <AnimatedBar value={profile.cooperativeness} color="bg-green-500" label="Cooperative" />
+      <AnimatedBar value={profile.defensiveness} color="bg-red-500" label="Defensive" />
+
+      {/* Escalation mini */}
+      <div className="space-y-1">
+        <div className="flex justify-between text-xs text-gray-400">
+          <span>Escalation</span>
+          <motion.span
+            key={profile.escalation}
+            initial={{ scale: 1.4, color: "#ef4444" }}
+            animate={{ scale: 1, color: "#9ca3af" }}
+            transition={{ duration: 0.5 }}
+          >
+            {profile.escalation}
+          </motion.span>
+        </div>
+        <div className="h-2 rounded-full bg-gray-700 overflow-hidden">
+          <motion.div
+            className={`h-full rounded-full ${getEscalationColor(profile.escalation)}`}
+            initial={false}
+            animate={{ width: `${profile.escalation}%` }}
+            transition={{ duration: 0.7, ease: "easeOut" }}
+          />
+        </div>
+      </div>
+
+      {/* Trust scores */}
+      {profile.trust && (
+        <div className="pt-1 border-t border-gray-700 space-y-1">
+          <div className="text-xs text-gray-500 mb-1">Trust</div>
+          {(["ability", "benevolence", "integrity"] as const).map((k) => (
+            <div key={k} className="flex items-center gap-2">
+              <span className="text-xs text-gray-500 w-16 capitalize">{k}</span>
+              <div className="flex-1 h-1 bg-gray-700 rounded-full overflow-hidden">
+                <motion.div
+                  className="h-full bg-indigo-500 rounded-full"
+                  initial={false}
+                  animate={{ width: `${profile.trust[k]}%` }}
+                  transition={{ duration: 0.6, ease: "easeOut" }}
+                />
+              </div>
+              <motion.span
+                key={profile.trust[k]}
+                initial={{ scale: 1.2 }}
+                animate={{ scale: 1 }}
+                className="text-xs text-gray-400 w-6 text-right"
+              >
+                {profile.trust[k]}
+              </motion.span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const PRIMITIVE_ICONS: Record<string, React.ReactNode> = {
+  Claim: <MessageSquare className="w-3 h-3" />,
+  Interest: <Heart className="w-3 h-3" />,
+  Event: <Clock className="w-3 h-3" />,
+  Constraint: <AlertTriangle className="w-3 h-3" />,
+  Commitment: <CheckCircle className="w-3 h-3" />,
+  Agreement: <Target className="w-3 h-3" />,
+  Narrative: <Shield className="w-3 h-3" />,
+  Risk: <Zap className="w-3 h-3" />,
+};
+
+function PrimitiveGrid({ counts }: { counts: PrimitiveCounts }) {
+  const types = Object.keys(PRIMITIVE_ICONS) as (keyof PrimitiveCounts)[];
+  return (
+    <div className="grid grid-cols-4 gap-2">
+      {types.map((type) => (
+        <motion.div
+          key={type}
+          className="bg-gray-800 border border-gray-700 rounded-lg p-2 flex flex-col items-center gap-1"
+          animate={counts[type] > 0 ? { borderColor: "#6366f1" } : { borderColor: "#374151" }}
+          transition={{ duration: 0.3 }}
+        >
+          <div className="text-indigo-400">{PRIMITIVE_ICONS[type]}</div>
+          <motion.span
+            key={counts[type]}
+            initial={{ scale: 1.6, color: "#a5b4fc" }}
+            animate={{ scale: 1, color: counts[type] > 0 ? "#e0e7ff" : "#6b7280" }}
+            transition={{ duration: 0.4, type: "spring", stiffness: 400 }}
+            className="text-sm font-bold"
+          >
+            {counts[type]}
+          </motion.span>
+          <span className="text-xs text-gray-500 text-center leading-tight">{type}</span>
+        </motion.div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────────
+
+export default function DemoPage() {
+  const [currentStep, setCurrentStep] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [speed, setSpeed] = useState(1);
+  const [displayedText, setDisplayedText] = useState("");
+  const [isTyping, setIsTyping] = useState(false);
+  const [skipToPhase, setSkipToPhase] = useState("");
+
+  const transcriptRef = useRef<HTMLDivElement>(null);
+  const typingRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoAdvanceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Accumulate transcript lines
+  const [transcriptHistory, setTranscriptHistory] = useState<{ step: number; text: string; phase: string }[]>([]);
+
+  // Accumulate primitive counts
+  const [primitiveCounts, setPrimitiveCounts] = useState<PrimitiveCounts>({
+    Claim: 0, Interest: 0, Event: 0, Constraint: 0,
+    Commitment: 0, Agreement: 0, Narrative: 0, Risk: 0,
+  });
+
+  const step = STEPS[currentStep];
+
+  // Build cumulative profiles by merging all steps up to current
+  const sarah: PartyProfile = STEPS.slice(0, currentStep + 1).reduce(
+    (acc, s) => mergeProfile(acc, s.sarah),
+    {} as Partial<PartyProfile>
+  ) as PartyProfile;
+
+  const michael: PartyProfile = STEPS.slice(0, currentStep + 1).reduce(
+    (acc, s) => mergeProfile(acc, s.michael),
+    {} as Partial<PartyProfile>
+  ) as PartyProfile;
+
+  // Typing effect
+  useEffect(() => {
+    if (typingRef.current) clearTimeout(typingRef.current);
+    setIsTyping(true);
+    setDisplayedText("");
+
+    const fullText = step.transcript;
+    let i = 0;
+    const charDelay = Math.max(12, 40 / speed);
+
+    function typeNext() {
+      if (i < fullText.length) {
+        i++;
+        setDisplayedText(fullText.slice(0, i));
+        typingRef.current = setTimeout(typeNext, charDelay);
+      } else {
+        setIsTyping(false);
+      }
+    }
+
+    typingRef.current = setTimeout(typeNext, 100);
+    return () => {
+      if (typingRef.current) clearTimeout(typingRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStep]);
+
+  // Auto-scroll transcript
+  useEffect(() => {
+    if (transcriptRef.current) {
+      transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight;
+    }
+  }, [displayedText, transcriptHistory]);
+
+  // Auto-advance
+  useEffect(() => {
+    if (autoAdvanceRef.current) clearTimeout(autoAdvanceRef.current);
+    if (isPlaying && currentStep < STEPS.length - 1) {
+      const delay = 4000 / speed;
+      autoAdvanceRef.current = setTimeout(() => {
+        advanceStep();
+      }, delay);
+    }
+    return () => {
+      if (autoAdvanceRef.current) clearTimeout(autoAdvanceRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPlaying, currentStep, speed]);
+
+  function advanceStep() {
+    setCurrentStep((prev) => {
+      if (prev >= STEPS.length - 1) {
+        setIsPlaying(false);
+        return prev;
+      }
+      const nextIdx = prev + 1;
+      const nextStep = STEPS[nextIdx];
+      // Add to transcript history
+      setTranscriptHistory((h) => [...h, { step: nextIdx + 1, text: nextStep.transcript, phase: nextStep.phase }]);
+      // Update primitives
+      setPrimitiveCounts((c) => {
+        const nc = { ...c };
+        Object.entries(nextStep.primitivesAdded).forEach(([k, v]) => {
+          nc[k as keyof PrimitiveCounts] = (nc[k as keyof PrimitiveCounts] ?? 0) + (v ?? 0);
+        });
+        return nc;
+      });
+      return nextIdx;
+    });
+  }
+
+  function goToStep(idx: number) {
+    // Rebuild state from scratch
+    const newHistory: { step: number; text: string; phase: string }[] = [];
+    const newCounts: PrimitiveCounts = { Claim: 0, Interest: 0, Event: 0, Constraint: 0, Commitment: 0, Agreement: 0, Narrative: 0, Risk: 0 };
+
+    for (let i = 0; i <= idx; i++) {
+      const s = STEPS[i];
+      newHistory.push({ step: i + 1, text: s.transcript, phase: s.phase });
+      Object.entries(s.primitivesAdded).forEach(([k, v]) => {
+        newCounts[k as keyof PrimitiveCounts] = (newCounts[k as keyof PrimitiveCounts] ?? 0) + (v ?? 0);
+      });
+    }
+
+    setTranscriptHistory(newHistory.slice(0, -1)); // all but current (current shown via typing)
+    setPrimitiveCounts(newCounts);
+    setCurrentStep(idx);
+  }
+
+  function handleReset() {
+    setIsPlaying(false);
+    setTranscriptHistory([]);
+    setPrimitiveCounts({ Claim: 0, Interest: 0, Event: 0, Constraint: 0, Commitment: 0, Agreement: 0, Narrative: 0, Risk: 0 });
+    setCurrentStep(0);
+  }
+
+  function handleSkipToPhase(phase: string) {
+    const idx = STEPS.findLastIndex ? STEPS.findLastIndex((s) => s.phase === phase) : [...STEPS].reverse().findIndex((s) => s.phase === phase);
+    const resolvedIdx = STEPS.findIndex((s) => s.phase === phase);
+    if (resolvedIdx !== -1) {
+      goToStep(resolvedIdx);
+      setSkipToPhase("");
+    }
+  }
+
+  const progressPercent = ((currentStep) / (STEPS.length - 1)) * 100;
+  const uniquePhases = Array.from(new Set(STEPS.map((s) => s.phase)));
+
+  // Get speaker style for transcript line
+  function getSpeakerStyle(text: string) {
+    if (text.startsWith("[CONCORDIA]")) return { color: "text-indigo-300", bg: "bg-indigo-950 border-indigo-800" };
+    if (text.startsWith("[Sarah]")) return { color: "text-violet-300", bg: "bg-violet-950 border-violet-800" };
+    if (text.startsWith("[Michael]")) return { color: "text-blue-300", bg: "bg-blue-950 border-blue-800" };
+    return { color: "text-gray-300", bg: "bg-gray-800 border-gray-700" };
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-950 text-white flex flex-col">
+      {/* ── Top Bar ── */}
+      <header className="border-b border-gray-800 bg-gray-900/80 backdrop-blur-sm sticky top-0 z-50">
+        <div className="flex items-center gap-4 px-6 py-3">
+          {/* Logo */}
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
+              <Zap className="w-4 h-4 text-white" />
+            </div>
+            <span className="text-white font-bold text-lg tracking-tight">CONCORDIA</span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs bg-indigo-900 text-indigo-300 border border-indigo-700 px-2 py-0.5 rounded-full font-medium">
+              Interactive Demo
+            </span>
+            <span className="text-xs text-gray-500">Workplace Mediation — Sarah vs Michael</span>
+          </div>
+
+          <div className="flex-1 mx-4">
+            <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
+              <motion.div
+                className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full"
+                initial={false}
+                animate={{ width: `${progressPercent}%` }}
+                transition={{ duration: 0.5 }}
+              />
+            </div>
+          </div>
+
+          <Link
+            href="/"
+            className="flex items-center gap-1 text-xs text-gray-400 hover:text-white transition-colors shrink-0"
+          >
+            <ChevronLeft className="w-3 h-3" />
+            Back to Home
+          </Link>
+        </div>
+      </header>
+
+      {/* ── Main 3-col layout ── */}
+      <div className="flex-1 flex gap-4 p-4 min-h-0">
+        {/* ── LEFT: Annotation ── */}
+        <div className="w-60 shrink-0 space-y-3">
+          <div className="text-xs text-gray-500 uppercase tracking-widest font-medium">AI Annotation</div>
+
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={currentStep}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -12 }}
+              transition={{ duration: 0.35 }}
+              className="bg-gray-800 border border-gray-700 rounded-xl p-4 space-y-3"
+            >
+              {/* Phase badge */}
+              <div className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full font-medium ${PHASE_COLORS[step.phase] ?? "bg-gray-700"} bg-opacity-20 ${PHASE_TEXT_COLORS[step.phase] ?? "text-gray-300"}`}
+                style={{ backgroundColor: undefined }}
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${PHASE_COLORS[step.phase] ?? "bg-gray-500"}`} />
+                {step.phase}
+              </div>
+
+              {/* Target */}
+              <div className="flex items-center gap-2 text-xs text-gray-400">
+                <Users className="w-3 h-3" />
+                <span>Target: {step.targetActor}</span>
+              </div>
+
+              {/* Annotation text */}
+              <p className="text-xs text-gray-300 leading-relaxed">{step.annotation}</p>
+
+              {/* Alert banners */}
+              {step.escalationAlert && (
+                <div className="flex items-start gap-2 bg-red-950 border border-red-800 rounded-lg p-2">
+                  <AlertTriangle className="w-3 h-3 text-red-400 mt-0.5 shrink-0" />
+                  <span className="text-xs text-red-300">Escalation Circuit Break Active</span>
+                </div>
+              )}
+              {step.deEscalation && (
+                <div className="flex items-start gap-2 bg-green-950 border border-green-800 rounded-lg p-2">
+                  <TrendingDown className="w-3 h-3 text-green-400 mt-0.5 shrink-0" />
+                  <span className="text-xs text-green-300">De-escalation Protocol Engaged</span>
+                </div>
+              )}
+            </motion.div>
+          </AnimatePresence>
+
+          {/* Framework legend */}
+          <div className="bg-gray-900 border border-gray-800 rounded-xl p-3 space-y-2">
+            <div className="text-xs text-gray-500 font-medium">Frameworks Active</div>
+            {["Fisher & Ury", "Glasl Escalation", "Lederach Transform.", "Bush & Folger"].map((fw) => (
+              <div key={fw} className="flex items-center gap-2 text-xs text-gray-400">
+                <div className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                {fw}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ── CENTER ── */}
+        <div className="flex-1 min-w-0 flex flex-col gap-3">
+          {/* Phase chips */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {uniquePhases.map((phase) => {
+              const isActive = step.phase === phase;
+              const isPast = STEPS.findIndex((s) => s.phase === phase) < currentStep;
+              return (
+                <motion.div
+                  key={phase}
+                  animate={isActive ? { scale: 1.05 } : { scale: 1 }}
+                  className={`text-xs px-3 py-1 rounded-full border font-medium transition-all cursor-default ${
+                    isActive
+                      ? `${PHASE_COLORS[phase] ?? "bg-indigo-500"} text-white border-transparent`
+                      : isPast
+                      ? "bg-gray-800 text-gray-400 border-gray-700"
+                      : "bg-gray-900 text-gray-600 border-gray-800"
+                  }`}
+                >
+                  {phase}
+                </motion.div>
+              );
+            })}
+          </div>
+
+          {/* Party cards */}
+          <div className="grid grid-cols-2 gap-3">
+            <PartyCard name="Sarah Chen" profile={sarah} side="sarah" />
+            <PartyCard name="Michael Torres" profile={michael} side="michael" />
+          </div>
+
+          {/* Transcript panel */}
+          <div className="flex-1 bg-gray-900 border border-gray-800 rounded-xl flex flex-col min-h-0" style={{ minHeight: 200 }}>
+            <div className="px-4 py-2 border-b border-gray-800 flex items-center justify-between">
+              <span className="text-xs text-gray-400 font-medium">Transcript</span>
+              {isTyping && (
+                <motion.div
+                  animate={{ opacity: [0.4, 1, 0.4] }}
+                  transition={{ duration: 1.2, repeat: Infinity }}
+                  className="flex items-center gap-1 text-xs text-indigo-400"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
+                  Transcribing...
+                </motion.div>
+              )}
+            </div>
+            <div ref={transcriptRef} className="flex-1 overflow-y-auto p-3 space-y-2 scroll-smooth" style={{ maxHeight: 260 }}>
+              {/* History */}
+              {transcriptHistory.map((item, i) => {
+                const style = getSpeakerStyle(item.text);
+                return (
+                  <motion.div
+                    key={i}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className={`text-xs leading-relaxed p-2.5 rounded-lg border ${style.bg} ${style.color}`}
+                  >
+                    {item.text}
+                  </motion.div>
+                );
+              })}
+              {/* Current (typing) */}
+              {displayedText && (
+                <div className={`text-xs leading-relaxed p-2.5 rounded-lg border ${getSpeakerStyle(displayedText).bg} ${getSpeakerStyle(displayedText).color}`}>
+                  {displayedText}
+                  {isTyping && (
+                    <motion.span
+                      animate={{ opacity: [0, 1, 0] }}
+                      transition={{ duration: 0.8, repeat: Infinity }}
+                      className="inline-block w-0.5 h-3 bg-current ml-0.5 align-text-bottom"
+                    />
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Primitive grid */}
+          <div>
+            <div className="text-xs text-gray-500 mb-2 uppercase tracking-widest font-medium">Extracted Primitives</div>
+            <PrimitiveGrid counts={primitiveCounts} />
+          </div>
+        </div>
+
+        {/* ── RIGHT ── */}
+        <div className="w-52 shrink-0 space-y-3">
+          {/* Escalation meter */}
+          <div className="bg-gray-800 border border-gray-700 rounded-xl p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-gray-400 font-medium uppercase tracking-widest">Escalation</span>
+              <TrendingUp className="w-3.5 h-3.5 text-gray-500" />
+            </div>
+            {/* Combined score (average) */}
+            {(() => {
+              const combined = Math.round((sarah.escalation + michael.escalation) / 2);
+              return (
+                <div className="space-y-2">
+                  <div className="flex items-end justify-between">
+                    <motion.span
+                      key={combined}
+                      initial={{ scale: 1.4, color: "#ef4444" }}
+                      animate={{ scale: 1, color: combined >= 60 ? "#ef4444" : combined >= 35 ? "#f97316" : "#22c55e" }}
+                      transition={{ duration: 0.5 }}
+                      className="text-3xl font-bold tabular-nums"
+                    >
+                      {combined}
+                    </motion.span>
+                    <span className={`text-xs font-medium mb-1 ${combined >= 60 ? "text-red-400" : combined >= 35 ? "text-orange-400" : "text-green-400"}`}>
+                      {getEscalationLabel(combined)}
+                    </span>
+                  </div>
+                  <div className="h-2.5 bg-gray-700 rounded-full overflow-hidden">
+                    <motion.div
+                      className={`h-full rounded-full ${getEscalationColor(combined)}`}
+                      initial={false}
+                      animate={{ width: `${combined}%` }}
+                      transition={{ duration: 0.7, ease: "easeOut" }}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5 pt-1">
+                    <div>
+                      <div className="text-xs text-gray-500 mb-1">Sarah</div>
+                      <div className="h-1 bg-gray-700 rounded-full overflow-hidden">
+                        <motion.div
+                          className={`h-full rounded-full ${getEscalationColor(sarah.escalation)}`}
+                          animate={{ width: `${sarah.escalation}%` }}
+                          transition={{ duration: 0.6 }}
+                        />
+                      </div>
+                      <motion.span key={sarah.escalation} initial={{ scale: 1.2 }} animate={{ scale: 1 }} className="text-xs text-gray-400">{sarah.escalation}</motion.span>
+                    </div>
+                    <div>
+                      <div className="text-xs text-gray-500 mb-1">Michael</div>
+                      <div className="h-1 bg-gray-700 rounded-full overflow-hidden">
+                        <motion.div
+                          className={`h-full rounded-full ${getEscalationColor(michael.escalation)}`}
+                          animate={{ width: `${michael.escalation}%` }}
+                          transition={{ duration: 0.6 }}
+                        />
+                      </div>
+                      <motion.span key={michael.escalation} initial={{ scale: 1.2 }} animate={{ scale: 1 }} className="text-xs text-gray-400">{michael.escalation}</motion.span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+
+          {/* Common Ground */}
+          <div className="bg-gray-800 border border-gray-700 rounded-xl p-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-gray-400 font-medium uppercase tracking-widest">Common Ground</span>
+              <motion.span
+                key={step.commonGround.length}
+                initial={{ scale: 1.5, backgroundColor: "#4f46e5" }}
+                animate={{ scale: 1, backgroundColor: "#1e1b4b" }}
+                transition={{ duration: 0.4 }}
+                className="text-xs font-bold text-indigo-300 bg-indigo-950 border border-indigo-800 rounded-full w-5 h-5 flex items-center justify-center"
+              >
+                {step.commonGround.length}
+              </motion.span>
+            </div>
+            <AnimatePresence>
+              {step.commonGround.length === 0 && (
+                <p className="text-xs text-gray-600 italic">None identified yet</p>
+              )}
+              {step.commonGround.map((item, i) => (
+                <motion.div
+                  key={item}
+                  initial={{ opacity: 0, x: -12 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: i * 0.08 }}
+                  className="flex items-start gap-2 text-xs text-gray-300"
+                >
+                  <CheckCircle className="w-3 h-3 text-green-500 mt-0.5 shrink-0" />
+                  <span className="leading-tight">{item}</span>
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </div>
+
+          {/* Phase indicator */}
+          <div className="bg-gray-800 border border-gray-700 rounded-xl p-4 space-y-3">
+            <div className="text-xs text-gray-400 font-medium uppercase tracking-widest">Phase</div>
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={step.phase}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                className={`text-base font-bold ${PHASE_TEXT_COLORS[step.phase] ?? "text-white"}`}
+              >
+                {step.phase}
+              </motion.div>
+            </AnimatePresence>
+            <div className="space-y-1">
+              {uniquePhases.map((phase, i) => {
+                const phaseStepIdx = STEPS.findIndex((s) => s.phase === phase);
+                const done = phaseStepIdx < currentStep;
+                const active = step.phase === phase;
+                return (
+                  <div key={phase} className="flex items-center gap-2">
+                    <motion.div
+                      animate={{
+                        backgroundColor: active ? "#6366f1" : done ? "#22c55e" : "#374151",
+                      }}
+                      transition={{ duration: 0.3 }}
+                      className="w-2 h-2 rounded-full shrink-0"
+                    />
+                    <span className={`text-xs ${active ? "text-white font-medium" : done ? "text-gray-400" : "text-gray-600"}`}>
+                      {phase}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Bottom Controls ── */}
+      <div className="border-t border-gray-800 bg-gray-900/90 backdrop-blur-sm px-6 py-3">
+        <div className="flex items-center gap-4 flex-wrap">
+          {/* Play/Pause */}
+          <motion.button
+            whileTap={{ scale: 0.93 }}
+            onClick={() => {
+              if (currentStep >= STEPS.length - 1) return;
+              setIsPlaying((p) => !p);
+            }}
+            className={`flex items-center gap-2 px-5 py-2 rounded-full font-medium text-sm transition-all ${
+              isPlaying
+                ? "bg-indigo-600 hover:bg-indigo-700 text-white"
+                : "bg-indigo-500 hover:bg-indigo-600 text-white"
+            } ${currentStep >= STEPS.length - 1 ? "opacity-40 cursor-not-allowed" : ""}`}
+          >
+            {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+            {isPlaying ? "Pause" : "Play"}
+          </motion.button>
+
+          {/* Manual step */}
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => currentStep > 0 && goToStep(currentStep - 1)}
+              disabled={currentStep === 0}
+              className="w-8 h-8 rounded-lg bg-gray-800 hover:bg-gray-700 disabled:opacity-30 flex items-center justify-center transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => currentStep < STEPS.length - 1 && advanceStep()}
+              disabled={currentStep >= STEPS.length - 1}
+              className="w-8 h-8 rounded-lg bg-gray-800 hover:bg-gray-700 disabled:opacity-30 flex items-center justify-center transition-colors"
+            >
+              <ChevronDown className="w-4 h-4 -rotate-90" />
+            </button>
+          </div>
+
+          {/* Speed selector */}
+          <div className="flex items-center gap-1 bg-gray-800 rounded-full p-1">
+            {[1, 2, 3].map((s) => (
+              <button
+                key={s}
+                onClick={() => setSpeed(s)}
+                className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
+                  speed === s ? "bg-indigo-600 text-white" : "text-gray-400 hover:text-white"
+                }`}
+              >
+                {s}×
+              </button>
+            ))}
+          </div>
+
+          {/* Reset */}
+          <button
+            onClick={handleReset}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white text-sm transition-colors"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            Reset
+          </button>
+
+          {/* Skip to phase */}
+          <div className="relative">
+            <select
+              value={skipToPhase}
+              onChange={(e) => {
+                if (e.target.value) handleSkipToPhase(e.target.value);
+              }}
+              className="appearance-none bg-gray-800 border border-gray-700 rounded-lg text-sm text-gray-300 px-3 py-2 pr-8 cursor-pointer hover:bg-gray-700 transition-colors focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            >
+              <option value="">Skip to phase...</option>
+              {uniquePhases.map((phase) => (
+                <option key={phase} value={phase}>
+                  {phase}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500 pointer-events-none" />
+          </div>
+
+          {/* Step counter */}
+          <div className="ml-auto text-sm text-gray-400 tabular-nums">
+            Step{" "}
+            <motion.span
+              key={currentStep}
+              initial={{ scale: 1.3, color: "#a5b4fc" }}
+              animate={{ scale: 1, color: "#9ca3af" }}
+              transition={{ duration: 0.3 }}
+              className="font-bold text-white inline-block"
+            >
+              {currentStep + 1}
+            </motion.span>{" "}
+            / {STEPS.length}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
