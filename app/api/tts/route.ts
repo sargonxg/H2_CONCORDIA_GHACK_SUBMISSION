@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { generateSpeech } from "@/lib/ai-service";
+import { classifyApiError } from "@/lib/api-error";
 
 const schema = z.object({
   text: z.string().min(1).max(10000),
@@ -17,7 +18,8 @@ export async function POST(request: Request) {
     const audio = await generateSpeech(text, voiceName);
     return Response.json({ audio });
   } catch (error) {
-    console.error("TTS error:", error instanceof Error ? error.message : "Unknown");
-    return Response.json({ error: "Internal server error" }, { status: 500 });
+    const { message, status } = classifyApiError(error);
+    console.error("TTS error:", error instanceof Error ? error.message : error);
+    return Response.json({ error: message }, { status });
   }
 }

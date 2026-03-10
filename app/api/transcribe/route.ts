@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { transcribeAudio } from "@/lib/ai-service";
+import { classifyApiError } from "@/lib/api-error";
 
 const ALLOWED_MIME_TYPES = [
   "audio/webm",
@@ -29,7 +30,8 @@ export async function POST(request: Request) {
     const text = await transcribeAudio(base64Audio, mimeType);
     return Response.json({ text });
   } catch (error) {
-    console.error("Transcribe error:", error instanceof Error ? error.message : "Unknown");
-    return Response.json({ error: "Internal server error" }, { status: 500 });
+    const { message, status } = classifyApiError(error);
+    console.error("Transcribe error:", error instanceof Error ? error.message : error);
+    return Response.json({ error: message }, { status });
   }
 }

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { researchGrounding } from "@/lib/ai-service";
+import { classifyApiError } from "@/lib/api-error";
 
 const schema = z.object({
   query: z.string().min(1).max(10000),
@@ -16,7 +17,8 @@ export async function POST(request: Request) {
     const result = await researchGrounding(query);
     return Response.json(result);
   } catch (error) {
-    console.error("Research error:", error instanceof Error ? error.message : "Unknown");
-    return Response.json({ error: "Internal server error" }, { status: 500 });
+    const { message, status } = classifyApiError(error);
+    console.error("Research error:", error instanceof Error ? error.message : error);
+    return Response.json({ error: message }, { status });
   }
 }

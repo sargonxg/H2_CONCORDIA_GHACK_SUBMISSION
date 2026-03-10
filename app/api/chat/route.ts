@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { chatWithAdvisor } from "@/lib/ai-service";
+import { classifyApiError } from "@/lib/api-error";
 
 const schema = z.object({
   message: z.string().min(1).max(10000),
@@ -18,7 +19,8 @@ export async function POST(request: Request) {
     const text = await chatWithAdvisor(message, history, caseContext);
     return Response.json({ text });
   } catch (error) {
-    console.error("Chat error:", error instanceof Error ? error.message : "Unknown");
-    return Response.json({ error: "Internal server error" }, { status: 500 });
+    const { message, status } = classifyApiError(error);
+    console.error("Chat error:", error instanceof Error ? error.message : error);
+    return Response.json({ error: message }, { status });
   }
 }
