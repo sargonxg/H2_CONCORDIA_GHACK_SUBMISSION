@@ -1,12 +1,19 @@
 import { GoogleGenAI, Type, Modality, Behavior } from "@google/genai";
 import fs from "fs";
 import path from "path";
+import os from "os";
 
-// Write service account credentials to temp file for Google Auth
-if (process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
-  const credPath = path.join("/tmp", "gcloud-credentials.json");
-  fs.writeFileSync(credPath, process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
-  process.env.GOOGLE_APPLICATION_CREDENTIALS = credPath;
+// Write service account credentials to temp file for Google Auth.
+// Only write if the value is set, non-empty, and not a placeholder.
+const _saJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+if (_saJson && _saJson.trim() !== "" && !_saJson.includes("{...}")) {
+  try {
+    const credPath = path.join(os.tmpdir(), "gcloud-credentials.json");
+    fs.writeFileSync(credPath, _saJson);
+    process.env.GOOGLE_APPLICATION_CREDENTIALS = credPath;
+  } catch (err) {
+    console.warn("[AI] Could not write service account credentials:", err);
+  }
 }
 
 const useVertexAI = process.env.USE_VERTEX_AI !== "false";
@@ -32,11 +39,23 @@ const MODEL_LIVE =
   (useVertexAI
     ? "gemini-live-2.5-flash-native-audio"
     : "gemini-2.5-flash-native-audio-preview-12-2025");
-const MODEL_TEXT = process.env.MODEL_TEXT || "gemini-3-flash-preview";
+// gemini-2.0-flash is the GA model universally available to all API key users.
+// Override with MODEL_TEXT=gemini-3-flash-preview for the latest frontier model.
+const MODEL_TEXT = process.env.MODEL_TEXT || "gemini-2.0-flash";
 const MODEL_TTS =
   process.env.MODEL_TTS || "gemini-2.5-flash-preview-tts";
 const MODEL_TRANSCRIBE =
-  process.env.MODEL_TRANSCRIBE || "gemini-3-flash-preview";
+  process.env.MODEL_TRANSCRIBE || "gemini-2.0-flash";
+
+// ── Startup diagnostics ──
+{
+  const authMode = useVertexAI ? "Vertex AI" : "Gemini API Key";
+  const keyHint = !useVertexAI && process.env.GEMINI_API_KEY
+    ? `...${process.env.GEMINI_API_KEY.slice(-4)}`
+    : process.env.GOOGLE_CLOUD_PROJECT || "n/a";
+  console.log(`[AI] Auth mode: ${authMode} (${keyHint})`);
+  console.log(`[AI] Models: live=${MODEL_LIVE}  text=${MODEL_TEXT}  tts=${MODEL_TTS}`);
+}
 
 // ── Tool declaration for live mediation state updates ──
 
@@ -335,13 +354,32 @@ When escalation is detected, IMMEDIATELY de-escalate before anything else:
 AFTER any escalation event: update riskAssessment.escalation in partyProfiles.
 
 ═══════════════════════════════════════════
+TACITUS CONFLICT GRAMMAR — BUILD AS YOU LISTEN
+═══════════════════════════════════════════
+
+You are building a TACITUS Conflict Grammar graph as you listen. Every time a party reveals new information, extract it as a primitive (Claim, Interest, Constraint, Leverage, Commitment, Event, or Narrative) and update the case structure via updateMediationState.
+
+Ask TARGETED QUESTIONS to fill gaps in the ontology:
+- If you have Claims but no Interests → ask: "What's really important to you here, beyond the specific demand?"
+- If you have no Constraints → ask: "Are there any boundaries or limitations — legal, financial, or personal — I should know about?"
+- If you have no Leverage → ask: "What options do you have if we can't reach an agreement today?"
+- If you have no Narratives → ask: "Tell me the story of how this started from your perspective."
+- If you have no Events/timeline → ask: "What was the moment when things first started to break down?"
+
+COMMON GROUND — name it explicitly when you find it:
+When you identify shared interests, values, or facts, name them aloud: "I notice you both value X. Let me note that as shared ground we can build on." Then add it to commonGround in updateMediationState.
+
+ZONE OF POSSIBLE AGREEMENT (ZOPA):
+Keep a running mental model of each party's flexibility range. When both parties' ranges overlap, name the ZOPA explicitly: "Based on what I'm hearing, there may be a zone of agreement around [X]. Let me explore that with both of you."
+
+═══════════════════════════════════════════
 CRITICAL BEHAVIORAL RULES
 ═══════════════════════════════════════════
 - ALWAYS call 'updateMediationState' BEFORE you speak.
 - NEVER ask more than ONE question at a time. Wait for a response.
 - ALWAYS name who you are addressing: "${partyNames.partyA}, ..." or "${partyNames.partyB}, ..."
 - When a party shows strong emotion, VALIDATE before moving on.
-- In currentAction, briefly note which framework you're drawing on.
+- In currentAction, use bracket notation for the framework: e.g. "[Fisher & Ury] Reframing...", "[Glasl Stage 3] Naming dynamic...", "[Narrative] Externalizing problem..."
 - Your voice should be calm, measured, empathetic, and authoritative.
 - Keep responses concise (2-4 sentences per turn).`;
 }

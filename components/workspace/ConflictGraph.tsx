@@ -85,8 +85,14 @@ export default function ConflictGraph({ nodes, edges }: Props) {
     // Stop old simulation
     simulationRef.current?.stop();
 
-    // Deep-clone nodes/edges so D3 can mutate them
-    const simNodes: GraphNode[] = nodes.map((n) => ({ ...n }));
+    // Deep-clone nodes/edges so D3 can mutate them.
+    // Pre-initialise x/y so SVG attributes are never "undefined" before the
+    // first simulation tick fires (fixes "<line> attribute x2: Expected length, 'undefined'").
+    const simNodes: GraphNode[] = nodes.map((n, i) => ({
+      ...n,
+      x: n.x ?? width / 2 + Math.cos((i * 2 * Math.PI) / Math.max(nodes.length, 1)) * 60,
+      y: n.y ?? height / 2 + Math.sin((i * 2 * Math.PI) / Math.max(nodes.length, 1)) * 60,
+    }));
     const nodeById = new Map(simNodes.map((n) => [n.id, n]));
     const simEdges: any[] = edges
       .map((e) => ({
@@ -113,7 +119,13 @@ export default function ConflictGraph({ nodes, edges }: Props) {
       .attr("stroke", (d) => edgeColor(d.type))
       .attr("stroke-width", 1.5)
       .attr("stroke-opacity", 0.55)
-      .attr("marker-end", "url(#arrow)");
+      .attr("marker-end", "url(#arrow)")
+      // Set initial coordinates from pre-initialised positions so SVG
+      // never renders with undefined/empty length attributes.
+      .attr("x1", (d) => (d.source as GraphNode).x ?? 0)
+      .attr("y1", (d) => (d.source as GraphNode).y ?? 0)
+      .attr("x2", (d) => (d.target as GraphNode).x ?? 0)
+      .attr("y2", (d) => (d.target as GraphNode).y ?? 0);
 
     // ── Link labels ──
     const linkLabelSel = root.append("g").attr("class", "link-labels")

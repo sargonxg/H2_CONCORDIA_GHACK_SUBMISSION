@@ -23,14 +23,28 @@ app.prepare().then(() => {
     }
   });
 
-  // WebSocket server on /api/live — same port, same container
-  const wss = new WebSocketServer({ server, path: "/api/live" });
+  // Use noServer mode so we can selectively route WebSocket upgrades.
+  // This prevents the ws library from rejecting Next.js HMR connections
+  // (which go to /_next/webpack-hmr) with a 400 status.
+  const wss = new WebSocketServer({ noServer: true });
   wss.on("connection", handleWebSocketConnection);
 
+  server.on("upgrade", (req, socket, head) => {
+    const { pathname } = parse(req.url ?? "");
+    if (pathname === "/api/live") {
+      wss.handleUpgrade(req, socket as any, head, (client) => {
+        wss.emit("connection", client, req);
+      });
+    }
+    // All other upgrade requests (e.g. Next.js HMR /_next/webpack-hmr)
+    // are intentionally NOT handled here — Next.js registers its own
+    // upgrade listener inside app.prepare() and will pick them up.
+  });
+
   server.listen(PORT, hostname, () => {
-    console.log(`CONCORDIA running on port ${PORT}`);
-    console.log(
-      `Vertex AI: ${process.env.USE_VERTEX_AI !== "false" ? "enabled" : "disabled"}`,
-    );
+    const authMode = process.env.USE_VERTEX_AI !== "false" ? "Vertex AI" : "Gemini API Key";
+    console.log(`\n🕊  CONCORDIA running on http://${hostname}:${PORT}`);
+    console.log(`   Auth mode : ${authMode}`);
+    console.log(`   Env       : ${process.env.NODE_ENV ?? "development"}\n`);
   });
 });

@@ -1244,6 +1244,71 @@ export default function DemoPage() {
           </div>
         </div>
       </div>
+
+      {/* ── Demo Completion Screen ── */}
+      <AnimatePresence>
+        {currentStep >= STEPS.length - 1 && !isTyping && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.6, delay: 1.2 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/80 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 1.4, ease: "easeOut" }}
+              className="bg-gray-900 border border-gray-700 rounded-2xl p-8 max-w-lg w-full mx-4 shadow-2xl text-center"
+            >
+              {/* Icon */}
+              <div className="w-16 h-16 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center mx-auto mb-5">
+                <CheckCircle className="w-8 h-8 text-emerald-400" />
+              </div>
+
+              <h2 className="text-2xl font-bold text-white mb-2">Agreement Reached</h2>
+              <p className="text-gray-400 text-sm mb-6 leading-relaxed">
+                CONCORDIA guided Sarah and Michael from heated conflict to a signed framework in{" "}
+                <span className="text-white font-semibold">12 exchanges</span> — extracting{" "}
+                <span className="text-white font-semibold">14 conflict primitives</span>, de-escalating
+                from Level&nbsp;3, and identifying a ZOPA built on mutual trust.
+              </p>
+
+              {/* Stats row */}
+              <div className="grid grid-cols-3 gap-3 mb-7">
+                {[
+                  { label: "Primitives extracted", value: "14", color: "text-indigo-400" },
+                  { label: "Trust increase", value: "+35%", color: "text-emerald-400" },
+                  { label: "Escalation", value: "78→10", color: "text-amber-400" },
+                ].map(({ label, value, color }) => (
+                  <div key={label} className="bg-gray-800 rounded-xl p-3 border border-gray-700">
+                    <div className={`text-xl font-bold ${color}`}>{value}</div>
+                    <div className="text-[10px] text-gray-500 uppercase tracking-wider mt-0.5">{label}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* CTAs */}
+              <div className="flex flex-col sm:flex-row gap-3">
+                <Link
+                  href="/workspace"
+                  className="flex-1 flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm transition-colors"
+                >
+                  <Zap className="w-4 h-4" />
+                  Start a Real Session →
+                </Link>
+                <button
+                  onClick={handleReset}
+                  className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white text-sm transition-colors border border-gray-700"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  Replay Demo
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
