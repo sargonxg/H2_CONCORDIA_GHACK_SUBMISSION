@@ -186,8 +186,22 @@ export const chatWithAdvisor = async (
 export const analyzePathways = async (
   transcript: string,
   caseStructure: string,
+  framework?: string,
 ): Promise<string> => {
-  const data = await apiPost("/api/analyze", { transcript, caseStructure });
+  const data = await apiPost("/api/analyze", { transcript, caseStructure, framework });
+  return data.result;
+};
+
+// ── Case Summary ──
+
+export const summarizeCase = async (caseData: {
+  transcript: string;
+  actors: any[];
+  primitives: any[];
+  commonGround: string[];
+  tensionPoints: string[];
+}): Promise<string> => {
+  const data = await apiPost("/api/summarize", caseData);
   return data.result;
 };
 

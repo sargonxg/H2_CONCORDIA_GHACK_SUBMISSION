@@ -5,6 +5,7 @@ import { classifyApiError } from "@/lib/api-error";
 const schema = z.object({
   transcript: z.string().min(1).max(50000),
   caseStructure: z.record(z.any()).optional(),
+  framework: z.string().optional(),
 });
 
 export async function POST(request: Request) {
@@ -14,8 +15,12 @@ export async function POST(request: Request) {
     if (!parsed.success) {
       return Response.json({ error: "Invalid request" }, { status: 400 });
     }
-    const { transcript, caseStructure } = parsed.data;
-    const result = await analyzePathways(transcript, caseStructure ? JSON.stringify(caseStructure) : "");
+    const { transcript, caseStructure, framework } = parsed.data;
+    const result = await analyzePathways(
+      transcript,
+      caseStructure ? JSON.stringify(caseStructure) : "",
+      framework,
+    );
     return Response.json({ result });
   } catch (error) {
     const { message, status } = classifyApiError(error);
