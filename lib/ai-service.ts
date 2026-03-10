@@ -32,11 +32,11 @@ const MODEL_LIVE =
   (useVertexAI
     ? "gemini-live-2.5-flash-native-audio"
     : "gemini-2.5-flash-native-audio-preview-12-2025");
-const MODEL_TEXT = process.env.MODEL_TEXT || "gemini-2.0-flash";
+const MODEL_TEXT = process.env.MODEL_TEXT || "gemini-3-flash-preview";
 const MODEL_TTS =
   process.env.MODEL_TTS || "gemini-2.5-flash-preview-tts";
 const MODEL_TRANSCRIBE =
-  process.env.MODEL_TRANSCRIBE || "gemini-2.0-flash";
+  process.env.MODEL_TRANSCRIBE || "gemini-3-flash-preview";
 
 // ── Tool declaration for live mediation state updates ──
 

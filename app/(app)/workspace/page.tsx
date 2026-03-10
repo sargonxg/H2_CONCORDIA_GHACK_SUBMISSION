@@ -1234,6 +1234,13 @@ export default function Workspace() {
     });
   };
 
+  // Knowledge graph — must be called before any early return (Rules of Hooks)
+  const { nodes: graphNodes, edges: graphEdges, stats: ontologyStats } = useConflictGraph(
+    activeCase?.actors ?? [],
+    activeCase?.primitives ?? [],
+    liveMediationState,
+  );
+
   // ─── CASE LIST VIEW ───
   if (!activeCaseId) {
     return (
@@ -1305,13 +1312,6 @@ export default function Workspace() {
   const presentTypes = new Set(activeCase?.primitives.map((p) => p.type));
   const healthScore = Math.round(
     (presentTypes.size / PRIMITIVE_TYPES.length) * 100,
-  );
-
-  // Knowledge graph
-  const { nodes: graphNodes, edges: graphEdges, stats: ontologyStats } = useConflictGraph(
-    activeCase?.actors ?? [],
-    activeCase?.primitives ?? [],
-    liveMediationState,
   );
 
   // Party claim counts for OntologyHealthCheck imbalance detection
