@@ -1,7 +1,9 @@
+"use client";
+
 import { useState } from "react";
 import { motion } from "motion/react";
 import { Volume2, Play, Loader2 } from "lucide-react";
-import { generateSpeech } from "../services/geminiService";
+import { generateSpeech } from "@/services/gemini-client";
 
 export default function TTS() {
   const [text, setText] = useState("");
@@ -19,9 +21,6 @@ export default function TTS() {
         for (let i = 0; i < binaryString.length; i++) {
           bytes[i] = binaryString.charCodeAt(i);
         }
-        const blob = new Blob([bytes], { type: "audio/pcm;rate=24000" });
-        // For simplicity, we'll try to play it as a generic audio blob, but PCM usually needs an AudioContext.
-        // Let's decode it properly.
         const audioContext = new AudioContext({ sampleRate: 24000 });
         const pcm16 = new Int16Array(bytes.buffer);
         const audioBuffer = audioContext.createBuffer(1, pcm16.length, 24000);
@@ -30,14 +29,11 @@ export default function TTS() {
           channelData[i] = pcm16[i] / 0x7fff;
         }
 
-        // We can't easily create a blob URL from an AudioBuffer for an <audio> tag without encoding to WAV.
-        // So we'll just play it directly.
         const source = audioContext.createBufferSource();
         source.buffer = audioBuffer;
         source.connect(audioContext.destination);
         source.start();
 
-        // We'll just set a dummy URL to show it's ready, or we could encode to WAV.
         setAudioUrl("played");
       }
     } catch (error) {

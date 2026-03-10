@@ -1,5 +1,8 @@
+"use client";
+
 import { motion } from "motion/react";
 import { BookOpen, Scale, HeartHandshake, FileText, ArrowRight } from "lucide-react";
+import Link from "next/link";
 
 export default function ResolutionLibrary() {
   const frameworks = [
@@ -43,7 +46,7 @@ export default function ResolutionLibrary() {
           {frameworks.map((fw, idx) => {
             const Icon = fw.icon;
             return (
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: idx * 0.1 }}
@@ -59,7 +62,6 @@ export default function ResolutionLibrary() {
                       <h2 className="text-xl font-semibold text-white">{fw.title}</h2>
                       <p className="text-[var(--color-text-muted)] mt-1 leading-relaxed">{fw.description}</p>
                     </div>
-                    
                     <div className="grid md:grid-cols-2 gap-4 pt-4 border-t border-[var(--color-border)]">
                       <div>
                         <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)] mb-2">Key Concepts</h3>
@@ -88,9 +90,9 @@ export default function ResolutionLibrary() {
             <h3 className="text-lg font-semibold text-white">Want to apply these frameworks?</h3>
             <p className="text-sm text-[var(--color-text-muted)] mt-1">Start a live mediation session and select your preferred approach.</p>
           </div>
-          <a href="/workspace" className="flex items-center gap-2 text-[var(--color-accent)] hover:text-[var(--color-accent-hover)] font-medium transition-colors">
+          <Link href="/workspace" className="flex items-center gap-2 text-[var(--color-accent)] hover:text-[var(--color-accent-hover)] font-medium transition-colors">
             Go to Workspace <ArrowRight className="w-4 h-4" />
-          </a>
+          </Link>
         </div>
       </div>
     </div>

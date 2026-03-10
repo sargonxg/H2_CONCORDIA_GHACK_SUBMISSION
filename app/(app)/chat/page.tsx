@@ -1,7 +1,9 @@
+"use client";
+
 import { useState, useRef, useEffect } from "react";
 import { motion } from "motion/react";
 import { MessageSquare, Send, User, ShieldAlert } from "lucide-react";
-import { chatWithAdvisor } from "../services/geminiService";
+import { chatWithAdvisor } from "@/services/gemini-client";
 import Markdown from "react-markdown";
 
 export default function Chat() {

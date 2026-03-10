@@ -1,4 +1,7 @@
-import { Link, Outlet, useLocation } from "react-router-dom";
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
   Activity,
   MessageSquare,
@@ -9,18 +12,18 @@ import {
   Info,
 } from "lucide-react";
 
-export default function Layout() {
-  const location = useLocation();
+const navItems = [
+  { path: "/", icon: Shield, label: "Overview" },
+  { path: "/workspace", icon: Activity, label: "Live Workspace" },
+  { path: "/library", icon: BookOpen, label: "Resolution Library" },
+  { path: "/how-it-works", icon: Info, label: "How It Works" },
+  { path: "/chat", icon: MessageSquare, label: "Advisor Chat" },
+  { path: "/transcribe", icon: Mic, label: "Transcription" },
+  { path: "/tts", icon: Volume2, label: "Speech Engine" },
+];
 
-  const navItems = [
-    { path: "/", icon: Shield, label: "Overview" },
-    { path: "/workspace", icon: Activity, label: "Live Workspace" },
-    { path: "/library", icon: BookOpen, label: "Resolution Library" },
-    { path: "/how-it-works", icon: Info, label: "How It Works" },
-    { path: "/chat", icon: MessageSquare, label: "Advisor Chat" },
-    { path: "/transcribe", icon: Mic, label: "Transcription" },
-    { path: "/tts", icon: Volume2, label: "Speech Engine" },
-  ];
+export default function AppLayout({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
 
   return (
     <div className="flex h-screen bg-[var(--color-bg)] text-[var(--color-text)] overflow-hidden">
@@ -38,12 +41,12 @@ export default function Layout() {
 
         <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
           {navItems.map((item) => {
-            const isActive = location.pathname === item.path;
+            const isActive = pathname === item.path;
             const Icon = item.icon;
             return (
               <Link
                 key={item.path}
-                to={item.path}
+                href={item.path}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-colors ${
                   isActive
                     ? "bg-[var(--color-surface-hover)] text-white font-medium"
@@ -73,7 +76,7 @@ export default function Layout() {
 
       {/* Main Content */}
       <main className="flex-1 overflow-hidden relative flex flex-col">
-        <Outlet />
+        {children}
       </main>
     </div>
   );
