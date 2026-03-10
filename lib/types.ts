@@ -146,6 +146,70 @@ export type Case = {
   primitives: Primitive[];
   partyAName: string;
   partyBName: string;
+  profilingEnabled?: boolean; // default true when undefined
+};
+
+// ── Pathway Analysis Result Types ──
+
+export type PathwayCommonGround = {
+  item: string;
+  strength: "strong" | "moderate" | "weak";
+  evidence: string;
+};
+
+export type PathwayCriticalQuestion = {
+  question: string;
+  target: string;
+  purpose: string;
+  framework: string;
+};
+
+export type ResolutionPathway = {
+  title: string;
+  description: string;
+  framework: string;
+  tradeoffsForA: string;
+  tradeoffsForB: string;
+  feasibility: "high" | "medium" | "low";
+  prerequisites: string[];
+  implementationSteps: string[];
+};
+
+export type ZopaAnalysis = {
+  exists: boolean;
+  description: string;
+  partyARange: string;
+  partyBRange: string;
+  overlapArea: string;
+};
+
+export type FrameworkFit = {
+  framework: string;
+  score: number;
+  rationale: string;
+};
+
+export type PathwaysResult = {
+  commonGround: PathwayCommonGround[];
+  criticalQuestions: PathwayCriticalQuestion[];
+  pathways: ResolutionPathway[];
+  zopaAnalysis: ZopaAnalysis;
+  frameworkFit: FrameworkFit[];
+  psychologicalDynamics: string[];
+  executiveSummary: string;
+};
+
+// ── Case Summary Type ──
+
+export type CaseSummary = {
+  sessionOverview: string;
+  keyClaimsPartyA: string[];
+  keyClaimsPartyB: string[];
+  coreInterestsPartyA: string[];
+  coreInterestsPartyB: string[];
+  areasOfAgreement: string[];
+  unresolvedTensions: string[];
+  recommendedNextSteps: string[];
 };
 
 // ── Graph / Edge Types ──

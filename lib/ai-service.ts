@@ -272,7 +272,14 @@ function buildSystemInstruction(
   partyNames: { partyA: string; partyB: string },
   context: string,
 ) {
+  const stylePreamble =
+    mediatorProfile.style === "empathic"
+      ? `YOUR STYLE: You are a compassionate conflict facilitator. Your tone is warm, gentle, and deeply present. You lead with emotion before process. You say things like "I can really feel how much this matters to you" before analyzing the structure. You avoid jargon entirely. You follow the emotional rhythm of the conversation rather than strict phases. If someone needs to be heard, you let them talk longer. You use everyday language — never technical terms like "ontology", "leverage", or "BATNA" aloud.`
+      : `YOUR STYLE: You are a board-certified professional mediator. Your tone is measured, precise, and authoritative. You reference established frameworks by name when appropriate (Fisher & Ury, Glasl, Lederach, etc.). You follow phase progression carefully. You use formal but accessible language. You maintain professional warmth without becoming casual.`;
+
   return `You are CONCORDIA, an elite AI Mediator created by the TACITUS Institute for Conflict Resolution. You are facilitating a live mediation session between two parties: "${partyNames.partyA}" and "${partyNames.partyB}".
+
+${stylePreamble}
 
 Your mediation approach is: ${mediatorProfile.approach}.
 
@@ -554,18 +561,26 @@ Be direct, specific, and actionable. Reference the case facts when available. Av
 export const analyzePathways = async (
   transcript: string,
   caseStructure: string,
+  framework?: string,
 ) => {
   const ai = initAI();
+  const frameworkInstruction = framework
+    ? `\nAnalyze this conflict SPECIFICALLY through the lens of "${framework}". Apply its principles, techniques, and evaluation criteria throughout your analysis.\n`
+    : "";
   const response = await ai.models.generateContent({
     model: _MODEL_TEXT,
-    contents: `You are the Resolution Architect for the CONCORDIA mediation platform.
+    contents: `You are the Resolution Architect for the CONCORDIA mediation platform.${frameworkInstruction}
 
-Analyze the following mediation transcript and case structure. Produce a detailed resolution analysis:
+Analyze the mediation transcript and case structure below. Produce a structured, theory-grounded resolution analysis.
 
-1. Common Ground — Identify shared interests, acknowledged facts, agreements, shared values, and mutual concerns.
-2. Critical Questions — Generate targeted questions to reveal hidden interests, test flexibility, help parties see each other's perspective, and move from blame to problem-solving.
-3. Resolution Pathways — Propose concrete, actionable pathways with trade-offs and implementation steps.
-4. Psychological Dynamics — Assess the emotional landscape: power balance, emotional readiness, communication patterns.
+INSTRUCTIONS:
+1. Executive Summary — One paragraph synthesizing the core conflict, current state, and most promising resolution direction.
+2. Common Ground — Each item with a strength rating (strong/moderate/weak) and the evidence from the transcript.
+3. Critical Questions — Targeted questions with: who to ask (target), why it matters (purpose), and which framework supports asking it (framework).
+4. Resolution Pathways — 2-4 concrete pathways, each with: title, description, framework used, trade-offs for each party, feasibility (high/medium/low), prerequisites, and numbered implementation steps.
+5. ZOPA Analysis — Does a Zone of Possible Agreement exist? Describe each party's flexibility range and the overlap area (or explain what would need to change to create one).
+6. Framework Fit — Score each of the 6 CONCORDIA frameworks (Fisher & Ury, Lederach, Glasl, Zartman, Bush & Folger, Narrative) 0-100 for fit with this specific conflict. Explain why.
+7. Psychological Dynamics — Assess emotional readiness, power balance, communication patterns, and readiness-to-resolve.
 
 Transcript:
 ${transcript}
@@ -577,16 +592,118 @@ ${caseStructure}`,
       responseSchema: {
         type: Type.OBJECT,
         properties: {
-          commonGround: { type: Type.ARRAY, items: { type: Type.STRING } },
+          executiveSummary: { type: Type.STRING },
+          commonGround: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                item: { type: Type.STRING },
+                strength: { type: Type.STRING },
+                evidence: { type: Type.STRING },
+              },
+            },
+          },
           criticalQuestions: {
             type: Type.ARRAY,
-            items: { type: Type.STRING },
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                question: { type: Type.STRING },
+                target: { type: Type.STRING },
+                purpose: { type: Type.STRING },
+                framework: { type: Type.STRING },
+              },
+            },
           },
-          pathways: { type: Type.ARRAY, items: { type: Type.STRING } },
-          psychologicalDynamics: {
+          pathways: {
             type: Type.ARRAY,
-            items: { type: Type.STRING },
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                title: { type: Type.STRING },
+                description: { type: Type.STRING },
+                framework: { type: Type.STRING },
+                tradeoffsForA: { type: Type.STRING },
+                tradeoffsForB: { type: Type.STRING },
+                feasibility: { type: Type.STRING },
+                prerequisites: { type: Type.ARRAY, items: { type: Type.STRING } },
+                implementationSteps: { type: Type.ARRAY, items: { type: Type.STRING } },
+              },
+            },
           },
+          zopaAnalysis: {
+            type: Type.OBJECT,
+            properties: {
+              exists: { type: Type.BOOLEAN },
+              description: { type: Type.STRING },
+              partyARange: { type: Type.STRING },
+              partyBRange: { type: Type.STRING },
+              overlapArea: { type: Type.STRING },
+            },
+          },
+          frameworkFit: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                framework: { type: Type.STRING },
+                score: { type: Type.NUMBER },
+                rationale: { type: Type.STRING },
+              },
+            },
+          },
+          psychologicalDynamics: { type: Type.ARRAY, items: { type: Type.STRING } },
+        },
+      },
+    },
+  });
+  return response.text;
+};
+
+// ── Case Summary ──
+
+export const summarizeCase = async (caseData: {
+  transcript: string;
+  actors: any[];
+  primitives: any[];
+  commonGround: string[];
+  tensionPoints: string[];
+}) => {
+  const ai = initAI();
+  const response = await ai.models.generateContent({
+    model: _MODEL_TEXT,
+    contents: `You are the CONCORDIA Case Analyst. Generate a structured executive summary for this mediation case.
+
+Transcript:
+${caseData.transcript}
+
+Actors:
+${JSON.stringify(caseData.actors, null, 2)}
+
+Primitives:
+${JSON.stringify(caseData.primitives, null, 2)}
+
+Common Ground identified:
+${caseData.commonGround.join("\n") || "(none yet)"}
+
+Tension Points:
+${caseData.tensionPoints.join("\n") || "(none yet)"}
+
+Generate a comprehensive structured summary with: session overview, top 3 claims per party, core interests per party, areas of agreement, unresolved tensions, and recommended next steps.`,
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          sessionOverview: { type: Type.STRING },
+          keyClaimsPartyA: { type: Type.ARRAY, items: { type: Type.STRING } },
+          keyClaimsPartyB: { type: Type.ARRAY, items: { type: Type.STRING } },
+          coreInterestsPartyA: { type: Type.ARRAY, items: { type: Type.STRING } },
+          coreInterestsPartyB: { type: Type.ARRAY, items: { type: Type.STRING } },
+          areasOfAgreement: { type: Type.ARRAY, items: { type: Type.STRING } },
+          unresolvedTensions: { type: Type.ARRAY, items: { type: Type.STRING } },
+          recommendedNextSteps: { type: Type.ARRAY, items: { type: Type.STRING } },
         },
       },
     },

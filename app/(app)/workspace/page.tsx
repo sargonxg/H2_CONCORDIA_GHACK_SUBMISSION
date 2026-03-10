@@ -36,8 +36,9 @@ import {
   extractPrimitives,
   researchGrounding,
   analyzePathways,
+  summarizeCase,
 } from "@/services/gemini-client";
-import type { Actor, Primitive, PrimitiveType, Case, LiveMediationState, OntologyStats, PartyProfile, GapNotification } from "@/lib/types";
+import type { Actor, Primitive, PrimitiveType, Case, LiveMediationState, OntologyStats, PartyProfile, GapNotification, CaseSummary } from "@/lib/types";
 import { useConflictGraph } from "@/hooks/useConflictGraph";
 import ConflictGraph from "@/components/workspace/ConflictGraph";
 import OntologyHealthCheck from "@/components/workspace/OntologyHealthCheck";
@@ -241,11 +242,17 @@ export default function Workspace() {
   const [mediatorProfile, setMediatorProfile] = useState({
     voice: "Zephyr",
     approach: "Facilitative",
+    style: "professional" as "professional" | "empathic",
   });
   const [showSettings, setShowSettings] = useState(false);
   const [activeTab, setActiveTab] = useState<
     "transcript" | "structure" | "pathways" | "graph"
   >("transcript");
+  const [selectedFramework, setSelectedFramework] = useState("");
+  const [expandedPathways, setExpandedPathways] = useState<Set<number>>(new Set([0]));
+  const [showSummary, setShowSummary] = useState(false);
+  const [summaryData, setSummaryData] = useState<CaseSummary | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
 
   const [liveMediationState, setLiveMediationState] = useState<LiveMediationState | null>(null);
   const [gapNotifications, setGapNotifications] = useState<GapNotification[]>([]);
@@ -1295,6 +1302,92 @@ export default function Workspace() {
     }
   };
 
+  const handleAnalyzeWithFramework = async (fw?: string) => {
+    if (!activeCase?.transcript) return;
+    const frameworkToUse = fw ?? selectedFramework;
+    setStatus("ANALYZING");
+    try {
+      const currentGraphContext = JSON.stringify(
+        { actors: activeCase.actors, primitives: activeCase.primitives },
+        null,
+        2,
+      );
+      const resultStr = await analyzePathways(
+        activeCase.transcript,
+        currentGraphContext,
+        frameworkToUse || undefined,
+      );
+      setPathways(JSON.parse(resultStr));
+      setExpandedPathways(new Set([0]));
+      setActiveTab("pathways");
+      setStatus("IDLE");
+    } catch (err) {
+      console.error("Framework analysis error:", err);
+      setStatus("ERROR");
+    }
+  };
+
+  const handleGenerateSummary = async () => {
+    if (!activeCase?.transcript) return;
+    setSummaryLoading(true);
+    setSummaryData(null);
+    setShowSummary(true);
+    try {
+      const resultStr = await summarizeCase({
+        transcript: activeCase.transcript,
+        actors: activeCase.actors,
+        primitives: activeCase.primitives,
+        commonGround: liveMediationState?.commonGround || [],
+        tensionPoints: liveMediationState?.tensionPoints || [],
+      });
+      setSummaryData(JSON.parse(resultStr));
+    } catch (err) {
+      console.error("Summary generation error:", err);
+    } finally {
+      setSummaryLoading(false);
+    }
+  };
+
+  const exportSummaryAsMarkdown = () => {
+    if (!summaryData) return;
+    const lines: string[] = [
+      `# CONCORDIA Case Summary`,
+      `**Case:** ${activeCase?.title || "Untitled"}`,
+      `**Generated:** ${new Date().toLocaleString()}`,
+      ``,
+      `## Session Overview`,
+      summaryData.sessionOverview,
+      ``,
+      `## Key Claims`,
+      `### ${activeCase?.partyAName || "Party A"}`,
+      ...summaryData.keyClaimsPartyA.map((c) => `- ${c}`),
+      `### ${activeCase?.partyBName || "Party B"}`,
+      ...summaryData.keyClaimsPartyB.map((c) => `- ${c}`),
+      ``,
+      `## Core Interests`,
+      `### ${activeCase?.partyAName || "Party A"}`,
+      ...summaryData.coreInterestsPartyA.map((c) => `- ${c}`),
+      `### ${activeCase?.partyBName || "Party B"}`,
+      ...summaryData.coreInterestsPartyB.map((c) => `- ${c}`),
+      ``,
+      `## Areas of Agreement`,
+      ...summaryData.areasOfAgreement.map((c) => `- ${c}`),
+      ``,
+      `## Unresolved Tensions`,
+      ...summaryData.unresolvedTensions.map((c) => `- ${c}`),
+      ``,
+      `## Recommended Next Steps`,
+      ...summaryData.recommendedNextSteps.map((c, i) => `${i + 1}. ${c}`),
+    ];
+    const blob = new Blob([lines.join("\n")], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `concordia-summary-${Date.now()}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const addActor = () => {
     updateActiveCase({
       actors: [
@@ -1472,6 +1565,17 @@ export default function Workspace() {
         </div>
 
         <div className="flex items-center gap-3">
+          {/* Generate Summary button */}
+          <button
+            onClick={handleGenerateSummary}
+            disabled={!activeCase?.transcript || summaryLoading}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:text-white hover:border-[var(--color-accent)] transition-colors disabled:opacity-40"
+            title="Generate Case Summary"
+          >
+            <BookOpen className="w-4 h-4" />
+            Summary
+          </button>
+
           <div className="relative">
             <button
               onClick={() => setShowSettings(!showSettings)}
@@ -1482,23 +1586,34 @@ export default function Workspace() {
             </button>
 
             {showSettings && (
-              <div className="absolute top-full right-0 mt-2 w-64 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl shadow-xl p-4 z-50">
-                <h3 className="text-sm font-semibold mb-3">
-                  Mediator Profile
-                </h3>
+              <div className="absolute top-full right-0 mt-2 w-72 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl shadow-xl p-4 z-50">
+                <h3 className="text-sm font-semibold mb-3">Mediator Profile</h3>
                 <div className="space-y-3">
+                  {/* Mediator Style */}
                   <div>
-                    <label className="text-xs text-[var(--color-text-muted)] block mb-1">
-                      Voice
-                    </label>
+                    <label className="text-xs text-[var(--color-text-muted)] block mb-1">Mediator Style</label>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <button
+                        onClick={() => setMediatorProfile({ ...mediatorProfile, style: "professional", voice: "Zephyr" })}
+                        className={`p-2 rounded-lg border text-left transition-all ${mediatorProfile.style === "professional" ? "border-[var(--color-accent)] bg-[var(--color-accent)]/10 text-white" : "border-[var(--color-border)] text-[var(--color-text-muted)] hover:border-[var(--color-accent)]/50"}`}
+                      >
+                        <div className="text-xs font-semibold">Professional</div>
+                        <div className="text-[10px] mt-0.5 leading-tight opacity-70">Formal, structured, framework-focused</div>
+                      </button>
+                      <button
+                        onClick={() => setMediatorProfile({ ...mediatorProfile, style: "empathic", voice: "Kore" })}
+                        className={`p-2 rounded-lg border text-left transition-all ${mediatorProfile.style === "empathic" ? "border-[var(--color-accent)] bg-[var(--color-accent)]/10 text-white" : "border-[var(--color-border)] text-[var(--color-text-muted)] hover:border-[var(--color-accent)]/50"}`}
+                      >
+                        <div className="text-xs font-semibold">Empathic</div>
+                        <div className="text-[10px] mt-0.5 leading-tight opacity-70">Warm, emotion-first, conversational</div>
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs text-[var(--color-text-muted)] block mb-1">Voice</label>
                     <select
                       value={mediatorProfile.voice}
-                      onChange={(e) =>
-                        setMediatorProfile({
-                          ...mediatorProfile,
-                          voice: e.target.value,
-                        })
-                      }
+                      onChange={(e) => setMediatorProfile({ ...mediatorProfile, voice: e.target.value })}
                       className="w-full bg-[var(--color-bg)] border border-[var(--color-border)] rounded text-sm p-1.5 focus:outline-none focus:border-[var(--color-accent)]"
                     >
                       <option value="Zephyr">Zephyr (Calm, Neutral)</option>
@@ -1507,32 +1622,32 @@ export default function Workspace() {
                     </select>
                   </div>
                   <div>
-                    <label className="text-xs text-[var(--color-text-muted)] block mb-1">
-                      Approach
-                    </label>
+                    <label className="text-xs text-[var(--color-text-muted)] block mb-1">Approach</label>
                     <select
                       value={mediatorProfile.approach}
-                      onChange={(e) =>
-                        setMediatorProfile({
-                          ...mediatorProfile,
-                          approach: e.target.value,
-                        })
-                      }
+                      onChange={(e) => setMediatorProfile({ ...mediatorProfile, approach: e.target.value })}
                       className="w-full bg-[var(--color-bg)] border border-[var(--color-border)] rounded text-sm p-1.5 focus:outline-none focus:border-[var(--color-accent)]"
                     >
-                      <option value="Facilitative">
-                        Facilitative (Guide process)
-                      </option>
-                      <option value="Evaluative">
-                        Evaluative (Assess merits)
-                      </option>
-                      <option value="Transformative">
-                        Transformative (Empowerment)
-                      </option>
-                      <option value="Narrative">
-                        Narrative (Deconstruct stories)
-                      </option>
+                      <option value="Facilitative">Facilitative (Guide process)</option>
+                      <option value="Evaluative">Evaluative (Assess merits)</option>
+                      <option value="Transformative">Transformative (Empowerment)</option>
+                      <option value="Narrative">Narrative (Deconstruct stories)</option>
                     </select>
+                  </div>
+                  {/* Psychological Profiling Toggle */}
+                  <div className="pt-2 border-t border-[var(--color-border)]">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-xs font-medium text-white">Deep Psychological Profiling</div>
+                        <div className="text-[10px] text-[var(--color-text-muted)] mt-0.5">Thomas-Kilmann · Plutchik · Trust model</div>
+                      </div>
+                      <button
+                        onClick={() => updateActiveCase({ profilingEnabled: activeCase?.profilingEnabled === false })}
+                        className={`relative w-10 h-5 rounded-full transition-colors ${activeCase?.profilingEnabled !== false ? "bg-[var(--color-accent)]" : "bg-[var(--color-border)]"}`}
+                      >
+                        <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${activeCase?.profilingEnabled !== false ? "translate-x-5" : "translate-x-0.5"}`} />
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1737,24 +1852,64 @@ export default function Workspace() {
       <div className="flex-1 flex overflow-hidden p-4 gap-4">
         {/* ─── LEFT: Party Profiles ─── */}
         <div className="w-72 shrink-0 flex flex-col gap-4 overflow-y-auto pr-1">
-          <EnhancedPartyProfile
-            name={activeCase?.partyAName || "Party A"}
-            profile={liveMediationState?.partyProfiles?.partyA || null}
-            side="A"
-          />
-          <EnhancedPartyProfile
-            name={activeCase?.partyBName || "Party B"}
-            profile={liveMediationState?.partyProfiles?.partyB || null}
-            side="B"
-          />
-
-          {/* ── Escalation Meter ── */}
-          <EscalationMeter
-            escalationScore={Math.max(
-              liveMediationState?.partyProfiles?.partyA?.riskAssessment?.escalation ?? 0,
-              liveMediationState?.partyProfiles?.partyB?.riskAssessment?.escalation ?? 0,
-            )}
-          />
+          {activeCase?.profilingEnabled !== false ? (
+            <>
+              <EnhancedPartyProfile
+                name={activeCase?.partyAName || "Party A"}
+                profile={liveMediationState?.partyProfiles?.partyA || null}
+                side="A"
+              />
+              <EnhancedPartyProfile
+                name={activeCase?.partyBName || "Party B"}
+                profile={liveMediationState?.partyProfiles?.partyB || null}
+                side="B"
+              />
+              {/* ── Escalation Meter ── */}
+              <EscalationMeter
+                escalationScore={Math.max(
+                  liveMediationState?.partyProfiles?.partyA?.riskAssessment?.escalation ?? 0,
+                  liveMediationState?.partyProfiles?.partyB?.riskAssessment?.escalation ?? 0,
+                )}
+              />
+            </>
+          ) : (
+            <>
+              {/* Simple party cards when profiling is disabled */}
+              {[
+                { name: activeCase?.partyAName || "Party A", profile: liveMediationState?.partyProfiles?.partyA, color: "blue" },
+                { name: activeCase?.partyBName || "Party B", profile: liveMediationState?.partyProfiles?.partyB, color: "violet" },
+              ].map(({ name, profile, color }) => (
+                <div key={name} className={`bg-[var(--color-surface)] border border-${color}-500/20 rounded-xl p-4`}>
+                  <div className="font-semibold text-sm text-white mb-2">{name}</div>
+                  {profile ? (
+                    <div className="space-y-1.5">
+                      <div className="text-[11px] text-[var(--color-text-muted)]">
+                        Emotion: <span className="text-white">{profile.emotionalState || "—"}</span>
+                      </div>
+                      <div className="text-[11px] text-[var(--color-text-muted)]">
+                        Engagement: <span className="text-white">{profile.engagementLevel || "—"}</span>
+                      </div>
+                      {profile.keyNeeds?.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {profile.keyNeeds.slice(0, 3).map((n, i) => (
+                            <span key={i} className="text-[10px] px-1.5 py-0.5 bg-[var(--color-bg)] rounded text-[var(--color-text-muted)]">{n}</span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-[var(--color-text-muted)] italic">Waiting for session…</p>
+                  )}
+                </div>
+              ))}
+              <button
+                onClick={() => updateActiveCase({ profilingEnabled: true })}
+                className="text-[11px] text-[var(--color-text-muted)] hover:text-[var(--color-accent)] text-center py-2 border border-dashed border-[var(--color-border)] rounded-xl transition-colors"
+              >
+                Enable psychological profiling for deeper analysis →
+              </button>
+            </>
+          )}
 
           {/* Common Ground */}
           {liveMediationState &&
@@ -2091,137 +2246,264 @@ export default function Workspace() {
 
           {/* ── PATHWAYS TAB ── */}
           {activeTab === "pathways" && (
-            <div className="flex-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-4 flex flex-col overflow-hidden">
-              <div className="flex-1 overflow-y-auto pr-2 space-y-6">
+            <div className="flex-1 flex flex-col gap-3 overflow-hidden">
+              {/* Framework selector toolbar */}
+              <div className="flex items-center gap-2 shrink-0">
+                <select
+                  value={selectedFramework}
+                  onChange={(e) => setSelectedFramework(e.target.value)}
+                  className="flex-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg text-sm p-2 focus:outline-none focus:border-[var(--color-accent)] text-[var(--color-text-muted)]"
+                >
+                  <option value="">All Frameworks</option>
+                  <option value="Fisher & Ury">Fisher &amp; Ury (Principled Negotiation)</option>
+                  <option value="Transformative">Transformative Mediation (Bush &amp; Folger)</option>
+                  <option value="Narrative">Narrative Mediation (Winslade &amp; Monk)</option>
+                  <option value="Glasl">Glasl Escalation Model</option>
+                  <option value="Lederach">Lederach Conflict Transformation</option>
+                  <option value="Zartman">Zartman Ripeness Theory</option>
+                </select>
+                <button
+                  onClick={() => handleAnalyzeWithFramework()}
+                  disabled={!activeCase?.transcript || status === "ANALYZING"}
+                  className="bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-white px-4 py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-50 flex items-center gap-2"
+                >
+                  {status === "ANALYZING" ? <Activity className="w-4 h-4 animate-spin" /> : <TrendingUp className="w-4 h-4" />}
+                  {selectedFramework ? "Re-analyze" : "Analyze"}
+                </button>
+              </div>
+
+              {/* Content */}
+              <div className="flex-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-4 overflow-y-auto">
                 {pathways ? (
                   <div className="space-y-8">
-                    {pathways.commonGround &&
-                      pathways.commonGround.length > 0 && (
-                        <motion.div
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                        >
-                          <h3 className="text-sm font-bold text-emerald-400 mb-3 flex items-center gap-2 uppercase tracking-wider">
-                            <CheckCircle2 className="w-4 h-4" /> Common Ground
-                          </h3>
-                          <div className="space-y-2">
-                            {pathways.commonGround.map(
-                              (item: string, i: number) => (
-                                <div
-                                  key={i}
-                                  className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-3 text-sm text-white flex items-start gap-2"
-                                >
-                                  <CheckCircle2 className="w-4 h-4 text-emerald-500 mt-0.5 shrink-0" />
-                                  {item}
-                                </div>
-                              ),
-                            )}
-                          </div>
-                        </motion.div>
-                      )}
+                    {/* Executive Summary */}
+                    {pathways.executiveSummary && (
+                      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                        className="p-4 bg-blue-500/5 border border-blue-500/20 rounded-xl">
+                        <h3 className="text-xs font-bold text-blue-400 uppercase tracking-wider mb-2 flex items-center gap-2">
+                          <BookOpen className="w-3.5 h-3.5" /> Executive Summary
+                        </h3>
+                        <p className="text-sm text-white leading-relaxed">{pathways.executiveSummary}</p>
+                      </motion.div>
+                    )}
 
-                    {pathways.criticalQuestions &&
-                      pathways.criticalQuestions.length > 0 && (
-                        <motion.div
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: 0.1 }}
-                        >
-                          <h3 className="text-sm font-bold text-amber-400 mb-3 flex items-center gap-2 uppercase tracking-wider">
-                            <Target className="w-4 h-4" /> Critical Questions
-                          </h3>
-                          <div className="space-y-2">
-                            {pathways.criticalQuestions.map(
-                              (item: string, i: number) => (
-                                <div
-                                  key={i}
-                                  className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-3 text-sm text-white flex items-start gap-2"
-                                >
-                                  <span className="text-amber-500 font-bold shrink-0">
-                                    Q{i + 1}.
-                                  </span>
-                                  {item}
-                                </div>
-                              ),
-                            )}
-                          </div>
-                        </motion.div>
-                      )}
-
-                    {pathways.pathways && pathways.pathways.length > 0 && (
-                      <motion.div
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.2 }}
-                      >
-                        <h3 className="text-sm font-bold text-[var(--color-accent)] mb-3 flex items-center gap-2 uppercase tracking-wider">
-                          <TrendingUp className="w-4 h-4" /> Resolution
-                          Pathways
+                    {/* Common Ground */}
+                    {pathways.commonGround?.length > 0 && (
+                      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
+                        <h3 className="text-sm font-bold text-emerald-400 mb-3 flex items-center gap-2 uppercase tracking-wider">
+                          <CheckCircle2 className="w-4 h-4" /> Common Ground
                         </h3>
                         <div className="space-y-2">
-                          {pathways.pathways.map(
-                            (item: string, i: number) => (
-                              <div
-                                key={i}
-                                className="bg-[var(--color-accent)]/5 border border-[var(--color-accent)]/20 rounded-lg p-3 text-sm text-white flex items-start gap-2"
-                              >
-                                <Lightbulb className="w-4 h-4 text-[var(--color-accent)] mt-0.5 shrink-0" />
-                                {item}
+                          {pathways.commonGround.map((item: any, i: number) => {
+                            const text = typeof item === "string" ? item : item.item;
+                            const strength = typeof item === "object" ? item.strength : null;
+                            const evidence = typeof item === "object" ? item.evidence : null;
+                            return (
+                              <div key={i} className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-3">
+                                <div className="flex items-start gap-2">
+                                  <CheckCircle2 className="w-4 h-4 text-emerald-500 mt-0.5 shrink-0" />
+                                  <div className="flex-1 text-sm text-white">
+                                    <span>{text}</span>
+                                    {strength && (
+                                      <span className={`ml-2 text-[10px] px-1.5 py-0.5 rounded font-mono ${strength === "strong" ? "bg-emerald-500/20 text-emerald-300" : strength === "moderate" ? "bg-amber-500/20 text-amber-300" : "bg-gray-500/20 text-gray-400"}`}>{strength}</span>
+                                    )}
+                                    {evidence && <p className="text-[11px] text-[var(--color-text-muted)] mt-1">{evidence}</p>}
+                                  </div>
+                                </div>
                               </div>
-                            ),
-                          )}
+                            );
+                          })}
                         </div>
                       </motion.div>
                     )}
 
-                    {pathways.psychologicalDynamics &&
-                      pathways.psychologicalDynamics.length > 0 && (
-                        <motion.div
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: 0.3 }}
-                        >
-                          <h3 className="text-sm font-bold text-violet-400 mb-3 flex items-center gap-2 uppercase tracking-wider">
-                            <Brain className="w-4 h-4" /> Psychological
-                            Dynamics
-                          </h3>
-                          <div className="space-y-2">
-                            {pathways.psychologicalDynamics.map(
-                              (item: string, i: number) => (
-                                <div
-                                  key={i}
-                                  className="bg-violet-500/5 border border-violet-500/20 rounded-lg p-3 text-sm text-white flex items-start gap-2"
-                                >
-                                  <Activity className="w-4 h-4 text-violet-400 mt-0.5 shrink-0" />
-                                  {item}
+                    {/* Critical Questions */}
+                    {pathways.criticalQuestions?.length > 0 && (
+                      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+                        <h3 className="text-sm font-bold text-amber-400 mb-3 flex items-center gap-2 uppercase tracking-wider">
+                          <Target className="w-4 h-4" /> Critical Questions
+                        </h3>
+                        <div className="space-y-2">
+                          {pathways.criticalQuestions.map((item: any, i: number) => {
+                            const text = typeof item === "string" ? item : item.question;
+                            const fw = typeof item === "object" ? item.framework : null;
+                            const target = typeof item === "object" ? item.target : null;
+                            return (
+                              <div key={i} className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-3">
+                                <div className="flex items-start gap-2">
+                                  <span className="text-amber-500 font-bold shrink-0 text-sm">Q{i + 1}.</span>
+                                  <div className="flex-1 text-sm text-white">
+                                    <p>{text}</p>
+                                    {(target || fw) && (
+                                      <div className="flex gap-2 mt-1.5 flex-wrap">
+                                        {target && <span className="text-[10px] px-1.5 py-0.5 bg-amber-500/10 text-amber-300 rounded font-mono">→ {target}</span>}
+                                        {fw && <span className="text-[10px] px-1.5 py-0.5 bg-violet-500/10 text-violet-300 rounded font-mono">{fw}</span>}
+                                      </div>
+                                    )}
+                                  </div>
                                 </div>
-                              ),
-                            )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </motion.div>
+                    )}
+
+                    {/* Resolution Pathways */}
+                    {pathways.pathways?.length > 0 && (
+                      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
+                        <h3 className="text-sm font-bold text-[var(--color-accent)] mb-3 flex items-center gap-2 uppercase tracking-wider">
+                          <TrendingUp className="w-4 h-4" /> Resolution Pathways
+                        </h3>
+                        <div className="space-y-3">
+                          {pathways.pathways.map((pathway: any, i: number) => {
+                            if (typeof pathway === "string") {
+                              return (
+                                <div key={i} className="bg-[var(--color-accent)]/5 border border-[var(--color-accent)]/20 rounded-lg p-3 text-sm text-white flex items-start gap-2">
+                                  <Lightbulb className="w-4 h-4 text-[var(--color-accent)] mt-0.5 shrink-0" />{pathway}
+                                </div>
+                              );
+                            }
+                            const isExpanded = expandedPathways.has(i);
+                            const feasColor = pathway.feasibility === "high" ? "text-emerald-400 bg-emerald-500/10" : pathway.feasibility === "medium" ? "text-amber-400 bg-amber-500/10" : "text-red-400 bg-red-500/10";
+                            return (
+                              <div key={i} className="bg-[var(--color-accent)]/5 border border-[var(--color-accent)]/20 rounded-xl overflow-hidden">
+                                <button
+                                  onClick={() => setExpandedPathways((prev) => { const next = new Set(prev); if (next.has(i)) next.delete(i); else next.add(i); return next; })}
+                                  className="w-full p-4 flex items-center gap-3 text-left hover:bg-[var(--color-accent)]/10 transition-colors"
+                                >
+                                  <Lightbulb className="w-4 h-4 text-[var(--color-accent)] shrink-0" />
+                                  <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
+                                    <span className="font-semibold text-sm text-white">{pathway.title}</span>
+                                    {pathway.framework && <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-500/10 text-violet-300 border border-violet-500/20 font-mono">{pathway.framework}</span>}
+                                    {pathway.feasibility && <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${feasColor}`}>{pathway.feasibility} feasibility</span>}
+                                  </div>
+                                  <ChevronLeft className={`w-4 h-4 text-[var(--color-text-muted)] shrink-0 transition-transform ${isExpanded ? "-rotate-90" : "rotate-180"}`} />
+                                </button>
+                                {isExpanded && (
+                                  <div className="px-4 pb-4 space-y-3 border-t border-[var(--color-accent)]/10 pt-3">
+                                    <p className="text-sm text-[var(--color-text-muted)] leading-relaxed">{pathway.description}</p>
+                                    {(pathway.tradeoffsForA || pathway.tradeoffsForB) && (
+                                      <div className="grid grid-cols-2 gap-3">
+                                        <div className="p-3 bg-blue-500/5 border border-blue-500/10 rounded-lg">
+                                          <div className="text-[10px] font-mono uppercase text-blue-400 mb-1">For {activeCase?.partyAName || "Party A"}</div>
+                                          <p className="text-xs text-white">{pathway.tradeoffsForA}</p>
+                                        </div>
+                                        <div className="p-3 bg-violet-500/5 border border-violet-500/10 rounded-lg">
+                                          <div className="text-[10px] font-mono uppercase text-violet-400 mb-1">For {activeCase?.partyBName || "Party B"}</div>
+                                          <p className="text-xs text-white">{pathway.tradeoffsForB}</p>
+                                        </div>
+                                      </div>
+                                    )}
+                                    {pathway.implementationSteps?.length > 0 && (
+                                      <div>
+                                        <div className="text-[10px] font-mono uppercase text-[var(--color-text-muted)] mb-2">Implementation Steps</div>
+                                        <ol className="space-y-1.5">
+                                          {pathway.implementationSteps.map((step: string, j: number) => (
+                                            <li key={j} className="flex items-start gap-2 text-xs text-white">
+                                              <span className="w-5 h-5 rounded-full bg-[var(--color-accent)]/20 text-[var(--color-accent)] text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">{j + 1}</span>
+                                              {step}
+                                            </li>
+                                          ))}
+                                        </ol>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </motion.div>
+                    )}
+
+                    {/* ZOPA Analysis */}
+                    {pathways.zopaAnalysis && (
+                      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+                        <h3 className="text-sm font-bold text-cyan-400 mb-3 flex items-center gap-2 uppercase tracking-wider">
+                          <Zap className="w-4 h-4" /> Zone of Possible Agreement (ZOPA)
+                        </h3>
+                        {pathways.zopaAnalysis.exists ? (
+                          <div className="bg-cyan-500/5 border border-cyan-500/20 rounded-xl p-4 space-y-3">
+                            <p className="text-sm text-white">{pathways.zopaAnalysis.description}</p>
+                            <div className="space-y-2">
+                              <div className="flex items-center gap-3">
+                                <span className="text-[10px] text-blue-300 w-20 shrink-0 font-mono truncate">{activeCase?.partyAName || "Party A"}</span>
+                                <div className="flex-1 h-7 bg-blue-500/20 rounded-lg flex items-center px-3"><span className="text-[10px] text-blue-200">{pathways.zopaAnalysis.partyARange}</span></div>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <span className="text-[10px] text-violet-300 w-20 shrink-0 font-mono truncate">{activeCase?.partyBName || "Party B"}</span>
+                                <div className="flex-1 h-7 bg-violet-500/20 rounded-lg flex items-center px-3"><span className="text-[10px] text-violet-200">{pathways.zopaAnalysis.partyBRange}</span></div>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <span className="text-[10px] text-cyan-300 w-20 shrink-0 font-mono">Overlap</span>
+                                <div className="flex-1 h-7 bg-cyan-500/30 border border-cyan-500/40 rounded-lg flex items-center px-3"><span className="text-[10px] text-cyan-200 font-semibold">{pathways.zopaAnalysis.overlapArea}</span></div>
+                              </div>
+                            </div>
                           </div>
-                        </motion.div>
-                      )}
+                        ) : (
+                          <div className="bg-red-500/5 border border-red-500/20 rounded-xl p-4">
+                            <p className="text-sm text-red-200 mb-2">No ZOPA currently identified.</p>
+                            <p className="text-xs text-[var(--color-text-muted)]">{pathways.zopaAnalysis.description}</p>
+                          </div>
+                        )}
+                      </motion.div>
+                    )}
+
+                    {/* Framework Fit */}
+                    {pathways.frameworkFit?.length > 0 && (
+                      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
+                        <h3 className="text-sm font-bold text-violet-400 mb-3 flex items-center gap-2 uppercase tracking-wider">
+                          <BookOpen className="w-4 h-4" /> Framework Fit
+                        </h3>
+                        <div className="space-y-2">
+                          {[...pathways.frameworkFit].sort((a: any, b: any) => b.score - a.score).slice(0, 4).map((fit: any, i: number) => (
+                            <div key={i} className="bg-violet-500/5 border border-violet-500/20 rounded-lg p-3 flex items-center gap-3">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                  <span className="text-sm font-semibold text-white">{fit.framework}</span>
+                                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${fit.score >= 70 ? "bg-emerald-500/20 text-emerald-300" : fit.score >= 40 ? "bg-amber-500/20 text-amber-300" : "bg-red-500/20 text-red-300"}`}>{fit.score}/100</span>
+                                </div>
+                                <p className="text-xs text-[var(--color-text-muted)]">{fit.rationale}</p>
+                              </div>
+                              <button
+                                onClick={() => { setSelectedFramework(fit.framework); handleAnalyzeWithFramework(fit.framework); }}
+                                className="shrink-0 text-xs px-3 py-1.5 rounded-lg bg-violet-500/10 hover:bg-violet-500/20 text-violet-300 border border-violet-500/20 transition-colors"
+                              >Apply</button>
+                            </div>
+                          ))}
+                        </div>
+                      </motion.div>
+                    )}
+
+                    {/* Psychological Dynamics */}
+                    {pathways.psychologicalDynamics?.length > 0 && (
+                      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
+                        <h3 className="text-sm font-bold text-violet-400 mb-3 flex items-center gap-2 uppercase tracking-wider">
+                          <Brain className="w-4 h-4" /> Psychological Dynamics
+                        </h3>
+                        <div className="space-y-2">
+                          {pathways.psychologicalDynamics.map((item: string, i: number) => (
+                            <div key={i} className="bg-violet-500/5 border border-violet-500/20 rounded-lg p-3 text-sm text-white flex items-start gap-2">
+                              <Activity className="w-4 h-4 text-violet-400 mt-0.5 shrink-0" />{item}
+                            </div>
+                          ))}
+                        </div>
+                      </motion.div>
+                    )}
                   </div>
                 ) : research ? (
                   <div className="space-y-4">
-                    <p className="text-sm text-white leading-relaxed">
-                      {research.text}
-                    </p>
-                    {research.chunks && research.chunks.length > 0 && (
+                    <p className="text-sm text-white leading-relaxed">{research.text}</p>
+                    {research.chunks?.length > 0 && (
                       <div className="mt-4 pt-4 border-t border-[var(--color-border)]">
-                        <h4 className="text-xs font-semibold uppercase mb-2 text-[var(--color-text-muted)]">
-                          Sources
-                        </h4>
+                        <h4 className="text-xs font-semibold uppercase mb-2 text-[var(--color-text-muted)]">Sources</h4>
                         <ul className="space-y-1">
-                          {research.chunks.map(
-                            (chunk: any, idx: number) => (
-                              <li
-                                key={idx}
-                                className="text-xs text-[var(--color-accent)] hover:underline cursor-pointer truncate"
-                              >
-                                {chunk.web?.title || chunk.web?.uri}
-                              </li>
-                            ),
-                          )}
+                          {research.chunks.map((chunk: any, idx: number) => (
+                            <li key={idx} className="text-xs text-[var(--color-accent)] hover:underline cursor-pointer truncate">
+                              {chunk.web?.title || chunk.web?.uri}
+                            </li>
+                          ))}
                         </ul>
                       </div>
                     )}
@@ -2229,13 +2511,8 @@ export default function Workspace() {
                 ) : (
                   <div className="h-full flex flex-col items-center justify-center text-[var(--color-text-muted)]">
                     <Lightbulb className="w-12 h-12 mb-4 opacity-20" />
-                    <p className="text-sm font-medium">
-                      No analysis yet
-                    </p>
-                    <p className="text-xs mt-1 opacity-60">
-                      Run a live session or enter context and click "Analyze"
-                      to generate resolution pathways
-                    </p>
+                    <p className="text-sm font-medium">No analysis yet</p>
+                    <p className="text-xs mt-1 opacity-60">Run a live session or enter context and click &quot;Analyze&quot; to generate resolution pathways</p>
                   </div>
                 )}
               </div>
@@ -2295,6 +2572,162 @@ export default function Workspace() {
             </div>
           )}
       </div>
+
+      {/* ─── CASE SUMMARY MODAL ─── */}
+      <AnimatePresence>
+        {showSummary && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4"
+            onClick={(e) => { if (e.target === e.currentTarget) setShowSummary(false); }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl w-full max-w-3xl max-h-[85vh] flex flex-col shadow-2xl"
+            >
+              {/* Modal header */}
+              <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--color-border)] shrink-0">
+                <div className="flex items-center gap-3">
+                  <BookOpen className="w-5 h-5 text-[var(--color-accent)]" />
+                  <div>
+                    <h2 className="font-bold text-white">Case Summary</h2>
+                    <p className="text-xs text-[var(--color-text-muted)]">{activeCase?.title}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {summaryData && (
+                    <>
+                      <button
+                        onClick={() => navigator.clipboard.writeText(
+                          [summaryData.sessionOverview,
+                            ...summaryData.recommendedNextSteps].join("\n\n")
+                        )}
+                        className="text-xs px-3 py-1.5 rounded-lg border border-[var(--color-border)] text-[var(--color-text-muted)] hover:text-white transition-colors"
+                      >Copy</button>
+                      <button
+                        onClick={exportSummaryAsMarkdown}
+                        className="text-xs px-3 py-1.5 rounded-lg border border-[var(--color-border)] text-[var(--color-text-muted)] hover:text-white transition-colors"
+                      >Export .md</button>
+                    </>
+                  )}
+                  <button onClick={() => setShowSummary(false)} className="p-1.5 hover:bg-[var(--color-surface-hover)] rounded-lg text-[var(--color-text-muted)] hover:text-white transition-colors">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Modal body */}
+              <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+                {summaryLoading ? (
+                  <div className="flex flex-col items-center justify-center py-16 gap-4">
+                    <Activity className="w-8 h-8 text-[var(--color-accent)] animate-spin" />
+                    <p className="text-sm text-[var(--color-text-muted)]">Generating case summary…</p>
+                  </div>
+                ) : summaryData ? (
+                  <>
+                    {/* Session Overview */}
+                    <div className="p-4 bg-blue-500/5 border border-blue-500/20 rounded-xl">
+                      <h3 className="text-xs font-bold text-blue-400 uppercase tracking-wider mb-2">Session Overview</h3>
+                      <p className="text-sm text-white leading-relaxed">{summaryData.sessionOverview}</p>
+                    </div>
+
+                    {/* Key Claims side by side */}
+                    <div>
+                      <h3 className="text-xs font-bold text-amber-400 uppercase tracking-wider mb-3">Key Claims</h3>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="p-3 bg-blue-500/5 border border-blue-500/10 rounded-xl">
+                          <div className="text-[10px] font-mono text-blue-400 uppercase mb-2">{activeCase?.partyAName || "Party A"}</div>
+                          <ul className="space-y-1.5">
+                            {summaryData.keyClaimsPartyA.map((c, i) => <li key={i} className="text-xs text-white flex items-start gap-1.5"><span className="text-blue-400 shrink-0 mt-0.5">•</span>{c}</li>)}
+                          </ul>
+                        </div>
+                        <div className="p-3 bg-violet-500/5 border border-violet-500/10 rounded-xl">
+                          <div className="text-[10px] font-mono text-violet-400 uppercase mb-2">{activeCase?.partyBName || "Party B"}</div>
+                          <ul className="space-y-1.5">
+                            {summaryData.keyClaimsPartyB.map((c, i) => <li key={i} className="text-xs text-white flex items-start gap-1.5"><span className="text-violet-400 shrink-0 mt-0.5">•</span>{c}</li>)}
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Core Interests side by side */}
+                    <div>
+                      <h3 className="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-3">Core Interests</h3>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="p-3 bg-blue-500/5 border border-blue-500/10 rounded-xl">
+                          <div className="text-[10px] font-mono text-blue-400 uppercase mb-2">{activeCase?.partyAName || "Party A"}</div>
+                          <ul className="space-y-1.5">
+                            {summaryData.coreInterestsPartyA.map((c, i) => <li key={i} className="text-xs text-white flex items-start gap-1.5"><span className="text-emerald-400 shrink-0 mt-0.5">•</span>{c}</li>)}
+                          </ul>
+                        </div>
+                        <div className="p-3 bg-violet-500/5 border border-violet-500/10 rounded-xl">
+                          <div className="text-[10px] font-mono text-violet-400 uppercase mb-2">{activeCase?.partyBName || "Party B"}</div>
+                          <ul className="space-y-1.5">
+                            {summaryData.coreInterestsPartyB.map((c, i) => <li key={i} className="text-xs text-white flex items-start gap-1.5"><span className="text-emerald-400 shrink-0 mt-0.5">•</span>{c}</li>)}
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Areas of Agreement */}
+                    {summaryData.areasOfAgreement.length > 0 && (
+                      <div>
+                        <h3 className="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-3">Areas of Agreement</h3>
+                        <div className="space-y-1.5">
+                          {summaryData.areasOfAgreement.map((item, i) => (
+                            <div key={i} className="flex items-start gap-2 text-sm text-white">
+                              <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />{item}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Unresolved Tensions */}
+                    {summaryData.unresolvedTensions.length > 0 && (
+                      <div>
+                        <h3 className="text-xs font-bold text-red-400 uppercase tracking-wider mb-3">Unresolved Tensions</h3>
+                        <div className="space-y-1.5">
+                          {summaryData.unresolvedTensions.map((item, i) => (
+                            <div key={i} className="flex items-start gap-2 text-sm text-white">
+                              <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />{item}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Next Steps */}
+                    {summaryData.recommendedNextSteps.length > 0 && (
+                      <div>
+                        <h3 className="text-xs font-bold text-[var(--color-accent)] uppercase tracking-wider mb-3">Recommended Next Steps</h3>
+                        <ol className="space-y-2">
+                          {summaryData.recommendedNextSteps.map((step, i) => (
+                            <li key={i} className="flex items-start gap-3 text-sm text-white">
+                              <span className="w-6 h-6 rounded-full bg-[var(--color-accent)]/20 text-[var(--color-accent)] text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
+                              {step}
+                            </li>
+                          ))}
+                        </ol>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-16 gap-3 text-[var(--color-text-muted)]">
+                    <AlertTriangle className="w-8 h-8 opacity-30" />
+                    <p className="text-sm">Failed to generate summary. Please try again.</p>
+                    <button onClick={handleGenerateSummary} className="text-sm text-[var(--color-accent)] hover:underline">Retry</button>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
