@@ -3,61 +3,81 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 
-// Write service account credentials to temp file for Google Auth.
-// Only write if the value is set, non-empty, and not a placeholder.
-const _saJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
-if (_saJson && _saJson.trim() !== "" && !_saJson.includes("{...}")) {
-  try {
-    const credPath = path.join(os.tmpdir(), "gcloud-credentials.json");
-    fs.writeFileSync(credPath, _saJson);
-    process.env.GOOGLE_APPLICATION_CREDENTIALS = credPath;
-  } catch (err) {
-    console.warn("[AI] Could not write service account credentials:", err);
-  }
-}
+// ══════════════════════════════════════════════════════════════════════════════
+// LAZY INITIALIZATION
+//
+// Problem: lib/ai-service.ts is imported at the top of server.ts, which means
+// its module-level code runs BEFORE Next.js calls app.prepare() and loads
+// .env.local into process.env. If we create GoogleGenAI() at module load time,
+// USE_VERTEX_AI, GEMINI_API_KEY etc. are all undefined, so it always defaults
+// to Vertex AI mode — causing "Could not load the default credentials" errors.
+//
+// Solution: defer all environment reading and client construction until the
+// first actual API call. By then, Next.js has populated process.env correctly.
+// ══════════════════════════════════════════════════════════════════════════════
 
-const useVertexAI = process.env.USE_VERTEX_AI !== "false";
+let _ai: GoogleGenAI | null = null;
+let _useVertexAI = false;
+let _MODEL_LIVE = "";
+let _MODEL_TEXT = "";
+let _MODEL_TTS = "";
+let _MODEL_TRANSCRIBE = "";
 
-const aiConfig: any = useVertexAI
-  ? {
-      vertexai: true,
-      project:
-        process.env.GOOGLE_CLOUD_PROJECT || "gcloud-hackathon-ybh0sdqtc9kco",
-      location: process.env.GOOGLE_CLOUD_LOCATION || "us-central1",
+function initAI(): GoogleGenAI {
+  if (_ai) return _ai;
+
+  // Write service account credentials if provided
+  const saJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+  if (saJson && saJson.trim() !== "" && !saJson.includes("{...}")) {
+    try {
+      const credPath = path.join(os.tmpdir(), "gcloud-credentials.json");
+      fs.writeFileSync(credPath, saJson);
+      process.env.GOOGLE_APPLICATION_CREDENTIALS = credPath;
+    } catch (err) {
+      console.warn("[AI] Could not write service account credentials:", err);
     }
-  : {
-      apiKey: process.env.GEMINI_API_KEY,
-    };
+  }
 
-const ai = new GoogleGenAI(aiConfig);
+  _useVertexAI = process.env.USE_VERTEX_AI !== "false";
 
-// Model names — configurable via env vars
-// NOTE: gemini-2.0-flash-live-001 was shut down Dec 2025.
-// gemini-live-2.5-flash-native-audio is the current GA Live API model.
-const MODEL_LIVE =
-  process.env.MODEL_LIVE ||
-  (useVertexAI
-    ? "gemini-live-2.5-flash-native-audio"
-    : "gemini-2.5-flash-native-audio-preview-12-2025");
-// gemini-2.0-flash is the GA model universally available to all API key users.
-// Override with MODEL_TEXT=gemini-3-flash-preview for the latest frontier model.
-const MODEL_TEXT = process.env.MODEL_TEXT || "gemini-2.0-flash";
-const MODEL_TTS =
-  process.env.MODEL_TTS || "gemini-2.5-flash-preview-tts";
-const MODEL_TRANSCRIBE =
-  process.env.MODEL_TRANSCRIBE || "gemini-2.0-flash";
+  const aiConfig: any = _useVertexAI
+    ? {
+        vertexai: true,
+        project:
+          process.env.GOOGLE_CLOUD_PROJECT || "gcloud-hackathon-ybh0sdqtc9kco",
+        location: process.env.GOOGLE_CLOUD_LOCATION || "us-central1",
+      }
+    : {
+        apiKey: process.env.GEMINI_API_KEY,
+      };
 
-// ── Startup diagnostics ──
-{
-  const authMode = useVertexAI ? "Vertex AI" : "Gemini API Key";
-  const keyHint = !useVertexAI && process.env.GEMINI_API_KEY
-    ? `...${process.env.GEMINI_API_KEY.slice(-4)}`
-    : process.env.GOOGLE_CLOUD_PROJECT || "n/a";
+  _ai = new GoogleGenAI(aiConfig);
+
+  // Model names — configurable via env vars.
+  // gemini-2.5-flash is the current stable GA model available to all users.
+  // gemini-2.0-flash has been deprecated for new API key users.
+  _MODEL_LIVE =
+    process.env.MODEL_LIVE ||
+    (_useVertexAI
+      ? "gemini-live-2.5-flash-native-audio"
+      : "gemini-2.5-flash-native-audio-preview-12-2025");
+  _MODEL_TEXT = process.env.MODEL_TEXT || "gemini-2.5-flash";
+  _MODEL_TTS = process.env.MODEL_TTS || "gemini-2.5-flash-preview-tts";
+  _MODEL_TRANSCRIBE = process.env.MODEL_TRANSCRIBE || "gemini-2.5-flash";
+
+  // Startup diagnostics — printed once on first use
+  const authMode = _useVertexAI ? "Vertex AI" : "Gemini API Key";
+  const keyHint =
+    !_useVertexAI && process.env.GEMINI_API_KEY
+      ? `...${process.env.GEMINI_API_KEY.slice(-4)}`
+      : process.env.GOOGLE_CLOUD_PROJECT || "n/a";
   console.log(`[AI] Auth mode: ${authMode} (${keyHint})`);
-  console.log(`[AI] Models: live=${MODEL_LIVE}  text=${MODEL_TEXT}  tts=${MODEL_TTS}`);
-}
+  console.log(
+    `[AI] Models: live=${_MODEL_LIVE}  text=${_MODEL_TEXT}  tts=${_MODEL_TTS}`,
+  );
 
-// ── Tool declaration for live mediation state updates ──
+  return _ai;
+}
 
 // ── Shared party profile schema (reused for partyA and partyB) ──
 const partyProfileSchema = {
@@ -72,10 +92,17 @@ const partyProfileSchema = {
     riskFactors: { type: Type.ARRAY, items: { type: Type.STRING } },
     conflictStyle: {
       type: Type.STRING,
-      description: "Thomas-Kilmann: Competing|Collaborating|Compromising|Avoiding|Accommodating",
+      description:
+        "Thomas-Kilmann: Competing|Collaborating|Compromising|Avoiding|Accommodating",
     },
-    emotionalIntensity: { type: Type.NUMBER, description: "Plutchik intensity 1-10" },
-    emotionalTrajectory: { type: Type.STRING, description: "escalating|stable|de-escalating" },
+    emotionalIntensity: {
+      type: Type.NUMBER,
+      description: "Plutchik intensity 1-10",
+    },
+    emotionalTrajectory: {
+      type: Type.STRING,
+      description: "escalating|stable|de-escalating",
+    },
     trustTowardOther: {
       type: Type.OBJECT,
       description: "Mayer/Davis/Schoorman trust 0-100 each",
@@ -98,119 +125,145 @@ const partyProfileSchema = {
   },
 };
 
-const updateMediationStateDeclaration: any = {
-  name: "updateMediationState",
-  description:
-    "Update the UI state of the mediation process based on the conversation progress. Call this BEFORE every response to keep the UI synchronized with your reasoning.",
-  ...(useVertexAI ? {} : { behavior: Behavior.NON_BLOCKING }),
-  parameters: {
-    type: Type.OBJECT,
-    properties: {
-      phase: {
-        type: Type.STRING,
-        description:
-          "Current phase: 'Opening', 'Discovery', 'Exploration', 'Negotiation', 'Resolution', 'Agreement'",
-      },
-      targetActor: {
-        type: Type.STRING,
-        description:
-          "The name of the party who should speak next, or 'Both' for joint address",
-      },
-      currentAction: {
-        type: Type.STRING,
-        description:
-          "Brief mediator reasoning — include which framework you're drawing on (e.g. '[Fisher & Ury] Reframing positions as interests...')",
-      },
-      missingItems: {
-        type: Type.ARRAY,
-        items: { type: Type.STRING },
-        description: "Facts, perspectives, or emotional dimensions still missing",
-      },
-      structuredItems: {
-        type: Type.ARRAY,
-        items: {
-          type: Type.OBJECT,
-          properties: {
-            topic: { type: Type.STRING },
-            summary: { type: Type.STRING },
-            actor: { type: Type.STRING },
-          },
-        },
-        description: "Established facts, agreements, or key revelations",
-      },
-      partyProfiles: {
-        type: Type.OBJECT,
-        properties: {
-          partyA: partyProfileSchema,
-          partyB: partyProfileSchema,
-        },
-        description: "Deep psychological profiles for both parties",
-      },
-      commonGround: {
-        type: Type.ARRAY,
-        items: { type: Type.STRING },
-        description: "Areas of agreement or shared interests identified so far",
-      },
-      tensionPoints: {
-        type: Type.ARRAY,
-        items: { type: Type.STRING },
-        description: "Active points of disagreement or high-emotion topics",
-      },
-      narratives: {
-        type: Type.ARRAY,
-        items: {
-          type: Type.OBJECT,
-          properties: {
-            actorName: { type: Type.STRING },
-            content: { type: Type.STRING },
-            type: {
-              type: Type.STRING,
-              description: "origin-story|grievance|justification|aspiration|identity-claim|counter-narrative",
-            },
-            framing: { type: Type.STRING, description: "victim|hero|villain|mediator|neutral" },
-            emotionalTone: { type: Type.STRING },
-          },
-        },
-        description: "Narrative frames each party uses to construct meaning",
-      },
-    },
-    required: [
-      "phase",
-      "targetActor",
-      "currentAction",
-      "missingItems",
-      "structuredItems",
-      "partyProfiles",
-      "commonGround",
-      "tensionPoints",
-    ],
-  },
-};
+// Tool declarations are built lazily inside createLiveSession so they can
+// read _useVertexAI (which is only known after initAI() runs).
+function buildToolDeclarations(): any[] {
+  const nonBlocking = !_useVertexAI ? { behavior: Behavior.NON_BLOCKING } : {};
 
-// ── Tool: Proactive gap detection ──
-const requestMissingInformationDeclaration: any = {
-  name: "requestMissingInformation",
-  description:
-    "Call when you detect ontology gaps — missing primitive types, party imbalances, or structural issues. Notifies the mediator UI so the human mediator can follow up.",
-  ...(useVertexAI ? {} : { behavior: Behavior.NON_BLOCKING }),
-  parameters: {
-    type: Type.OBJECT,
-    properties: {
-      gapType: {
-        type: Type.STRING,
-        description: "primitive_missing|imbalance|structural|emotional",
+  const updateMediationState: any = {
+    name: "updateMediationState",
+    description:
+      "Update the UI state of the mediation process based on the conversation progress. Call this BEFORE every response to keep the UI synchronized with your reasoning.",
+    ...nonBlocking,
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        phase: {
+          type: Type.STRING,
+          description:
+            "Current phase: 'Opening', 'Discovery', 'Exploration', 'Negotiation', 'Resolution', 'Agreement'",
+        },
+        targetActor: {
+          type: Type.STRING,
+          description:
+            "The name of the party who should speak next, or 'Both' for joint address",
+        },
+        currentAction: {
+          type: Type.STRING,
+          description:
+            "Brief mediator reasoning — include which framework you're drawing on (e.g. '[Fisher & Ury] Reframing positions as interests...')",
+        },
+        missingItems: {
+          type: Type.ARRAY,
+          items: { type: Type.STRING },
+          description: "Facts, perspectives, or emotional dimensions still missing",
+        },
+        structuredItems: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              topic: { type: Type.STRING },
+              summary: { type: Type.STRING },
+              actor: { type: Type.STRING },
+            },
+          },
+          description: "Established facts, agreements, or key revelations",
+        },
+        partyProfiles: {
+          type: Type.OBJECT,
+          properties: {
+            partyA: partyProfileSchema,
+            partyB: partyProfileSchema,
+          },
+          description: "Deep psychological profiles for both parties",
+        },
+        commonGround: {
+          type: Type.ARRAY,
+          items: { type: Type.STRING },
+          description: "Areas of agreement or shared interests identified so far",
+        },
+        tensionPoints: {
+          type: Type.ARRAY,
+          items: { type: Type.STRING },
+          description: "Active points of disagreement or high-emotion topics",
+        },
+        narratives: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              actorName: { type: Type.STRING },
+              content: { type: Type.STRING },
+              type: {
+                type: Type.STRING,
+                description:
+                  "origin-story|grievance|justification|aspiration|identity-claim|counter-narrative",
+              },
+              framing: {
+                type: Type.STRING,
+                description: "victim|hero|villain|mediator|neutral",
+              },
+              emotionalTone: { type: Type.STRING },
+            },
+          },
+          description: "Narrative frames each party uses to construct meaning",
+        },
       },
-      description: { type: Type.STRING, description: "What gap was detected" },
-      suggestedQuestion: {
-        type: Type.STRING,
-        description: "The exact question to ask to fill this gap",
-      },
-      priority: { type: Type.STRING, description: "critical|important|minor" },
-      targetParty: { type: Type.STRING, description: "Which party to ask, or 'Both'" },
+      required: [
+        "phase",
+        "targetActor",
+        "currentAction",
+        "missingItems",
+        "structuredItems",
+        "partyProfiles",
+        "commonGround",
+        "tensionPoints",
+      ],
     },
-    required: ["gapType", "description", "suggestedQuestion", "priority", "targetParty"],
-  },
-};
+  };
+
+  const requestMissingInformation: any = {
+    name: "requestMissingInformation",
+    description:
+      "Call when you detect ontology gaps — missing primitive types, party imbalances, or structural issues. Notifies the mediator UI so the human mediator can follow up.",
+    ...nonBlocking,
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        gapType: {
+          type: Type.STRING,
+          description: "primitive_missing|imbalance|structural|emotional",
+        },
+        description: {
+          type: Type.STRING,
+          description: "What gap was detected",
+        },
+        suggestedQuestion: {
+          type: Type.STRING,
+          description: "The exact question to ask to fill this gap",
+        },
+        priority: {
+          type: Type.STRING,
+          description: "critical|important|minor",
+        },
+        targetParty: {
+          type: Type.STRING,
+          description: "Which party to ask, or 'Both'",
+        },
+      },
+      required: [
+        "gapType",
+        "description",
+        "suggestedQuestion",
+        "priority",
+        "targetParty",
+      ],
+    },
+  };
+
+  return [updateMediationState, requestMissingInformation];
+}
 
 // ── Live Audio Session ──
 
@@ -394,8 +447,10 @@ export const createLiveSession = (
   },
   resumptionHandle?: string,
 ) => {
+  const ai = initAI();
+
   console.log(
-    `[Live] Connecting to ${MODEL_LIVE}` +
+    `[Live] Connecting to ${_MODEL_LIVE}` +
       (resumptionHandle ? " (resuming session)" : " (new session)"),
   );
 
@@ -406,7 +461,7 @@ export const createLiveSession = (
         prebuiltVoiceConfig: { voiceName: mediatorProfile.voice },
       },
     },
-    tools: [{ functionDeclarations: [updateMediationStateDeclaration, requestMissingInformationDeclaration] }],
+    tools: [{ functionDeclarations: buildToolDeclarations() }],
     systemInstruction: buildSystemInstruction(
       mediatorProfile,
       partyNames,
@@ -426,7 +481,7 @@ export const createLiveSession = (
   }
 
   return ai.live.connect({
-    model: MODEL_LIVE,
+    model: _MODEL_LIVE,
     callbacks,
     config,
   });
@@ -438,8 +493,9 @@ export const transcribeAudio = async (
   base64Audio: string,
   mimeType: string,
 ) => {
+  const ai = initAI();
   const response = await ai.models.generateContent({
-    model: MODEL_TRANSCRIBE,
+    model: _MODEL_TRANSCRIBE,
     contents: [
       {
         parts: [
@@ -458,8 +514,9 @@ export const generateSpeech = async (
   text: string,
   voiceName: string = "Kore",
 ) => {
+  const ai = initAI();
   const response = await ai.models.generateContent({
-    model: MODEL_TTS,
+    model: _MODEL_TTS,
     contents: [{ parts: [{ text }] }],
     config: {
       responseModalities: [Modality.AUDIO],
@@ -480,12 +537,13 @@ export const chatWithAdvisor = async (
   history: { role: string; parts: { text: string }[] }[],
   caseContext?: string,
 ) => {
+  const ai = initAI();
   const caseSection = caseContext
     ? `\n\nACTIVE CASE CONTEXT:\n${caseContext}\n\nUse this case structure and transcript when answering questions. Reference specific parties, primitives, and facts from the case.`
     : "";
 
   const chat = ai.chats.create({
-    model: MODEL_TEXT,
+    model: _MODEL_TEXT,
     history,
     config: {
       systemInstruction: `You are the Strategic Advisor Agent for CONCORDIA, the TACITUS Institute's AI mediation platform.
@@ -521,8 +579,9 @@ export const analyzePathways = async (
   transcript: string,
   caseStructure: string,
 ) => {
+  const ai = initAI();
   const response = await ai.models.generateContent({
-    model: MODEL_TEXT,
+    model: _MODEL_TEXT,
     contents: `You are the Resolution Architect for the CONCORDIA mediation platform.
 
 Analyze the following mediation transcript and case structure. Produce a detailed resolution analysis:
@@ -562,8 +621,9 @@ ${caseStructure}`,
 // ── Primitive Extraction ──
 
 export const extractPrimitives = async (text: string) => {
+  const ai = initAI();
   const response = await ai.models.generateContent({
-    model: MODEL_TEXT,
+    model: _MODEL_TEXT,
     contents: `You are the Extraction Agent for the CONCORDIA mediation platform, using the full TACITUS conflict ontology (8 primitives).
 
 Extract ALL conflict primitives from the following mediation transcript. Apply the complete TACITUS grammar:
@@ -673,8 +733,9 @@ ${text}`,
 // ── Research Grounding ──
 
 export const researchGrounding = async (query: string) => {
+  const ai = initAI();
   const response = await ai.models.generateContent({
-    model: MODEL_TEXT,
+    model: _MODEL_TEXT,
     contents: `Research the following conflict context or entities to provide grounding facts, legal precedents, or relevant background information that could inform the mediation: ${query}`,
     config: {
       tools: [{ googleSearch: {} }],
