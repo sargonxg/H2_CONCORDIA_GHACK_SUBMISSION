@@ -28,6 +28,8 @@ import {
   Brain,
   Target,
   MessageCircle,
+  X,
+  BookOpen,
 } from "lucide-react";
 import {
   getLiveSession,
@@ -35,10 +37,12 @@ import {
   researchGrounding,
   analyzePathways,
 } from "@/services/gemini-client";
-import type { Actor, Primitive, PrimitiveType, Case, LiveMediationState, OntologyStats, PartyProfile } from "@/lib/types";
+import type { Actor, Primitive, PrimitiveType, Case, LiveMediationState, OntologyStats, PartyProfile, GapNotification } from "@/lib/types";
 import { useConflictGraph } from "@/hooks/useConflictGraph";
 import ConflictGraph from "@/components/workspace/ConflictGraph";
 import OntologyHealthCheck from "@/components/workspace/OntologyHealthCheck";
+import EnhancedPartyProfile from "@/components/workspace/EnhancedPartyProfile";
+import EscalationMeter from "@/components/workspace/EscalationMeter";
 
 const PRIMITIVE_TYPES: PrimitiveType[] = [
   "Actor",
@@ -244,6 +248,7 @@ export default function Workspace() {
   >("transcript");
 
   const [liveMediationState, setLiveMediationState] = useState<LiveMediationState | null>(null);
+  const [gapNotifications, setGapNotifications] = useState<GapNotification[]>([]);
 
   const [demoMode, setDemoMode] = useState(false);
   const demoTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -408,6 +413,24 @@ export default function Workspace() {
                       response: { result: "UI updated successfully" },
                     };
                   }
+                  if (call.name === "requestMissingInformation") {
+                    const args = call.args;
+                    const notification: GapNotification = {
+                      id: Date.now().toString() + Math.random(),
+                      gapType: args.gapType || "structural",
+                      description: args.description || "",
+                      suggestedQuestion: args.suggestedQuestion || "",
+                      priority: args.priority || "important",
+                      targetParty: args.targetParty || "Both",
+                      dismissed: false,
+                    };
+                    setGapNotifications((prev) => [notification, ...prev.slice(0, 4)]);
+                    return {
+                      id: call.id,
+                      name: call.name,
+                      response: { result: "Gap notification displayed" },
+                    };
+                  }
                   return {
                     id: call.id,
                     name: call.name,
@@ -488,6 +511,7 @@ export default function Workspace() {
     setIsRecording(false);
     setDemoMode(false);
     setStatus("IDLE");
+    setGapNotifications([]);
 
     if (activeCase?.transcript) {
       handleSimulateExtraction();
@@ -634,7 +658,7 @@ export default function Workspace() {
         state: {
           phase: "Opening",
           targetActor: "Both",
-          currentAction: "Setting ground rules and establishing safe space",
+          currentAction: "[Fisher & Ury] Setting ground rules and establishing safe space for principled negotiation",
           missingItems: [
             `${partyA}'s opening statement`,
             `${partyB}'s opening statement`,
@@ -651,6 +675,11 @@ export default function Workspace() {
               defensiveness: 55,
               keyNeeds: ["Recognition", "Fairness"],
               riskFactors: ["Fixed position"],
+              conflictStyle: "Competing",
+              emotionalIntensity: 5,
+              emotionalTrajectory: "stable",
+              trustTowardOther: { ability: 40, benevolence: 30, integrity: 35 },
+              riskAssessment: { escalation: 25, withdrawal: 20, badFaith: 15, impasse: 30 },
             },
             partyB: {
               emotionalState: "Anxious",
@@ -660,6 +689,11 @@ export default function Workspace() {
               defensiveness: 60,
               keyNeeds: ["Security", "Autonomy"],
               riskFactors: ["Withdrawal risk"],
+              conflictStyle: "Avoiding",
+              emotionalIntensity: 6,
+              emotionalTrajectory: "stable",
+              trustTowardOther: { ability: 45, benevolence: 35, integrity: 40 },
+              riskAssessment: { escalation: 20, withdrawal: 35, badFaith: 10, impasse: 25 },
             },
           },
           commonGround: [],
@@ -672,7 +706,7 @@ export default function Workspace() {
         state: {
           phase: "Discovery",
           targetActor: partyA,
-          currentAction: `Inviting ${partyA} to share their perspective first`,
+          currentAction: `[Lederach] Inviting ${partyA} to share their perspective — attending to narrative and root causes`,
           missingItems: [
             `${partyA}'s narrative`,
             `${partyB}'s narrative`,
@@ -695,6 +729,11 @@ export default function Workspace() {
               defensiveness: 52,
               keyNeeds: ["Recognition", "Fairness"],
               riskFactors: ["Fixed position"],
+              conflictStyle: "Competing",
+              emotionalIntensity: 5,
+              emotionalTrajectory: "stable",
+              trustTowardOther: { ability: 42, benevolence: 32, integrity: 38 },
+              riskAssessment: { escalation: 28, withdrawal: 18, badFaith: 15, impasse: 32 },
             },
             partyB: {
               emotionalState: "Anxious",
@@ -704,6 +743,11 @@ export default function Workspace() {
               defensiveness: 60,
               keyNeeds: ["Security", "Autonomy"],
               riskFactors: ["Withdrawal risk"],
+              conflictStyle: "Avoiding",
+              emotionalIntensity: 6,
+              emotionalTrajectory: "stable",
+              trustTowardOther: { ability: 45, benevolence: 35, integrity: 40 },
+              riskAssessment: { escalation: 22, withdrawal: 38, badFaith: 10, impasse: 28 },
             },
           },
           commonGround: [],
@@ -716,7 +760,7 @@ export default function Workspace() {
         state: {
           phase: "Discovery",
           targetActor: partyA,
-          currentAction: `Processing ${partyA}'s opening statement, identifying claims and emotions`,
+          currentAction: `[Narrative] Processing ${partyA}'s opening statement — identifying grievance narrative and emotional framing`,
           missingItems: [
             `${partyB}'s perspective`,
             "Specific agreement details",
@@ -749,6 +793,11 @@ export default function Workspace() {
               defensiveness: 65,
               keyNeeds: ["Recognition", "Fairness", "Respect"],
               riskFactors: ["Escalation tendency", "Fixed position"],
+              conflictStyle: "Competing",
+              emotionalIntensity: 7,
+              emotionalTrajectory: "escalating",
+              trustTowardOther: { ability: 35, benevolence: 22, integrity: 28 },
+              riskAssessment: { escalation: 52, withdrawal: 15, badFaith: 20, impasse: 40 },
             },
             partyB: {
               emotionalState: "Anxious",
@@ -758,6 +807,11 @@ export default function Workspace() {
               defensiveness: 60,
               keyNeeds: ["Security", "Autonomy"],
               riskFactors: ["Withdrawal risk"],
+              conflictStyle: "Avoiding",
+              emotionalIntensity: 6,
+              emotionalTrajectory: "stable",
+              trustTowardOther: { ability: 45, benevolence: 35, integrity: 40 },
+              riskAssessment: { escalation: 25, withdrawal: 42, badFaith: 10, impasse: 30 },
             },
           },
           commonGround: [],
@@ -773,7 +827,7 @@ export default function Workspace() {
         state: {
           phase: "Discovery",
           targetActor: partyB,
-          currentAction: `Validated ${partyA}'s emotions, pivoting to ${partyB} for their narrative`,
+          currentAction: `[Bush & Folger] Validated ${partyA}'s emotions (empowerment), pivoting to ${partyB} for recognition moment`,
           missingItems: [
             `${partyB}'s full perspective`,
             "Specific agreement details from both sides",
@@ -810,6 +864,11 @@ export default function Workspace() {
               defensiveness: 58,
               keyNeeds: ["Recognition", "Fairness", "Respect"],
               riskFactors: ["Escalation tendency"],
+              conflictStyle: "Competing",
+              emotionalIntensity: 6,
+              emotionalTrajectory: "de-escalating",
+              trustTowardOther: { ability: 38, benevolence: 28, integrity: 32 },
+              riskAssessment: { escalation: 42, withdrawal: 12, badFaith: 18, impasse: 38 },
             },
             partyB: {
               emotionalState: "Anxious",
@@ -819,6 +878,11 @@ export default function Workspace() {
               defensiveness: 55,
               keyNeeds: ["Security", "Autonomy"],
               riskFactors: ["Withdrawal risk", "Avoidance"],
+              conflictStyle: "Avoiding",
+              emotionalIntensity: 6,
+              emotionalTrajectory: "stable",
+              trustTowardOther: { ability: 48, benevolence: 38, integrity: 44 },
+              riskAssessment: { escalation: 28, withdrawal: 36, badFaith: 10, impasse: 32 },
             },
           },
           commonGround: [
@@ -836,7 +900,7 @@ export default function Workspace() {
         state: {
           phase: "Exploration",
           targetActor: "Both",
-          currentAction: "Cross-referencing both narratives, identifying shared values and communication gaps",
+          currentAction: "[Zartman] Cross-referencing narratives — testing ripeness: is there a mutually hurting stalemate and a way out?",
           missingItems: [
             "Nature of the new constraints",
             "Why communication broke down",
@@ -883,6 +947,11 @@ export default function Workspace() {
               defensiveness: 40,
               keyNeeds: ["Recognition", "Fairness", "Communication"],
               riskFactors: ["May fixate on original terms"],
+              conflictStyle: "Compromising",
+              emotionalIntensity: 4,
+              emotionalTrajectory: "de-escalating",
+              trustTowardOther: { ability: 52, benevolence: 40, integrity: 45 },
+              riskAssessment: { escalation: 28, withdrawal: 10, badFaith: 12, impasse: 22 },
             },
             partyB: {
               emotionalState: "Hopeful",
@@ -892,6 +961,11 @@ export default function Workspace() {
               defensiveness: 35,
               keyNeeds: ["Autonomy", "Flexibility", "Harmony"],
               riskFactors: ["Conflict avoidance may mask issues"],
+              conflictStyle: "Collaborating",
+              emotionalIntensity: 4,
+              emotionalTrajectory: "de-escalating",
+              trustTowardOther: { ability: 58, benevolence: 52, integrity: 55 },
+              riskAssessment: { escalation: 18, withdrawal: 22, badFaith: 8, impasse: 20 },
             },
           },
           commonGround: [
@@ -911,7 +985,7 @@ export default function Workspace() {
         state: {
           phase: "Negotiation",
           targetActor: partyA,
-          currentAction: "Testing a process-based solution that addresses both parties' needs",
+          currentAction: "[Fisher & Ury] Testing a process-based solution — mutual gains, objective criteria for future changes",
           missingItems: [
             "Specific process for handling changes",
             "Frequency of check-ins",
@@ -963,6 +1037,11 @@ export default function Workspace() {
               defensiveness: 28,
               keyNeeds: ["Process", "Transparency", "Recognition"],
               riskFactors: [],
+              conflictStyle: "Collaborating",
+              emotionalIntensity: 3,
+              emotionalTrajectory: "de-escalating",
+              trustTowardOther: { ability: 65, benevolence: 58, integrity: 62 },
+              riskAssessment: { escalation: 12, withdrawal: 8, badFaith: 5, impasse: 15 },
             },
             partyB: {
               emotionalState: "Hopeful",
@@ -972,6 +1051,11 @@ export default function Workspace() {
               defensiveness: 25,
               keyNeeds: ["Flexibility", "Harmony", "Structure"],
               riskFactors: [],
+              conflictStyle: "Collaborating",
+              emotionalIntensity: 3,
+              emotionalTrajectory: "de-escalating",
+              trustTowardOther: { ability: 70, benevolence: 65, integrity: 68 },
+              riskAssessment: { escalation: 8, withdrawal: 10, badFaith: 4, impasse: 12 },
             },
           },
           commonGround: [
@@ -1446,25 +1530,72 @@ export default function Workspace() {
                 <Brain className="w-4 h-4 text-[var(--color-accent)]" />
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-[10px] font-mono uppercase tracking-wider text-[var(--color-accent)] mb-0.5">
-                  Mediator Focus
+                <div className="flex items-center gap-2 mb-0.5">
+                  <div className="text-[10px] font-mono uppercase tracking-wider text-[var(--color-accent)]">
+                    Mediator Focus
+                  </div>
+                  {/* Theory badge — parse framework tag from currentAction */}
+                  {liveMediationState.currentAction.match(/\[([^\]]+)\]/) && (
+                    <span className="text-[9px] px-1.5 py-0.5 rounded border border-violet-500/30 bg-violet-500/10 text-violet-400 font-mono shrink-0">
+                      <BookOpen className="w-2.5 h-2.5 inline mr-0.5" />
+                      {liveMediationState.currentAction.match(/\[([^\]]+)\]/)?.[1]}
+                    </span>
+                  )}
                 </div>
                 <p className="text-sm text-white truncate">
-                  {liveMediationState.currentAction}
+                  {liveMediationState.currentAction.replace(/^\[[^\]]+\]\s*/, "")}
                 </p>
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 <MessageCircle className="w-3.5 h-3.5 text-[var(--color-text-muted)]" />
-                <span className="text-xs text-[var(--color-text-muted)]">
-                  Addressing:{" "}
-                </span>
-                <span className="text-xs font-bold text-white">
-                  {liveMediationState.targetActor}
-                </span>
+                <span className="text-xs text-[var(--color-text-muted)]">Addressing: </span>
+                <span className="text-xs font-bold text-white">{liveMediationState.targetActor}</span>
               </div>
             </div>
           </motion.div>
         )}
+      </AnimatePresence>
+
+      {/* ─── GAP NOTIFICATIONS ─── */}
+      <AnimatePresence>
+        {gapNotifications.filter((n) => !n.dismissed).slice(0, 2).map((notif) => (
+          <motion.div
+            key={notif.id}
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="px-6 shrink-0"
+          >
+            <div className={`mt-2 p-3 rounded-lg border flex items-start gap-3 ${
+              notif.priority === "critical"
+                ? "bg-red-500/5 border-red-500/20"
+                : notif.priority === "important"
+                  ? "bg-amber-500/5 border-amber-500/20"
+                  : "bg-[var(--color-surface)] border-[var(--color-border)]"
+            }`}>
+              <Search className={`w-4 h-4 shrink-0 mt-0.5 ${
+                notif.priority === "critical" ? "text-red-400" :
+                notif.priority === "important" ? "text-amber-400" : "text-[var(--color-text-muted)]"
+              }`} />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className="text-[9px] font-mono uppercase tracking-wider text-[var(--color-text-muted)]">
+                    {notif.gapType.replace(/_/g, " ")} · {notif.priority}
+                  </span>
+                  <span className="text-[9px] text-[var(--color-text-muted)]">→ {notif.targetParty}</span>
+                </div>
+                <p className="text-xs text-white mb-1">{notif.description}</p>
+                <p className="text-[11px] text-[var(--color-accent)] italic">&ldquo;{notif.suggestedQuestion}&rdquo;</p>
+              </div>
+              <button
+                onClick={() => setGapNotifications((prev) => prev.map((n) => n.id === notif.id ? { ...n, dismissed: true } : n))}
+                className="text-[var(--color-text-muted)] hover:text-white transition-colors shrink-0"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </motion.div>
+        ))}
       </AnimatePresence>
 
       {/* ─── ONTOLOGY HEALTH BANNER ─── */}
@@ -1497,15 +1628,23 @@ export default function Workspace() {
       <div className="flex-1 flex overflow-hidden p-4 gap-4">
         {/* ─── LEFT: Party Profiles ─── */}
         <div className="w-72 shrink-0 flex flex-col gap-4 overflow-y-auto pr-1">
-          <PartyCard
+          <EnhancedPartyProfile
             name={activeCase?.partyAName || "Party A"}
             profile={liveMediationState?.partyProfiles?.partyA || null}
             side="A"
           />
-          <PartyCard
+          <EnhancedPartyProfile
             name={activeCase?.partyBName || "Party B"}
             profile={liveMediationState?.partyProfiles?.partyB || null}
             side="B"
+          />
+
+          {/* ── Escalation Meter ── */}
+          <EscalationMeter
+            escalationScore={Math.max(
+              liveMediationState?.partyProfiles?.partyA?.riskAssessment?.escalation ?? 0,
+              liveMediationState?.partyProfiles?.partyB?.riskAssessment?.escalation ?? 0,
+            )}
           />
 
           {/* Common Ground */}

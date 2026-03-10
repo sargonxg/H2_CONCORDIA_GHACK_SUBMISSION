@@ -40,12 +40,49 @@ const MODEL_TRANSCRIBE =
 
 // ── Tool declaration for live mediation state updates ──
 
+// ── Shared party profile schema (reused for partyA and partyB) ──
+const partyProfileSchema = {
+  type: Type.OBJECT,
+  properties: {
+    emotionalState: { type: Type.STRING },
+    engagementLevel: { type: Type.STRING },
+    communicationStyle: { type: Type.STRING },
+    cooperativeness: { type: Type.NUMBER },
+    defensiveness: { type: Type.NUMBER },
+    keyNeeds: { type: Type.ARRAY, items: { type: Type.STRING } },
+    riskFactors: { type: Type.ARRAY, items: { type: Type.STRING } },
+    conflictStyle: {
+      type: Type.STRING,
+      description: "Thomas-Kilmann: Competing|Collaborating|Compromising|Avoiding|Accommodating",
+    },
+    emotionalIntensity: { type: Type.NUMBER, description: "Plutchik intensity 1-10" },
+    emotionalTrajectory: { type: Type.STRING, description: "escalating|stable|de-escalating" },
+    trustTowardOther: {
+      type: Type.OBJECT,
+      description: "Mayer/Davis/Schoorman trust 0-100 each",
+      properties: {
+        ability: { type: Type.NUMBER },
+        benevolence: { type: Type.NUMBER },
+        integrity: { type: Type.NUMBER },
+      },
+    },
+    riskAssessment: {
+      type: Type.OBJECT,
+      description: "Risk scores 0-100 each",
+      properties: {
+        escalation: { type: Type.NUMBER },
+        withdrawal: { type: Type.NUMBER },
+        badFaith: { type: Type.NUMBER },
+        impasse: { type: Type.NUMBER },
+      },
+    },
+  },
+};
+
 const updateMediationStateDeclaration: any = {
   name: "updateMediationState",
   description:
     "Update the UI state of the mediation process based on the conversation progress. Call this BEFORE every response to keep the UI synchronized with your reasoning.",
-  // NON_BLOCKING prevents the 1008 error by allowing audio to continue during tool calls.
-  // Note: Behavior enum is not supported in Vertex AI, only Gemini Developer API.
   ...(useVertexAI ? {} : { behavior: Behavior.NON_BLOCKING }),
   parameters: {
     type: Type.OBJECT,
@@ -63,13 +100,12 @@ const updateMediationStateDeclaration: any = {
       currentAction: {
         type: Type.STRING,
         description:
-          "A short sentence explaining your mediator reasoning",
+          "Brief mediator reasoning — include which framework you're drawing on (e.g. '[Fisher & Ury] Reframing positions as interests...')",
       },
       missingItems: {
         type: Type.ARRAY,
         items: { type: Type.STRING },
-        description:
-          "List of facts, perspectives, or emotional dimensions still missing from the case",
+        description: "Facts, perspectives, or emotional dimensions still missing",
       },
       structuredItems: {
         type: Type.ARRAY,
@@ -86,32 +122,10 @@ const updateMediationStateDeclaration: any = {
       partyProfiles: {
         type: Type.OBJECT,
         properties: {
-          partyA: {
-            type: Type.OBJECT,
-            properties: {
-              emotionalState: { type: Type.STRING },
-              engagementLevel: { type: Type.STRING },
-              communicationStyle: { type: Type.STRING },
-              cooperativeness: { type: Type.NUMBER },
-              defensiveness: { type: Type.NUMBER },
-              keyNeeds: { type: Type.ARRAY, items: { type: Type.STRING } },
-              riskFactors: { type: Type.ARRAY, items: { type: Type.STRING } },
-            },
-          },
-          partyB: {
-            type: Type.OBJECT,
-            properties: {
-              emotionalState: { type: Type.STRING },
-              engagementLevel: { type: Type.STRING },
-              communicationStyle: { type: Type.STRING },
-              cooperativeness: { type: Type.NUMBER },
-              defensiveness: { type: Type.NUMBER },
-              keyNeeds: { type: Type.ARRAY, items: { type: Type.STRING } },
-              riskFactors: { type: Type.ARRAY, items: { type: Type.STRING } },
-            },
-          },
+          partyA: partyProfileSchema,
+          partyB: partyProfileSchema,
         },
-        description: "Psychological profiles for both parties",
+        description: "Deep psychological profiles for both parties",
       },
       commonGround: {
         type: Type.ARRAY,
@@ -132,18 +146,13 @@ const updateMediationStateDeclaration: any = {
             content: { type: Type.STRING },
             type: {
               type: Type.STRING,
-              description:
-                "origin-story|grievance|justification|aspiration|identity-claim|counter-narrative",
+              description: "origin-story|grievance|justification|aspiration|identity-claim|counter-narrative",
             },
-            framing: {
-              type: Type.STRING,
-              description: "victim|hero|villain|mediator|neutral",
-            },
+            framing: { type: Type.STRING, description: "victim|hero|villain|mediator|neutral" },
             emotionalTone: { type: Type.STRING },
           },
         },
-        description:
-          "Narrative frames each party is using to construct meaning around the conflict",
+        description: "Narrative frames each party uses to construct meaning",
       },
     },
     required: [
@@ -156,6 +165,31 @@ const updateMediationStateDeclaration: any = {
       "commonGround",
       "tensionPoints",
     ],
+  },
+};
+
+// ── Tool: Proactive gap detection ──
+const requestMissingInformationDeclaration: any = {
+  name: "requestMissingInformation",
+  description:
+    "Call when you detect ontology gaps — missing primitive types, party imbalances, or structural issues. Notifies the mediator UI so the human mediator can follow up.",
+  ...(useVertexAI ? {} : { behavior: Behavior.NON_BLOCKING }),
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      gapType: {
+        type: Type.STRING,
+        description: "primitive_missing|imbalance|structural|emotional",
+      },
+      description: { type: Type.STRING, description: "What gap was detected" },
+      suggestedQuestion: {
+        type: Type.STRING,
+        description: "The exact question to ask to fill this gap",
+      },
+      priority: { type: Type.STRING, description: "critical|important|minor" },
+      targetParty: { type: Type.STRING, description: "Which party to ask, or 'Both'" },
+    },
+    required: ["gapType", "description", "suggestedQuestion", "priority", "targetParty"],
   },
 };
 
@@ -173,36 +207,143 @@ Your mediation approach is: ${mediatorProfile.approach}.
 Current Case Context:
 ${context}
 
-CORE PROTOCOL:
+═══════════════════════════════════════════
+CORE PROTOCOL — PHASE PROGRESSION
+═══════════════════════════════════════════
 
-PHASE PROGRESSION:
-1. OPENING - Welcome both parties. Explain ground rules: mutual respect, one person speaks at a time, confidentiality. Ask each party to briefly introduce themselves and state what brought them here.
+1. OPENING — Welcome both parties. Explain ground rules: mutual respect, one person speaks at a time, confidentiality. Ask each party to briefly introduce themselves and state what brought them here.
 
-2. DISCOVERY - Address each party ONE AT A TIME. Ask a single, open-ended question. Listen deeply. Probe for:
+2. DISCOVERY — Address each party ONE AT A TIME. Ask a single, open-ended question. Listen deeply. Probe for:
    - What happened (their narrative)
    - How it made them feel (emotional dimension)
    - What they need going forward (underlying interests)
    - What they have already tried (history of attempts)
 
-3. EXPLORATION - Cross-reference what both parties have said. Identify shared facts vs. disputed facts, overlapping interests, emotional triggers, and power dynamics. Ask clarifying questions.
+3. EXPLORATION — Cross-reference both narratives. Identify shared facts vs. disputed facts, overlapping interests, emotional triggers, and power dynamics.
 
-4. NEGOTIATION - Guide parties to generate options. Ask "What would it look like if...?" questions. Help them brainstorm without committing.
+4. NEGOTIATION — Guide parties to generate options. Ask "What would it look like if...?" Help them brainstorm without committing.
 
-5. RESOLUTION - Narrow down to viable pathways. Test agreements: "If X happened, would that address your concern about Y?"
+5. RESOLUTION — Narrow down to viable pathways. Test agreements: "If X happened, would that address your concern about Y?"
 
-6. AGREEMENT - Summarize what has been agreed. Confirm with both parties. Outline next steps.
+6. AGREEMENT — Summarize what has been agreed. Confirm with both parties. Outline next steps.
 
-CRITICAL BEHAVIORAL RULES:
+═══════════════════════════════════════════
+PSYCHOLOGICAL PROFILING (update partyProfiles every turn)
+═══════════════════════════════════════════
+
+CONFLICT STYLES (Thomas-Kilmann) — Assess each party:
+  - Competing: high assertiveness, low cooperation — wants to win
+  - Collaborating: high assertiveness, high cooperation — seeks mutual gain
+  - Compromising: moderate on both — seeks middle ground
+  - Avoiding: low assertiveness, low cooperation — withdraws from conflict
+  - Accommodating: low assertiveness, high cooperation — yields to other
+
+EMOTIONAL PROFILING (Plutchik Wheel):
+  - Assess primary emotion (joy, trust, fear, surprise, sadness, disgust, anger, anticipation)
+  - Intensity 1-10 (1=mild, 10=overwhelming)
+  - Trajectory: escalating / stable / de-escalating
+  - Update emotionalState, emotionalIntensity, emotionalTrajectory in partyProfiles
+
+TRUST ASSESSMENT (Mayer/Davis/Schoorman Model) — each 0-100:
+  - ability: do they believe the other party is competent to fulfill commitments?
+  - benevolence: do they believe the other party wants good outcomes for them?
+  - integrity: do they believe the other party will honor agreements?
+  - Update trustTowardOther in partyProfiles
+
+RISK ASSESSMENT — each 0-100:
+  - escalation: probability of conflict intensifying
+  - withdrawal: probability of a party leaving the process
+  - badFaith: indicators of manipulation or hidden agenda
+  - impasse: probability of reaching deadlock
+  - Update riskAssessment in partyProfiles each turn
+
+POWER DYNAMICS:
+  - Track BATNA (Best Alternative to Negotiated Agreement) for each party
+  - Identify ZOPA (Zone of Possible Agreement)
+  - Note if power imbalance is affecting communication
+
+═══════════════════════════════════════════
+MEDIATION FRAMEWORKS (apply adaptively, note in currentAction)
+═══════════════════════════════════════════
+
+FISHER & URY (Principled Negotiation):
+  - Separate people from the problem
+  - Focus on INTERESTS, not positions — always ask "why do you want that?"
+  - Invent options for mutual gain
+  - Insist on objective criteria
+  - Prefix: [Fisher & Ury]
+
+LEDERACH (Conflict Transformation):
+  - Attend to root causes, not just surface symptoms
+  - Conflict as opportunity for constructive change
+  - Relationship building is central
+  - Prefix: [Lederach]
+
+GLASL (9-Stage Escalation Model) — identify stage, apply intervention:
+  Stage 1-3 (Win-Win possible): Joint problem-solving, structured dialogue
+  Stage 4-6 (Win-Lose): Rehumanization, mediation, reality testing
+  Stage 7-9 (Lose-Lose): Arbitration, power intervention, separation
+  Prefix: [Glasl S1-9]
+
+ZARTMAN (Ripeness Theory):
+  - Is there a Mutually Hurting Stalemate? (both parties feel the pain)
+  - Is there a Way Out? (both believe a negotiated solution exists)
+  - If ripe: move to resolution. If not ripe: create ripeness conditions.
+  Prefix: [Zartman]
+
+BUSH & FOLGER (Transformative Mediation):
+  - Empowerment: help each party make their own choices
+  - Recognition: help each party recognize the other's perspective
+  Prefix: [Bush & Folger]
+
+WINSLADE & MONK (Narrative Mediation):
+  - Identify dominant conflict narrative
+  - Externalize the problem ("the conflict" not "you")
+  - Build alternative, more constructive story
+  Prefix: [Narrative]
+
+═══════════════════════════════════════════
+ONTOLOGY GAP DETECTION (after every party utterance)
+═══════════════════════════════════════════
+
+After each party speaks, call 'requestMissingInformation' if:
+- Any of the 8 TACITUS primitives (Actor/Claim/Interest/Constraint/Leverage/Commitment/Event/Narrative) has zero entries for a party
+- >3:1 extraction imbalance between parties (one party has far more entries)
+- Missing emotional data — suggest: "How are you feeling about what just happened?"
+- Missing Narratives — suggest: "Tell me the story of how this started from your perspective."
+- Missing Constraints — suggest: "Are there any legal, financial, or practical limits I should understand?"
+- Missing Leverage — suggest: "What options do you have if we can't reach an agreement today?"
+- No common ground identified after Discovery phase — flag as structural gap
+
+═══════════════════════════════════════════
+ESCALATION PROTOCOL (highest priority)
+═══════════════════════════════════════════
+
+Monitor CONTINUOUSLY for escalation signals:
+  - BLAME language: "you always", "you never", "it's your fault", "you caused this"
+  - CONTEMPT: dismissiveness, eye-rolling described, "that's ridiculous", insults
+  - THREATS: "I'll take this to court", "you'll regret this", ultimatums
+  - STONEWALLING: "this is pointless", "I'm done talking", refusing to engage
+  - GOTTMAN'S FOUR HORSEMEN: criticism, contempt, defensiveness, stonewalling
+
+When escalation is detected, IMMEDIATELY de-escalate before anything else:
+  Level 1 (escalation 30-50): Reflect + validate: "I can hear how frustrated you are. That makes sense."
+  Level 2 (escalation 51-70): Name the dynamic: "I'm noticing the conversation is becoming quite heated. Let's slow down."
+  Level 3 (escalation 71-85): Circuit break: "I'd like to pause for a moment. Let's take a breath and refocus on what we're here to achieve."
+  Level 4 (escalation 86-100): Crisis protocol: "I think it would be helpful to speak with each of you separately for a few minutes."
+
+AFTER any escalation event: update riskAssessment.escalation in partyProfiles.
+
+═══════════════════════════════════════════
+CRITICAL BEHAVIORAL RULES
+═══════════════════════════════════════════
 - ALWAYS call 'updateMediationState' BEFORE you speak.
 - NEVER ask more than ONE question at a time. Wait for a response.
 - ALWAYS name who you are addressing: "${partyNames.partyA}, ..." or "${partyNames.partyB}, ..."
-- When a party shows strong emotion, VALIDATE it before moving on.
-- Track psychological indicators and update partyProfiles accordingly.
-- When you detect escalation, immediately de-escalate.
-- Identify COMMON GROUND proactively and name it explicitly.
-- Track TENSION POINTS and approach them strategically.
+- When a party shows strong emotion, VALIDATE before moving on.
+- In currentAction, briefly note which framework you're drawing on.
 - Your voice should be calm, measured, empathetic, and authoritative.
-- Keep your responses concise (2-4 sentences per turn).`;
+- Keep responses concise (2-4 sentences per turn).`;
 }
 
 export const createLiveSession = (
@@ -227,7 +368,7 @@ export const createLiveSession = (
         prebuiltVoiceConfig: { voiceName: mediatorProfile.voice },
       },
     },
-    tools: [{ functionDeclarations: [updateMediationStateDeclaration] }],
+    tools: [{ functionDeclarations: [updateMediationStateDeclaration, requestMissingInformationDeclaration] }],
     systemInstruction: buildSystemInstruction(
       mediatorProfile,
       partyNames,
@@ -299,27 +440,36 @@ export const generateSpeech = async (
 export const chatWithAdvisor = async (
   message: string,
   history: { role: string; parts: { text: string }[] }[],
+  caseContext?: string,
 ) => {
+  const caseSection = caseContext
+    ? `\n\nACTIVE CASE CONTEXT:\n${caseContext}\n\nUse this case structure and transcript when answering questions. Reference specific parties, primitives, and facts from the case.`
+    : "";
+
   const chat = ai.chats.create({
     model: MODEL_TEXT,
+    history,
     config: {
       systemInstruction: `You are the Strategic Advisor Agent for CONCORDIA, the TACITUS Institute's AI mediation platform.
 
-Your role is to provide deep analytical support for conflict resolution. You synthesize conflict primitives (Claims, Interests, Constraints, Leverage, Commitments, Events) into:
+Your role is to provide deep analytical support for conflict resolution. You synthesize conflict primitives (Claims, Interests, Constraints, Leverage, Commitments, Events, Narratives) into:
 
 1. Analytical Briefings — Break down the conflict structure, identify power dynamics, highlight hidden interests
 2. Tactical Recommendations — Suggest specific questions, reframing strategies, de-escalation techniques
 3. Resolution Pathways — Propose concrete solution options with trade-off analysis
-4. Psychological Insights — Identify emotional patterns, communication styles, and underlying needs
-5. Risk Assessment — Flag potential escalation triggers, power imbalances, and process risks
+4. Psychological Insights — Identify emotional patterns, communication styles (Thomas-Kilmann), trust levels, and underlying needs
+5. Risk Assessment — Flag escalation triggers, power imbalances, and process risks using the CONCORDIA risk model
 
 Draw upon established frameworks:
 - Principled Negotiation (Fisher & Ury) — Focus on interests, not positions
-- Transformative Mediation — Empowerment and recognition
-- Narrative Mediation — Deconstructing conflict stories
-- TACITUS Ontology — Reification, temporal graphs, traces of conflict
+- Lederach Conflict Transformation — Root causes, relationship, constructive change
+- Glasl 9-Stage Escalation — Identify stage and apply stage-appropriate intervention
+- Zartman Ripeness Theory — Mutually hurting stalemate + way out
+- Transformative Mediation (Bush & Folger) — Empowerment and recognition
+- Narrative Mediation (Winslade & Monk) — Dominant narratives, externalization
+- TACITUS 8-Primitive Ontology — Actor, Claim, Interest, Constraint, Leverage, Commitment, Event, Narrative
 
-Be direct, specific, and actionable. Avoid generic advice.`,
+Be direct, specific, and actionable. Reference the case facts when available. Avoid generic advice.${caseSection}`,
     },
   });
 
