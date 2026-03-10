@@ -105,6 +105,22 @@ export type PartyProfile = {
   defensiveness: number;
   keyNeeds: string[];
   riskFactors: string[];
+  // Enhanced profiling fields (Part A)
+  conflictStyle?: string; // Thomas-Kilmann: Competing|Collaborating|Compromising|Avoiding|Accommodating
+  emotionalIntensity?: number; // Plutchik 1-10
+  emotionalTrajectory?: string; // escalating|stable|de-escalating
+  trustTowardOther?: { ability: number; benevolence: number; integrity: number }; // Mayer/Davis/Schoorman 0-100 each
+  riskAssessment?: { escalation: number; withdrawal: number; badFaith: number; impasse: number }; // 0-100 each
+};
+
+export type GapNotification = {
+  id: string;
+  gapType: string; // primitive_missing|imbalance|structural|emotional
+  description: string;
+  suggestedQuestion: string;
+  priority: string; // critical|important|minor
+  targetParty: string;
+  dismissed: boolean;
 };
 
 export type LiveMediationState = {

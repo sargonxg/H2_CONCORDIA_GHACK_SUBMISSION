@@ -175,8 +175,9 @@ export const generateSpeech = async (
 export const chatWithAdvisor = async (
   message: string,
   history: { role: string; parts: { text: string }[] }[],
+  caseContext?: string,
 ): Promise<string> => {
-  const data = await apiPost("/api/chat", { message, history });
+  const data = await apiPost("/api/chat", { message, history, caseContext });
   return data.text;
 };
 
