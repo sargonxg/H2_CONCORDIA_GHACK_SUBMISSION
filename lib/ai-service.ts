@@ -123,6 +123,28 @@ const updateMediationStateDeclaration: any = {
         items: { type: Type.STRING },
         description: "Active points of disagreement or high-emotion topics",
       },
+      narratives: {
+        type: Type.ARRAY,
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            actorName: { type: Type.STRING },
+            content: { type: Type.STRING },
+            type: {
+              type: Type.STRING,
+              description:
+                "origin-story|grievance|justification|aspiration|identity-claim|counter-narrative",
+            },
+            framing: {
+              type: Type.STRING,
+              description: "victim|hero|villain|mediator|neutral",
+            },
+            emotionalTone: { type: Type.STRING },
+          },
+        },
+        description:
+          "Narrative frames each party is using to construct meaning around the conflict",
+      },
     },
     required: [
       "phase",
@@ -354,18 +376,46 @@ ${caseStructure}`,
 export const extractPrimitives = async (text: string) => {
   const response = await ai.models.generateContent({
     model: MODEL_TEXT,
-    contents: `You are the Extraction Agent for the CONCORDIA mediation platform, using the TACITUS conflict ontology.
+    contents: `You are the Extraction Agent for the CONCORDIA mediation platform, using the full TACITUS conflict ontology (8 primitives).
 
-Extract structured conflict primitives from the following mediation transcript. For each party involved, identify:
+Extract ALL conflict primitives from the following mediation transcript. Apply the complete TACITUS grammar:
 
-- Claims — What each party states as fact or asserts as their position
-- Interests — The underlying needs, desires, fears, or motivations behind their claims
-- Constraints — Limitations, boundaries, or non-negotiables each party has
-- Leverage — Sources of power, influence, or advantage each party holds
-- Commitments — Promises, obligations, or agreements already made
-- Events — Key incidents, timeline markers, or turning points referenced
+ACTORS — Named parties and stakeholders:
+  - type: individual|group|organization|state
+  - stance: their declared position
+  - powerLevel: 1 (low) to 5 (high)
 
-Also identify the actors with their names and roles/stances.
+CLAIMS — What parties assert as fact or demand:
+  - type: position|demand|assertion|accusation
+  - status: active|withdrawn|acknowledged|disputed
+  - confidence: 0.0–1.0 (how certain they seem)
+
+INTERESTS — The underlying needs behind claims (dig deeper):
+  - type: substantive (tangible resources)|procedural (process fairness)|psychological (respect, identity)|relational (relationship quality)
+  - priority: critical|important|desirable
+  - visibility: stated (explicit)|implicit (inferable)|hidden (buried)
+
+CONSTRAINTS — Limits on what is possible:
+  - type: legal|financial|temporal|organizational|cultural|emotional
+  - rigidity: hard (non-negotiable)|soft (flexible)|negotiable
+
+LEVERAGE — Sources of power and influence:
+  - type: coercive|reward|legitimate|expert|referent|informational
+  - strength: 1 (weak) to 5 (dominant)
+
+COMMITMENTS — Promises, agreements, threats already made:
+  - type: promise|agreement|concession|threat|ultimatum
+  - status: proposed|accepted|rejected|conditional|fulfilled|broken
+  - bindingness: moral|legal|social
+
+EVENTS — Key incidents, turning points, deadlines:
+  - type: trigger|escalation|de-escalation|turning-point|deadline|milestone
+  - impact: high|medium|low
+
+NARRATIVES — How parties frame and make meaning of the conflict:
+  - type: origin-story|grievance|justification|aspiration|identity-claim|counter-narrative
+  - framing: victim|hero|villain|mediator|neutral
+  - emotionalTone: describe the emotional quality (e.g., "bitter resentment", "cautious hope")
 
 Text:
 ${text}`,
@@ -381,6 +431,9 @@ ${text}`,
               properties: {
                 name: { type: Type.STRING },
                 role: { type: Type.STRING },
+                type: { type: Type.STRING },
+                stance: { type: Type.STRING },
+                powerLevel: { type: Type.NUMBER },
               },
             },
           },
@@ -389,13 +442,36 @@ ${text}`,
             items: {
               type: Type.OBJECT,
               properties: {
-                type: {
+                primitiveType: {
                   type: Type.STRING,
                   description:
-                    "Must be exactly 'Claim', 'Interest', 'Constraint', 'Leverage', 'Commitment', or 'Event'",
+                    "Must be exactly one of: 'Claim', 'Interest', 'Constraint', 'Leverage', 'Commitment', 'Event', 'Narrative'",
                 },
                 actorName: { type: Type.STRING },
                 description: { type: Type.STRING },
+                subType: {
+                  type: Type.STRING,
+                  description: "The specific sub-type for this primitive",
+                },
+                // Claim fields
+                status: { type: Type.STRING },
+                confidence: { type: Type.NUMBER },
+                // Interest fields
+                priority: { type: Type.STRING },
+                visibility: { type: Type.STRING },
+                // Constraint fields
+                rigidity: { type: Type.STRING },
+                // Leverage / Actor fields
+                strength: { type: Type.NUMBER },
+                powerLevel: { type: Type.NUMBER },
+                // Commitment fields
+                bindingness: { type: Type.STRING },
+                // Event fields
+                impact: { type: Type.STRING },
+                timestamp: { type: Type.STRING },
+                // Narrative fields
+                framing: { type: Type.STRING },
+                emotionalTone: { type: Type.STRING },
               },
             },
           },

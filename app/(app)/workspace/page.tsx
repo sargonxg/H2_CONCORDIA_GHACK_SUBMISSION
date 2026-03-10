@@ -35,50 +35,20 @@ import {
   researchGrounding,
   analyzePathways,
 } from "@/services/gemini-client";
-
-type Actor = { id: string; name: string; role: string };
-type PrimitiveType =
-  | "Claim"
-  | "Interest"
-  | "Constraint"
-  | "Leverage"
-  | "Commitment"
-  | "Event";
-type Primitive = {
-  id: string;
-  type: PrimitiveType;
-  actorId: string;
-  description: string;
-};
-
-type PartyProfile = {
-  emotionalState: string;
-  engagementLevel: string;
-  communicationStyle: string;
-  cooperativeness: number;
-  defensiveness: number;
-  keyNeeds: string[];
-  riskFactors: string[];
-};
-
-type Case = {
-  id: string;
-  title: string;
-  updatedAt: string;
-  transcript: string;
-  actors: Actor[];
-  primitives: Primitive[];
-  partyAName: string;
-  partyBName: string;
-};
+import type { Actor, Primitive, PrimitiveType, Case, LiveMediationState, OntologyStats, PartyProfile } from "@/lib/types";
+import { useConflictGraph } from "@/hooks/useConflictGraph";
+import ConflictGraph from "@/components/workspace/ConflictGraph";
+import OntologyHealthCheck from "@/components/workspace/OntologyHealthCheck";
 
 const PRIMITIVE_TYPES: PrimitiveType[] = [
+  "Actor",
   "Claim",
   "Interest",
   "Constraint",
   "Leverage",
   "Commitment",
   "Event",
+  "Narrative",
 ];
 
 const PHASES = [
@@ -270,22 +240,10 @@ export default function Workspace() {
   });
   const [showSettings, setShowSettings] = useState(false);
   const [activeTab, setActiveTab] = useState<
-    "transcript" | "structure" | "pathways"
+    "transcript" | "structure" | "pathways" | "graph"
   >("transcript");
 
-  const [liveMediationState, setLiveMediationState] = useState<{
-    phase: string;
-    targetActor: string;
-    currentAction: string;
-    missingItems: string[];
-    structuredItems: { topic: string; summary: string; actor: string }[];
-    partyProfiles: {
-      partyA: PartyProfile | null;
-      partyB: PartyProfile | null;
-    };
-    commonGround: string[];
-    tensionPoints: string[];
-  } | null>(null);
+  const [liveMediationState, setLiveMediationState] = useState<LiveMediationState | null>(null);
 
   const [demoMode, setDemoMode] = useState(false);
   const demoTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -1100,14 +1058,15 @@ export default function Workspace() {
 
       result.primitives?.forEach((p: any) => {
         const actor = newActors.find(
-          (a) => a.name.toLowerCase() === p.actorName?.toLowerCase(),
+          (a) => a.name.toLowerCase() === (p.actorName ?? p.actor)?.toLowerCase(),
         );
         const actorId = actor ? actor.id : newActors[0]?.id;
+        const primitiveType = p.primitiveType ?? p.type;
         if (actorId) {
           newPrimitives.push({
             id: Date.now().toString() + Math.random(),
-            type: PRIMITIVE_TYPES.includes(p.type as PrimitiveType)
-              ? p.type
+            type: PRIMITIVE_TYPES.includes(primitiveType as PrimitiveType)
+              ? (primitiveType as PrimitiveType)
               : "Claim",
             actorId,
             description: p.description,
@@ -1263,6 +1222,19 @@ export default function Workspace() {
   const healthScore = Math.round(
     (presentTypes.size / PRIMITIVE_TYPES.length) * 100,
   );
+
+  // Knowledge graph
+  const { nodes: graphNodes, edges: graphEdges, stats: ontologyStats } = useConflictGraph(
+    activeCase?.actors ?? [],
+    activeCase?.primitives ?? [],
+    liveMediationState,
+  );
+
+  // Party claim counts for OntologyHealthCheck imbalance detection
+  const actorA = activeCase?.actors[0];
+  const actorB = activeCase?.actors[1];
+  const partyAClaims = activeCase?.primitives.filter((p) => p.type === "Claim" && p.actorId === actorA?.id).length ?? 0;
+  const partyBClaims = activeCase?.primitives.filter((p) => p.type === "Claim" && p.actorId === actorB?.id).length ?? 0;
   const currentPhaseIdx = PHASES.indexOf(
     liveMediationState?.phase || "Opening",
   );
@@ -1495,6 +1467,32 @@ export default function Workspace() {
         )}
       </AnimatePresence>
 
+      {/* ─── ONTOLOGY HEALTH BANNER ─── */}
+      <AnimatePresence>
+        {healthScore < 50 && activeCase && activeCase.primitives.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="px-6 shrink-0"
+          >
+            <div className="mt-3 p-3 bg-amber-500/5 border border-amber-500/20 rounded-lg flex items-center gap-3">
+              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+              <p className="text-xs text-amber-200 flex-1">
+                Ontology coverage is low ({healthScore}%). Open the{" "}
+                <button
+                  className="underline font-semibold"
+                  onClick={() => setActiveTab("graph")}
+                >
+                  Knowledge Graph
+                </button>{" "}
+                tab to see what&apos;s still needed.
+              </p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* ─── MAIN CONTENT AREA ─── */}
       <div className="flex-1 flex overflow-hidden p-4 gap-4">
         {/* ─── LEFT: Party Profiles ─── */}
@@ -1605,6 +1603,11 @@ export default function Workspace() {
                   id: "pathways" as const,
                   label: "Resolution Pathways",
                   icon: Lightbulb,
+                },
+                {
+                  id: "graph" as const,
+                  label: "Knowledge Graph",
+                  icon: Network,
                 },
               ] as const
             ).map((tab) => {
@@ -1928,6 +1931,26 @@ export default function Workspace() {
                     </p>
                   </div>
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* ── KNOWLEDGE GRAPH TAB ── */}
+          {activeTab === "graph" && (
+            <div className="flex-1 flex gap-4 overflow-hidden">
+              {/* Graph canvas */}
+              <div className="flex-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl flex flex-col overflow-hidden">
+                <ConflictGraph nodes={graphNodes} edges={graphEdges} />
+              </div>
+              {/* Health check sidebar */}
+              <div className="w-72 shrink-0 overflow-y-auto">
+                <OntologyHealthCheck
+                  stats={ontologyStats}
+                  partyAName={activeCase?.partyAName || "Party A"}
+                  partyBName={activeCase?.partyBName || "Party B"}
+                  partyAClaims={partyAClaims}
+                  partyBClaims={partyBClaims}
+                />
               </div>
             </div>
           )}
