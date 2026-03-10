@@ -270,6 +270,24 @@ export default function Workspace() {
   const activeCaseIdRef = useRef<string | null>(null);
   activeCaseIdRef.current = activeCaseId;
 
+  // Transcript buffering — accumulate word-by-word fragments, flush on turnComplete
+  const aiTranscriptBuffer = useRef<string>("");
+  const userTranscriptBuffer = useRef<string>("");
+  const sessionStartTimeRef = useRef<number>(0);
+
+  // Continuous extraction during live sessions
+  const autoExtractionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lastAutoExtractLengthRef = useRef<number>(0);
+
+  // Styled transcript panel
+  const transcriptEndRef = useRef<HTMLDivElement>(null);
+  const [autoScrollEnabled, setAutoScrollEnabled] = useState(true);
+  const [extractionNotice, setExtractionNotice] = useState(false);
+
+  // Keep a ref-mirror of cases to avoid stale closures in interval callbacks
+  const casesRef = useRef(cases);
+  casesRef.current = cases;
+
   useEffect(() => {
     const saved = localStorage.getItem("concordia_cases");
     if (saved) {
@@ -300,6 +318,16 @@ export default function Workspace() {
   };
 
   const activeCase = cases.find((c) => c.id === activeCaseId);
+
+  // Auto-scroll transcript panel to latest entry during live sessions
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (autoScrollEnabled && transcriptEndRef.current && (status === "LIVE" || isRecording)) {
+      transcriptEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  // activeCase?.transcript is the key dep that triggers scrolling
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeCase?.transcript, autoScrollEnabled, status, isRecording]);
 
   const updateActiveCase = (updates: Partial<Case>) => {
     setCases((prev) =>
@@ -332,9 +360,17 @@ export default function Workspace() {
       const session = await getLiveSession(
         {
           onopen: () => {
+            sessionStartTimeRef.current = Date.now();
+            lastAutoExtractLengthRef.current = 0;
+            aiTranscriptBuffer.current = "";
+            userTranscriptBuffer.current = "";
             setStatus("LIVE");
             setIsRecording(true);
             startAudioCapture();
+            // Start continuous extraction every 3 minutes
+            autoExtractionIntervalRef.current = setInterval(() => {
+              autoExtractFromTranscript();
+            }, 3 * 60 * 1000);
           },
           onmessage: async (message: any) => {
             if (sessionClosingRef.current) return;
@@ -345,45 +381,65 @@ export default function Workspace() {
               playAudio(base64Audio);
             }
 
-            // Get transcription text from the outputTranscription or model text parts
-            const aiText =
-              message.serverContent?.outputTranscription?.text ||
-              message.serverContent?.modelTurn?.parts?.[0]?.text;
-            // Get user's spoken text from input transcription
-            const userText =
-              message.serverContent?.inputTranscription?.text;
-
-            if (aiText && activeCaseIdRef.current) {
-              setCases((prev) =>
-                prev.map((c) =>
-                  c.id === activeCaseIdRef.current
-                    ? {
-                        ...c,
-                        transcript:
-                          c.transcript +
-                          (c.transcript ? "\n\n" : "") +
-                          "[Concordia]: " +
-                          aiText,
-                      }
-                    : c,
-                ),
-              );
+            // Buffer AI transcription fragments (arrive word-by-word)
+            if (message.serverContent?.outputTranscription?.text) {
+              aiTranscriptBuffer.current += message.serverContent.outputTranscription.text;
             }
-            if (userText && activeCaseIdRef.current) {
-              setCases((prev) =>
-                prev.map((c) =>
-                  c.id === activeCaseIdRef.current
-                    ? {
-                        ...c,
-                        transcript:
-                          c.transcript +
-                          (c.transcript ? "\n\n" : "") +
-                          "[Speaker]: " +
-                          userText,
-                      }
-                    : c,
-                ),
-              );
+            // Capture model text parts for non-audio response modes
+            if (
+              message.serverContent?.modelTurn?.parts?.[0]?.text &&
+              !message.serverContent?.outputTranscription?.text
+            ) {
+              aiTranscriptBuffer.current += message.serverContent.modelTurn.parts[0].text;
+            }
+            // Buffer user transcription fragments (arrive word-by-word)
+            if (message.serverContent?.inputTranscription?.text) {
+              userTranscriptBuffer.current += message.serverContent.inputTranscription.text;
+            }
+
+            // FLUSH buffers when a turn completes or a tool call arrives
+            const shouldFlush = message.serverContent?.turnComplete || message.toolCall;
+            if (shouldFlush && activeCaseIdRef.current) {
+              const elapsed = Math.floor((Date.now() - sessionStartTimeRef.current) / 1000);
+              const mm = String(Math.floor(elapsed / 60)).padStart(2, "0");
+              const ss = String(elapsed % 60).padStart(2, "0");
+              const timestamp = `[${mm}:${ss}]`;
+
+              const aiUtterance = aiTranscriptBuffer.current.trim();
+              const userUtterance = userTranscriptBuffer.current.trim();
+
+              if (aiUtterance) {
+                setCases((prev) =>
+                  prev.map((c) =>
+                    c.id === activeCaseIdRef.current
+                      ? {
+                          ...c,
+                          transcript:
+                            c.transcript +
+                            (c.transcript ? "\n\n" : "") +
+                            `${timestamp} [Concordia]: ${aiUtterance}`,
+                        }
+                      : c,
+                  ),
+                );
+                aiTranscriptBuffer.current = "";
+              }
+              if (userUtterance) {
+                setCases((prev) =>
+                  prev.map((c) =>
+                    c.id === activeCaseIdRef.current
+                      ? {
+                          ...c,
+                          transcript:
+                            c.transcript +
+                            (c.transcript ? "\n\n" : "") +
+                            `${timestamp} [Speaker]: ${userUtterance}`,
+                        }
+                      : c,
+                  ),
+                );
+                userTranscriptBuffer.current = "";
+              }
             }
 
             if (message.toolCall) {
@@ -458,6 +514,10 @@ export default function Workspace() {
           },
           onclose: () => {
             sessionClosingRef.current = true;
+            if (autoExtractionIntervalRef.current) {
+              clearInterval(autoExtractionIntervalRef.current);
+              autoExtractionIntervalRef.current = null;
+            }
             setStatus("DISCONNECTED");
             setIsRecording(false);
             stopAudioCapture();
@@ -497,6 +557,10 @@ export default function Workspace() {
 
   const stopSession = () => {
     sessionClosingRef.current = true;
+    if (autoExtractionIntervalRef.current) {
+      clearInterval(autoExtractionIntervalRef.current);
+      autoExtractionIntervalRef.current = null;
+    }
     stopAudioCapture();
     if (sessionRef.current) {
       try {
@@ -1186,6 +1250,51 @@ export default function Workspace() {
     }
   };
 
+  // Continuous background extraction during live sessions — duplicate-aware merge
+  const autoExtractFromTranscript = async () => {
+    if (!activeCaseIdRef.current) return;
+    const currentCase = casesRef.current.find((c) => c.id === activeCaseIdRef.current);
+    if (!currentCase?.transcript) return;
+    const currentLength = currentCase.transcript.length;
+    if (currentLength <= lastAutoExtractLengthRef.current + 200) return;
+    lastAutoExtractLengthRef.current = currentLength;
+    try {
+      const resultStr = await extractPrimitives(currentCase.transcript);
+      const result = JSON.parse(resultStr);
+      setCases((prev) =>
+        prev.map((c) => {
+          if (c.id !== activeCaseIdRef.current) return c;
+          let newActors = [...c.actors];
+          let newPrimitives = [...c.primitives];
+          result.actors?.forEach((a: any) => {
+            if (!newActors.find((existing) => existing.name.toLowerCase() === a.name.toLowerCase())) {
+              newActors.push({ id: Date.now().toString() + Math.random(), name: a.name, role: a.role || "Unknown" });
+            }
+          });
+          result.primitives?.forEach((p: any) => {
+            const actor = newActors.find((a) => a.name.toLowerCase() === (p.actorName ?? p.actor)?.toLowerCase());
+            const actorId = actor ? actor.id : newActors[0]?.id;
+            const primitiveType = p.primitiveType ?? p.type;
+            const desc: string = p.description ?? "";
+            if (actorId && desc && !newPrimitives.some((existing) => existing.description.toLowerCase() === desc.toLowerCase())) {
+              newPrimitives.push({
+                id: Date.now().toString() + Math.random(),
+                type: PRIMITIVE_TYPES.includes(primitiveType as PrimitiveType) ? (primitiveType as PrimitiveType) : "Claim",
+                actorId,
+                description: desc,
+              });
+            }
+          });
+          return { ...c, actors: newActors, primitives: newPrimitives };
+        }),
+      );
+      setExtractionNotice(true);
+      setTimeout(() => setExtractionNotice(false), 3000);
+    } catch (err) {
+      console.warn("[AutoExtract] Background extraction failed:", err);
+    }
+  };
+
   const addActor = () => {
     updateActiveCase({
       actors: [
@@ -1771,25 +1880,84 @@ export default function Workspace() {
           {/* ── TRANSCRIPT TAB ── */}
           {activeTab === "transcript" && (
             <div className="flex-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-4 flex flex-col overflow-hidden">
-              <textarea
-                value={activeCase?.transcript}
-                onChange={(e) =>
-                  updateActiveCase({ transcript: e.target.value })
-                }
-                placeholder={`Enter initial context here, or start the Live Session to begin mediation between ${activeCase?.partyAName || "Party A"} and ${activeCase?.partyBName || "Party B"}...`}
-                className="flex-1 bg-transparent border-none resize-none focus:ring-0 text-sm leading-relaxed text-white placeholder-[var(--color-text-muted)] font-mono"
-              />
-              <div className="mt-3 pt-3 border-t border-[var(--color-border)] flex justify-end">
-                <button
-                  onClick={handleSimulateExtraction}
-                  disabled={
-                    !activeCase?.transcript || status === "ANALYZING"
-                  }
-                  className="bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-white px-5 py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-50 flex items-center gap-2 shadow-md shadow-[var(--color-accent)]/20"
+              {(isRecording || status === "LIVE" || status === "RECONNECTING") ? (
+                /* Styled live transcript panel */
+                <div
+                  className="flex-1 overflow-y-auto space-y-2 pr-1"
+                  onScroll={(e) => {
+                    const el = e.currentTarget;
+                    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+                    setAutoScrollEnabled(atBottom);
+                  }}
                 >
-                  <Target className="w-4 h-4" />
-                  Analyze & Find Pathways
-                </button>
+                  {extractionNotice && (
+                    <div className="flex items-center gap-2 px-3 py-1.5 bg-indigo-500/10 border border-indigo-500/30 rounded-lg text-xs text-indigo-300 mb-2">
+                      <Activity className="w-3 h-3 animate-pulse" />
+                      Structure updated from transcript
+                    </div>
+                  )}
+                  {activeCase?.transcript ? (
+                    activeCase.transcript.split("\n\n").map((line, i) => {
+                      const isConcordia = line.includes("[Concordia]:");
+                      const isSpeaker = line.includes("[Speaker]:");
+                      return (
+                        <div
+                          key={i}
+                          className={`text-sm leading-relaxed px-3 py-2 rounded-lg font-mono ${
+                            isConcordia
+                              ? "bg-indigo-500/10 border border-indigo-500/20 text-indigo-200"
+                              : isSpeaker
+                              ? "bg-sky-500/10 border border-sky-500/20 text-sky-200"
+                              : "text-[var(--color-text-muted)]"
+                          }`}
+                        >
+                          {line}
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <p className="text-[var(--color-text-muted)] text-sm italic">
+                      Waiting for conversation…
+                    </p>
+                  )}
+                  <div ref={transcriptEndRef} />
+                </div>
+              ) : (
+                /* Editable textarea when not live */
+                <textarea
+                  value={activeCase?.transcript}
+                  onChange={(e) =>
+                    updateActiveCase({ transcript: e.target.value })
+                  }
+                  placeholder={`Enter initial context here, or start the Live Session to begin mediation between ${activeCase?.partyAName || "Party A"} and ${activeCase?.partyBName || "Party B"}...`}
+                  className="flex-1 bg-transparent border-none resize-none focus:ring-0 text-sm leading-relaxed text-white placeholder-[var(--color-text-muted)] font-mono"
+                />
+              )}
+              <div className="mt-3 pt-3 border-t border-[var(--color-border)] flex items-center justify-between">
+                {(isRecording || status === "LIVE") && !autoScrollEnabled && (
+                  <button
+                    onClick={() => {
+                      setAutoScrollEnabled(true);
+                      transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
+                    }}
+                    className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1"
+                  >
+                    <Activity className="w-3 h-3" />
+                    Scroll to latest
+                  </button>
+                )}
+                <div className="ml-auto">
+                  <button
+                    onClick={handleSimulateExtraction}
+                    disabled={
+                      !activeCase?.transcript || status === "ANALYZING" || isRecording
+                    }
+                    className="bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-white px-5 py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-50 flex items-center gap-2 shadow-md shadow-[var(--color-accent)]/20"
+                  >
+                    <Target className="w-4 h-4" />
+                    Analyze & Find Pathways
+                  </button>
+                </div>
               </div>
             </div>
           )}
