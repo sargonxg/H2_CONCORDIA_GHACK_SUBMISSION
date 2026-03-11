@@ -2,6 +2,7 @@ import { GoogleGenAI, Type, Modality, Behavior } from "@google/genai";
 import fs from "fs";
 import path from "path";
 import os from "os";
+import { getRelevantFrameworks, buildFrameworkSnippet } from "./mediation-library";
 
 // ══════════════════════════════════════════════════════════════════════════════
 // LAZY INITIALIZATION
@@ -690,6 +691,31 @@ export const chatWithAdvisor = async (
   caseContext?: string,
 ) => {
   const ai = initAI();
+
+  // Extract escalation level and phase from case context if present
+  let escalationLevel: number | undefined;
+  let phase: string | undefined;
+  let missingPrimitives: string[] | undefined;
+
+  if (caseContext) {
+    const escalationMatch = caseContext.match(/escalation[:\s]+(\d+)/i);
+    if (escalationMatch) escalationLevel = parseInt(escalationMatch[1], 10);
+    const phaseMatch = caseContext.match(/phase[:\s]+"?(\w+)"?/i);
+    if (phaseMatch) phase = phaseMatch[1];
+    const allPrimitiveTypes = ["Actor", "Claim", "Interest", "Constraint", "Leverage", "Commitment", "Event", "Narrative"];
+    missingPrimitives = allPrimitiveTypes.filter(
+      (t) => !caseContext.includes(t),
+    );
+  }
+
+  const relevantFrameworks = getRelevantFrameworks({
+    escalationLevel,
+    phase,
+    missingPrimitives,
+  });
+
+  const frameworkSnippet = buildFrameworkSnippet(relevantFrameworks);
+
   const caseSection = caseContext
     ? `\n\nACTIVE CASE CONTEXT:\n${caseContext}\n\nUse this case structure and transcript when answering questions. Reference specific parties, primitives, and facts from the case.`
     : "";
@@ -717,7 +743,10 @@ Draw upon established frameworks:
 - Narrative Mediation (Winslade & Monk) — Dominant narratives, externalization
 - TACITUS 8-Primitive Ontology — Actor, Claim, Interest, Constraint, Leverage, Commitment, Event, Narrative
 
-Be direct, specific, and actionable. Reference the case facts when available. Avoid generic advice.${caseSection}`,
+Be direct, specific, and actionable. Reference the case facts when available. Avoid generic advice.
+
+FRAMEWORKS MOST RELEVANT TO THIS CASE (apply these specifically):
+${frameworkSnippet}${caseSection}`,
     },
   });
 
