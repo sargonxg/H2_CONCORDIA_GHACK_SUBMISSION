@@ -53,6 +53,7 @@ import ConflictGraph from "@/components/workspace/ConflictGraph";
 import OntologyHealthCheck from "@/components/workspace/OntologyHealthCheck";
 import EnhancedPartyProfile from "@/components/workspace/EnhancedPartyProfile";
 import EscalationMeter from "@/components/workspace/EscalationMeter";
+import { ErrorPanel } from "@/components/ErrorPanel";
 import SessionControls from "@/components/workspace/SessionControls";
 import LiveStatusBar from "@/components/workspace/LiveStatusBar";
 import TranscriptPanel from "@/components/workspace/TranscriptPanel";
@@ -303,6 +304,8 @@ export default function Workspace() {
 
   const [demoMode, setDemoMode] = useState(false);
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
+  const [connectionLostBanner, setConnectionLostBanner] = useState(false);
+  const [micDenied, setMicDenied] = useState(false);
   const demoTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   const sessionRef = useRef<any>(null);
@@ -438,6 +441,33 @@ export default function Workspace() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isRecording, activeCase?.transcript]);
 
+  // AudioContext recovery on tab visibility change
+  useEffect(() => {
+    const handler = () => {
+      if (document.hidden) return;
+      if (audioContextRef.current?.state === "suspended") audioContextRef.current.resume();
+      if (playbackContextRef.current?.state === "suspended") playbackContextRef.current.resume();
+    };
+    document.addEventListener("visibilitychange", handler);
+    return () => document.removeEventListener("visibilitychange", handler);
+  }, []);
+
+  // Session duration warnings (45min warn, 55min critical)
+  useEffect(() => {
+    if (status !== "LIVE") return;
+    const warnTimer = setTimeout(() => {
+      setSessionToast("Session has been running for 45 minutes. Consider saving your progress.");
+    }, 45 * 60 * 1000);
+    const criticalTimer = setTimeout(() => {
+      setSessionToast("Session approaching 60-minute limit. Auto-saving transcript...");
+      if (activeCase?.transcript) {
+        safeLocalStorageSet("concordia_cases", cases);
+      }
+    }, 55 * 60 * 1000);
+    return () => { clearTimeout(warnTimer); clearTimeout(criticalTimer); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status]);
+
   // Dismiss session toast after 5s
   useEffect(() => {
     if (!sessionToast) return;
@@ -459,7 +489,23 @@ export default function Workspace() {
     return sessionRef.current && !sessionClosingRef.current;
   };
 
+  const checkMicPermission = async (): Promise<boolean> => {
+    try {
+      const result = await navigator.permissions.query({ name: "microphone" as PermissionName });
+      return result.state !== "denied";
+    } catch {
+      return true; // Assume OK if permissions API not available
+    }
+  };
+
   const startSession = async () => {
+    // Check microphone permission first
+    const micOk = await checkMicPermission();
+    if (!micOk) {
+      setMicDenied(true);
+      return;
+    }
+    setMicDenied(false);
     try {
       setStatus("CONNECTING");
       sessionClosingRef.current = false;
@@ -703,6 +749,7 @@ export default function Workspace() {
             }
           },
           onclose: () => {
+            const wasLive = !sessionClosingRef.current;
             sessionClosingRef.current = true;
             if (autoExtractionIntervalRef.current) {
               clearInterval(autoExtractionIntervalRef.current);
@@ -723,6 +770,11 @@ export default function Workspace() {
             setStatus("DISCONNECTED");
             setIsRecording(false);
             stopAudioCapture();
+            // If closed unexpectedly, save transcript and show banner
+            if (wasLive) {
+              safeLocalStorageSet("concordia_cases", casesRef.current);
+              setConnectionLostBanner(true);
+            }
           },
           onerror: (err: any) => {
             console.error("Live API Error:", err);
@@ -2025,22 +2077,54 @@ export default function Workspace() {
         </div>
       )}
 
+      {/* ─── MIC DENIED BANNER ─── */}
+      {micDenied && (
+        <div className="mx-6 mt-2 shrink-0 flex items-center gap-3 px-4 py-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+          <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+          <p className="text-sm text-red-200 flex-1">
+            Microphone access denied. Enable it in your browser settings (Site Settings → Microphone → Allow), then retry.
+          </p>
+          <button onClick={() => setMicDenied(false)} className="text-red-400 hover:text-white"><X className="w-3.5 h-3.5" /></button>
+        </div>
+      )}
+
+      {/* ─── CONNECTION LOST BANNER ─── */}
+      {connectionLostBanner && (
+        <div className="mx-6 mt-2 shrink-0 flex items-center gap-3 px-4 py-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+          <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+          <p className="text-sm text-red-200 flex-1">Connection lost. Your transcript has been saved.</p>
+          <button
+            onClick={() => { exportTranscript(); setConnectionLostBanner(false); }}
+            className="shrink-0 text-xs px-2.5 py-1.5 rounded-lg border border-red-500/30 text-red-300 hover:bg-red-500/10 transition-colors"
+          >Download Transcript</button>
+          <button
+            onClick={() => { setConnectionLostBanner(false); startSession(); }}
+            className="shrink-0 text-xs px-2.5 py-1.5 rounded-lg border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/10 transition-colors"
+          >Reconnect</button>
+          <button onClick={() => setConnectionLostBanner(false)} className="text-red-400/60 hover:text-white"><X className="w-3.5 h-3.5" /></button>
+        </div>
+      )}
+
       {/* ─── MAIN CONTENT AREA ─── */}
       <div className="flex-1 flex overflow-hidden p-4 gap-4">
         {/* ─── LEFT: Party Profiles ─── */}
         <div className="w-72 shrink-0 flex flex-col gap-4 overflow-y-auto pr-1">
           {activeCase?.profilingEnabled !== false ? (
             <>
+              <ErrorPanel fallbackMessage="Profile unavailable">
               <EnhancedPartyProfile
                 name={activeCase?.partyAName || "Party A"}
                 profile={liveMediationState?.partyProfiles?.partyA || null}
                 side="A"
               />
+              </ErrorPanel>
+              <ErrorPanel fallbackMessage="Profile unavailable">
               <EnhancedPartyProfile
                 name={activeCase?.partyBName || "Party B"}
                 profile={liveMediationState?.partyProfiles?.partyB || null}
                 side="B"
               />
+              </ErrorPanel>
               {/* ── Escalation Meter ── */}
               <EscalationMeter
                 escalationScore={Math.max(
@@ -2801,7 +2885,9 @@ export default function Workspace() {
                     ))}
                   </div>
                 </div>
-                <ConflictGraph nodes={graphNodes} edges={graphEdges} highlightActorId={highlightActorId} />
+                <ErrorPanel fallbackMessage="Graph rendering failed">
+                  <ConflictGraph nodes={graphNodes} edges={graphEdges} highlightActorId={highlightActorId} />
+                </ErrorPanel>
               </div>
               {/* Health check sidebar */}
               <div className="w-72 shrink-0 overflow-y-auto">

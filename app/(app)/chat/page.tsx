@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { motion } from "motion/react";
 import { MessageSquare, Send, User, ShieldAlert, Database, Zap } from "lucide-react";
 import { chatWithAdvisor } from "@/services/gemini-client";
@@ -9,12 +9,22 @@ import type { Case } from "@/lib/types";
 
 // ── Quick-action prompts ──
 const QUICK_ACTIONS = [
-  { label: "What to ask next?", icon: "🎯", prompt: "Based on the current case structure and transcript, what is the single most important question to ask next in the mediation, and why? Be specific." },
-  { label: "Power dynamics", icon: "⚖️", prompt: "Analyze the power dynamics in this case using the CONCORDIA framework. Who has stronger BATNA? What leverage does each party hold? Identify any power imbalances affecting the process." },
-  { label: "De-escalation", icon: "🌊", prompt: "What de-escalation techniques would you recommend for this case right now? Identify any escalation signals in the transcript and suggest specific Ury or Glasl interventions." },
-  { label: "Find common ground", icon: "🤝", prompt: "Identify all potential areas of common ground between the parties using principled negotiation (Fisher & Ury). What shared interests, values, or goals could form the basis of an agreement?" },
-  { label: "Draft terms", icon: "📋", prompt: "Based on the case structure and transcript, draft potential agreement terms. What commitments could each party realistically make? What would a fair resolution look like in concrete terms?" },
+  { label: "Brief Me", prompt: "Give me a full briefing on the current state of this case." },
+  { label: "What's Missing?", prompt: "What information gaps exist in our case structure? What should I ask next?" },
+  { label: "Suggest Questions", prompt: "Generate 5 targeted questions I should ask, based on what's missing from the ontology." },
+  { label: "Escalation Risk", prompt: "Assess the current escalation dynamics. What are the risk factors?" },
+  { label: "Draft Agreement", prompt: "Based on the common ground and agreements so far, draft preliminary agreement language." },
+  { label: "Compare Frameworks", prompt: "Which conflict resolution framework best fits this case and why? Compare top 3." },
 ];
+
+function safeJsonParse<T>(s: string | null, fallback: T): T {
+  if (!s) return fallback;
+  try { return JSON.parse(s); } catch { return fallback; }
+}
+
+function safeLocalStorageSet(key: string, value: unknown) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch (_) {}
+}
 
 function buildCaseContext(activeCase: Case | null): string | undefined {
   if (!activeCase) return undefined;
@@ -37,23 +47,21 @@ function buildCaseContext(activeCase: Case | null): string | undefined {
   return lines.join("\n");
 }
 
+const INITIAL_MESSAGE = { role: "model", text: "Hello. I am the CONCORDIA Strategic Advisor. I have access to your active case structure and transcript. Ask me anything about the conflict, or use a quick action below." };
+
 export default function Chat() {
-  const [messages, setMessages] = useState<{ role: string; text: string }[]>([
-    {
-      role: "model",
-      text: "Hello. I am the CONCORDIA Strategic Advisor. I have access to your active case structure and transcript. Ask me anything about the conflict, or use a quick action below.",
-    },
-  ]);
+  const [messages, setMessages] = useState<{ role: string; text: string }[]>([INITIAL_MESSAGE]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [activeCase, setActiveCase] = useState<Case | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const activeCaseIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Load most-recently-updated case from localStorage
+  // Load most-recently-updated case from localStorage + restore chat history
   useEffect(() => {
     try {
       const saved = localStorage.getItem("concordia_cases");
@@ -63,10 +71,27 @@ export default function Chat() {
           const sorted = [...cases].sort(
             (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
           );
-          setActiveCase(sorted[0]);
+          const c = sorted[0];
+          setActiveCase(c);
+          activeCaseIdRef.current = c.id;
+          // Restore per-case chat history
+          const chatKey = `concordia_chat_${c.id}`;
+          const savedChat = safeJsonParse<{ role: string; text: string }[]>(
+            localStorage.getItem(chatKey), []
+          );
+          if (savedChat.length > 0) {
+            setMessages([INITIAL_MESSAGE, ...savedChat]);
+          }
         }
       }
     } catch (_) {}
+  }, []);
+
+  const saveHistory = useCallback((msgs: { role: string; text: string }[]) => {
+    if (!activeCaseIdRef.current) return;
+    const chatKey = `concordia_chat_${activeCaseIdRef.current}`;
+    // Save all messages except the initial system greeting
+    safeLocalStorageSet(chatKey, msgs.slice(1));
   }, []);
 
   const handleSend = async (messageOverride?: string) => {
@@ -74,7 +99,9 @@ export default function Chat() {
     if (!userMessage.trim()) return;
 
     setInput("");
-    setMessages((prev) => [...prev, { role: "user", text: userMessage }]);
+    const newUserMsg = { role: "user", text: userMessage };
+    const updatedWithUser = [...messages, newUserMsg];
+    setMessages(updatedWithUser);
     setIsLoading(true);
 
     try {
@@ -84,7 +111,10 @@ export default function Chat() {
         messages.map((m) => ({ role: m.role, parts: [{ text: m.text }] })),
         caseContext,
       );
-      setMessages((prev) => [...prev, { role: "model", text: response }]);
+      const newModelMsg = { role: "model", text: response };
+      const final = [...updatedWithUser, newModelMsg];
+      setMessages(final);
+      saveHistory(final);
     } catch (error) {
       console.error("Chat error:", error);
       setMessages((prev) => [
@@ -126,15 +156,14 @@ export default function Chat() {
         </div>
 
         {/* ── Quick-action buttons ── */}
-        <div className="flex flex-wrap gap-2 mt-4">
+        <div className="flex gap-2 mt-4 overflow-x-auto pb-1 scrollbar-hide">
           {QUICK_ACTIONS.map((action) => (
             <button
               key={action.label}
               onClick={() => handleSend(action.prompt)}
               disabled={isLoading}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text-muted)] hover:text-white hover:border-[var(--color-accent)]/50 hover:bg-[var(--color-accent)]/5 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              className="shrink-0 px-3 py-1.5 text-xs rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text-muted)] hover:text-white hover:border-[var(--color-accent)]/50 hover:bg-[var(--color-accent)]/5 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <span>{action.icon}</span>
               {action.label}
             </button>
           ))}

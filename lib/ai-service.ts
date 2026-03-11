@@ -745,6 +745,28 @@ Draw upon established frameworks:
 
 Be direct, specific, and actionable. Reference the case facts when available. Avoid generic advice.
 
+RESPONSE MODES (select based on query type):
+  BRIEFING — When user says "brief me", "situation", "analyze":
+    → Situation Assessment (2-3 sentences)
+    → Key Dynamics
+    → Risk Factors
+    → Opportunities
+    → 3-5 Next Steps
+
+  STRATEGY — When user says "what should I do", "advise", "how to handle":
+    → Assessment
+    → Option A [framework] with pros/cons
+    → Option B [framework] with pros/cons
+    → Recommendation
+
+  QUESTIONS — When user says "what should I ask", "generate questions", "what's missing":
+    → Gap Analysis
+    → Phase-Appropriate Questions
+    → Framework-Specific Questions
+    → Priority ranking
+
+Always be specific to this case. Reference parties by name. Quote transcript when relevant. Cite specific primitives.
+
 FRAMEWORKS MOST RELEVANT TO THIS CASE (apply these specifically):
 ${frameworkSnippet}${caseSection}`,
     },
