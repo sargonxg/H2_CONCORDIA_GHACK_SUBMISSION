@@ -125,6 +125,43 @@ export type GapNotification = {
   dismissed: boolean;
 };
 
+export type DiscoveryProgress = {
+  currentParty: string;         // "partyA" | "partyB"
+  currentRound: string;         // "narrative" | "emotion" | "interests"
+  partyARoundsComplete: string[];
+  partyBRoundsComplete: string[];
+};
+
+export type Agreement = {
+  id: string;
+  topic: string;
+  terms: string;
+  conditions: string[];
+  partyAAccepts: boolean;
+  partyBAccepts: boolean;
+  timestamp: string;
+};
+
+export type EscalationFlag = {
+  id: string;
+  trigger: string;
+  category: string;
+  severity: number;
+  affectedParty: string;
+  deEscalationTechnique: string;
+  timestamp: string;
+};
+
+export type SolutionProposal = {
+  id: string;
+  title: string;
+  description: string;
+  framework?: string;
+  addressesPartyANeeds: string[];
+  addressesPartyBNeeds: string[];
+  timestamp: string;
+};
+
 export type LiveMediationState = {
   phase: string;
   targetActor: string;
@@ -137,6 +174,7 @@ export type LiveMediationState = {
   };
   commonGround: string[];
   tensionPoints: string[];
+  discoveryProgress?: DiscoveryProgress;
 };
 
 export type PrimitiveCluster = {

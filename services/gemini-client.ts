@@ -75,6 +75,11 @@ export const getLiveSession = (
                 );
               }
             },
+            sendContext: (text: string) => {
+              if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: "context", text }));
+              }
+            },
             close: () => {
               intentionallyClosed = true;
               stopKeepAlive();

@@ -187,6 +187,16 @@ export function handleWebSocketConnection(ws: WebSocket) {
           }
           liveSession = null;
         }
+      } else if (msg.type === "context" && liveSession && !sessionClosing) {
+        // Mid-session context injection — send text without interrupting audio
+        try {
+          liveSession.sendClientContent({
+            turns: [{ role: "user", parts: [{ text: msg.text }] }],
+            turnComplete: true,
+          });
+        } catch (e) {
+          console.warn("[Live] Failed to inject context:", e);
+        }
       } else if (msg.type === "ping") {
         // Keep-alive ping from client — respond with pong
         if (ws.readyState === WebSocket.OPEN) {
