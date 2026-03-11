@@ -750,6 +750,7 @@ INSTRUCTIONS:
 5. ZOPA Analysis — Does a Zone of Possible Agreement exist? Describe each party's flexibility range and the overlap area (or explain what would need to change to create one).
 6. Framework Fit — Score each of the 6 CONCORDIA frameworks (Fisher & Ury, Lederach, Glasl, Zartman, Bush & Folger, Narrative) 0-100 for fit with this specific conflict. Explain why.
 7. Psychological Dynamics — Assess emotional readiness, power balance, communication patterns, and readiness-to-resolve.
+8. Momentum Assessment — Rate overall readiness to resolve (0-100). List specific blockers preventing resolution and catalysts that could accelerate it. Recommend the single most impactful next move.
 
 Transcript:
 ${transcript}
@@ -823,6 +824,15 @@ ${caseStructure}`,
             },
           },
           psychologicalDynamics: { type: Type.ARRAY, items: { type: Type.STRING } },
+          momentumAssessment: {
+            type: Type.OBJECT,
+            properties: {
+              readinessToResolve: { type: Type.NUMBER },
+              blockers: { type: Type.ARRAY, items: { type: Type.STRING } },
+              catalysts: { type: Type.ARRAY, items: { type: Type.STRING } },
+              recommendedNextMove: { type: Type.STRING },
+            },
+          },
         },
       },
     },
