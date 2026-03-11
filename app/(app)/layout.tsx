@@ -62,15 +62,20 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        <div className="p-4 border-t border-[var(--color-border)] text-xs text-[var(--color-text-muted)] font-mono">
-          <div className="flex justify-between items-center mb-2">
+        <div className="p-4 border-t border-[var(--color-border)] text-xs text-[var(--color-text-muted)] font-mono space-y-2">
+          <div className="flex justify-between items-center">
             <span>SYSTEM STATUS</span>
             <span className="flex items-center gap-1 text-emerald-500">
               <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
               ONLINE
             </span>
           </div>
-          <div>CONCORDIA Mediation Engine v2.0</div>
+          <div className="text-[10px] opacity-60 leading-relaxed">
+            CONCORDIA by TACITUS◳<br />
+            <a href="https://tacitus.me" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">tacitus.me</a>
+            {" · "}
+            <a href="mailto:hello@tacitus.me" className="hover:text-white transition-colors">hello@tacitus.me</a>
+          </div>
         </div>
       </aside>
 

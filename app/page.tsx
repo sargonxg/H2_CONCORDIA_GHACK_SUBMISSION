@@ -409,8 +409,8 @@ export default function LandingPage() {
             </div>
           </div>
           <div className="border-t border-[#0f172a] pt-8 flex flex-col md:flex-row items-center justify-between gap-4 text-[11px] text-[#334155] font-mono">
-            <span>© 2026 TACITUS Institute for Conflict Resolution. All rights reserved.</span>
-            <span>CONCORDIA Mediation Engine v2.0</span>
+            <span>CONCORDIA by TACITUS◳ — <a href="https://tacitus.me" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">tacitus.me</a> — <a href="mailto:hello@tacitus.me" className="hover:text-white transition-colors">hello@tacitus.me</a></span>
+            <span>© 2026 TACITUS Institute for Conflict Resolution</span>
           </div>
         </div>
       </footer>

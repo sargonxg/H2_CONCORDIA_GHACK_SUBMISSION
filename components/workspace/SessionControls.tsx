@@ -117,9 +117,15 @@ export default function SessionControls({
                   }
                   className="w-full bg-[var(--color-bg)] border border-[var(--color-border)] rounded text-sm p-1.5 focus:outline-none focus:border-[var(--color-accent)]"
                 >
-                  <option value="Zephyr">Zephyr (Calm)</option>
-                  <option value="Kore">Kore (Empathetic)</option>
-                  <option value="Puck">Puck (Direct)</option>
+                  <option value="Zephyr">Zephyr (Calm, Neutral)</option>
+                  <option value="Kore">Kore (Empathetic, Warm)</option>
+                  <option value="Puck">Puck (Direct, Clear)</option>
+                  <option value="Charon">Charon (Deep, Authoritative)</option>
+                  <option value="Fenrir">Fenrir (Steady, Measured)</option>
+                  <option value="Aoede">Aoede (Melodic, Reassuring)</option>
+                  <option value="Leda">Leda (Gentle, Patient)</option>
+                  <option value="Orus">Orus (Precise, Analytical)</option>
+                  <option value="Perseus">Perseus (Confident, Clear)</option>
                 </select>
               </div>
               <div>
