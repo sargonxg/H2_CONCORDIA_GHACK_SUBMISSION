@@ -250,6 +250,13 @@ export type FrameworkFit = {
   rationale: string;
 };
 
+export type MomentumAssessment = {
+  readinessToResolve: number;
+  blockers: string[];
+  catalysts: string[];
+  recommendedNextMove: string;
+};
+
 export type PathwaysResult = {
   commonGround: PathwayCommonGround[];
   criticalQuestions: PathwayCriticalQuestion[];
@@ -258,6 +265,7 @@ export type PathwaysResult = {
   frameworkFit: FrameworkFit[];
   psychologicalDynamics: string[];
   executiveSummary: string;
+  momentumAssessment: MomentumAssessment;
 };
 
 // ── Case Summary Type ──

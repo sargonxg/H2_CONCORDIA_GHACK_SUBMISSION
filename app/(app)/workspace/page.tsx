@@ -47,6 +47,7 @@ import {
 } from "@/services/gemini-client";
 import type { Actor, Primitive, PrimitiveType, Case, LiveMediationState, OntologyStats, PartyProfile, GapNotification, CaseSummary, TimelineEntry, PrimitiveCluster, Agreement, EscalationFlag, SolutionProposal } from "@/lib/types";
 import { safeJsonParse } from "@/lib/utils";
+import { exportAsMarkdown, exportAsJSON, downloadFile } from "@/lib/export";
 import { useConflictGraph } from "@/hooks/useConflictGraph";
 import ConflictGraph from "@/components/workspace/ConflictGraph";
 import OntologyHealthCheck from "@/components/workspace/OntologyHealthCheck";
@@ -239,6 +240,25 @@ function PartyCard({
   );
 }
 
+function safeLocalStorageSet(key: string, value: any) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (e) {
+    console.warn("localStorage write failed:", e);
+    // If quota exceeded, prune oldest cases
+    if (e instanceof DOMException && e.name === "QuotaExceededError") {
+      const raw = localStorage.getItem("concordia_cases");
+      const cases = raw ? JSON.parse(raw) : [];
+      if (Array.isArray(cases) && cases.length > 5) {
+        localStorage.setItem(
+          "concordia_cases",
+          JSON.stringify(cases.slice(0, 5)),
+        );
+      }
+    }
+  }
+}
+
 export default function Workspace() {
   const [cases, setCases] = useState<Case[]>([]);
   const [activeCaseId, setActiveCaseId] = useState<string | null>(null);
@@ -305,6 +325,8 @@ export default function Workspace() {
   const lastAutoExtractLengthRef = useRef<number>(0);
   const sessionDurationIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const autoSaveIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const extractionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastExtractedPosRef = useRef(0);
 
   // Styled transcript panel
   const transcriptEndRef = useRef<HTMLDivElement>(null);
@@ -324,7 +346,7 @@ export default function Workspace() {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem("concordia_cases", JSON.stringify(cases));
+    safeLocalStorageSet("concordia_cases", cases);
   }, [cases]);
 
   const createNewCase = () => {
@@ -429,10 +451,8 @@ export default function Workspace() {
             setStatus("LIVE");
             setIsRecording(true);
             startAudioCapture();
-            // Start continuous extraction every 3 minutes
-            autoExtractionIntervalRef.current = setInterval(() => {
-              autoExtractFromTranscript();
-            }, 3 * 60 * 1000);
+            // Extraction is debounced — triggered by turn completion (see shouldFlush block)
+            lastExtractedPosRef.current = 0;
             // Session duration timer with milestone toasts
             sessionDurationIntervalRef.current = setInterval(() => {
               setSessionDuration((prev) => {
@@ -445,7 +465,7 @@ export default function Workspace() {
             }, 1000);
             // Auto-save every 30s
             autoSaveIntervalRef.current = setInterval(() => {
-              localStorage.setItem("concordia_cases", JSON.stringify(casesRef.current));
+              safeLocalStorageSet("concordia_cases", casesRef.current);
             }, 30000);
           },
           onmessage: async (message: any) => {
@@ -516,6 +536,11 @@ export default function Workspace() {
                 );
                 userTranscriptBuffer.current = "";
               }
+              // Debounce extraction — 12s after last turn
+              if (extractionTimerRef.current) clearTimeout(extractionTimerRef.current);
+              extractionTimerRef.current = setTimeout(() => {
+                autoExtractIncremental();
+              }, 12000);
             }
 
             if (message.toolCall) {
@@ -650,6 +675,10 @@ export default function Workspace() {
               clearInterval(autoExtractionIntervalRef.current);
               autoExtractionIntervalRef.current = null;
             }
+            if (extractionTimerRef.current) {
+              clearTimeout(extractionTimerRef.current);
+              extractionTimerRef.current = null;
+            }
             if (sessionDurationIntervalRef.current) {
               clearInterval(sessionDurationIntervalRef.current);
               sessionDurationIntervalRef.current = null;
@@ -701,6 +730,10 @@ export default function Workspace() {
     if (autoExtractionIntervalRef.current) {
       clearInterval(autoExtractionIntervalRef.current);
       autoExtractionIntervalRef.current = null;
+    }
+    if (extractionTimerRef.current) {
+      clearTimeout(extractionTimerRef.current);
+      extractionTimerRef.current = null;
     }
     if (sessionDurationIntervalRef.current) {
       clearInterval(sessionDurationIntervalRef.current);
@@ -1413,6 +1446,94 @@ export default function Workspace() {
     }
   };
 
+  function wordOverlap(a: string, b: string): number {
+    const setA = new Set(a.toLowerCase().split(/\s+/).filter((w) => w.length > 3));
+    const setB = new Set(b.toLowerCase().split(/\s+/).filter((w) => w.length > 3));
+    if (setA.size === 0 && setB.size === 0) return 1;
+    const intersection = [...setA].filter((w) => setB.has(w)).length;
+    const union = new Set([...setA, ...setB]).size;
+    return union > 0 ? intersection / union : 0;
+  }
+
+  function mergeExtractedData(result: any) {
+    setCases((prev) =>
+      prev.map((c) => {
+        if (c.id !== activeCaseIdRef.current) return c;
+        const actors = [...c.actors];
+        const primitives = [...c.primitives];
+
+        result.actors?.forEach((a: any) => {
+          if (!a?.name) return;
+          const exists = actors.some(
+            (e) => e.name.toLowerCase() === a.name.toLowerCase(),
+          );
+          if (!exists)
+            actors.push({
+              id:
+                (typeof crypto.randomUUID === "function"
+                  ? crypto.randomUUID()
+                  : null) ??
+                Date.now().toString() + Math.random(),
+              name: a.name,
+              role: a.role || "Unknown",
+            });
+        });
+
+        result.primitives?.forEach((p: any) => {
+          const desc = p?.description ?? "";
+          if (!desc) return;
+          const isDup = primitives.some(
+            (e) => wordOverlap(e.description || "", desc) > 0.6,
+          );
+          if (!isDup) {
+            const actor = actors.find(
+              (a) =>
+                a.name.toLowerCase() ===
+                (p.actorName ?? p.actor)?.toLowerCase(),
+            );
+            primitives.push({
+              id:
+                (typeof crypto.randomUUID === "function"
+                  ? crypto.randomUUID()
+                  : null) ??
+                Date.now().toString() + Math.random(),
+              type: PRIMITIVE_TYPES.includes(p.primitiveType ?? p.type)
+                ? (p.primitiveType ?? p.type)
+                : "Claim",
+              actorId: actor?.id || actors[0]?.id || "unknown",
+              description: desc,
+            });
+          }
+        });
+
+        return { ...c, actors, primitives };
+      }),
+    );
+  }
+
+  const autoExtractIncremental = async () => {
+    const currentCase = casesRef.current.find(
+      (c) => c.id === activeCaseIdRef.current,
+    );
+    if (!currentCase?.transcript) return;
+
+    const newText = currentCase.transcript.slice(lastExtractedPosRef.current);
+    if (newText.length < 150) return; // Need enough context
+
+    lastExtractedPosRef.current = currentCase.transcript.length;
+    setExtractionNotice(true);
+
+    try {
+      const resultStr = await extractPrimitives(newText);
+      const result = safeJsonParse(resultStr, { actors: [], primitives: [] });
+      mergeExtractedData(result);
+      setTimeout(() => setExtractionNotice(false), 3000);
+    } catch (err) {
+      console.error("Incremental extraction error:", err);
+      setExtractionNotice(false);
+    }
+  };
+
   // Continuous background extraction during live sessions — duplicate-aware merge
   const autoExtractFromTranscript = async () => {
     if (!activeCaseIdRef.current) return;
@@ -1561,42 +1682,29 @@ export default function Workspace() {
 
   const exportCaseJSON = () => {
     if (!activeCase) return;
-    const blob = new Blob([JSON.stringify(activeCase, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `concordia-case-${Date.now()}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadFile(
+      exportAsJSON(activeCase, pathways, summaryData),
+      `concordia-case-${Date.now()}.json`,
+      "application/json",
+    );
   };
 
   const exportMarkdownReport = () => {
     if (!activeCase) return;
-    const lines = [
-      `# CONCORDIA Case Report`,
-      `**Case:** ${activeCase.title}`,
-      `**Generated:** ${new Date().toLocaleString()}`,
-      ``,
-      `## Parties`,
-      `- ${activeCase.partyAName}`,
-      `- ${activeCase.partyBName}`,
-      ``,
-      `## Primitives (${activeCase.primitives.length})`,
-      ...activeCase.primitives.map((p) => {
-        const actor = activeCase.actors.find((a) => a.id === p.actorId);
-        return `- **[${p.type}]** ${p.description} *(${actor?.name || "Unknown"})*`;
-      }),
-      ``,
-      `## Transcript`,
-      activeCase.transcript || "_No transcript_",
-    ];
-    const blob = new Blob([lines.join("\n")], { type: "text/markdown" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `concordia-report-${Date.now()}.md`;
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadFile(
+      exportAsMarkdown(activeCase, pathways ?? undefined, summaryData ?? undefined),
+      `concordia-report-${Date.now()}.md`,
+      "text/markdown",
+    );
+  };
+
+  const exportTranscript = () => {
+    if (!activeCase?.transcript) return;
+    downloadFile(
+      activeCase.transcript,
+      `concordia-transcript-${Date.now()}.txt`,
+      "text/plain",
+    );
   };
 
   const handleAnalyzeWithFramework = async (fw?: string) => {
@@ -1651,43 +1759,12 @@ export default function Workspace() {
   };
 
   const exportSummaryAsMarkdown = () => {
-    if (!summaryData) return;
-    const lines: string[] = [
-      `# CONCORDIA Case Summary`,
-      `**Case:** ${activeCase?.title || "Untitled"}`,
-      `**Generated:** ${new Date().toLocaleString()}`,
-      ``,
-      `## Session Overview`,
-      summaryData.sessionOverview,
-      ``,
-      `## Key Claims`,
-      `### ${activeCase?.partyAName || "Party A"}`,
-      ...summaryData.keyClaimsPartyA.map((c) => `- ${c}`),
-      `### ${activeCase?.partyBName || "Party B"}`,
-      ...summaryData.keyClaimsPartyB.map((c) => `- ${c}`),
-      ``,
-      `## Core Interests`,
-      `### ${activeCase?.partyAName || "Party A"}`,
-      ...summaryData.coreInterestsPartyA.map((c) => `- ${c}`),
-      `### ${activeCase?.partyBName || "Party B"}`,
-      ...summaryData.coreInterestsPartyB.map((c) => `- ${c}`),
-      ``,
-      `## Areas of Agreement`,
-      ...summaryData.areasOfAgreement.map((c) => `- ${c}`),
-      ``,
-      `## Unresolved Tensions`,
-      ...summaryData.unresolvedTensions.map((c) => `- ${c}`),
-      ``,
-      `## Recommended Next Steps`,
-      ...summaryData.recommendedNextSteps.map((c, i) => `${i + 1}. ${c}`),
-    ];
-    const blob = new Blob([lines.join("\n")], { type: "text/markdown" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `concordia-summary-${Date.now()}.md`;
-    a.click();
-    URL.revokeObjectURL(url);
+    if (!summaryData || !activeCase) return;
+    downloadFile(
+      exportAsMarkdown(activeCase, pathways ?? undefined, summaryData),
+      `concordia-summary-${Date.now()}.md`,
+      "text/markdown",
+    );
   };
 
   const addActor = () => {
@@ -1969,8 +2046,9 @@ export default function Workspace() {
             {showExport && (
               <div className="absolute top-full right-0 mt-1 w-52 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl shadow-xl z-50 overflow-hidden">
                 {[
+                  { label: "Export Markdown", action: exportMarkdownReport },
                   { label: "Export JSON", action: exportCaseJSON },
-                  { label: "Export Markdown Report", action: exportMarkdownReport },
+                  { label: "Export Transcript", action: exportTranscript },
                   { label: "Copy Transcript", action: () => navigator.clipboard.writeText(activeCase?.transcript || "") },
                   { label: "Copy Summary", action: () => summaryData && navigator.clipboard.writeText(summaryData.sessionOverview) },
                 ].map(({ label, action }) => (
@@ -2994,6 +3072,65 @@ export default function Workspace() {
                               <Activity className="w-4 h-4 text-violet-400 mt-0.5 shrink-0" />{item}
                             </div>
                           ))}
+                        </div>
+                      </motion.div>
+                    )}
+
+                    {/* Momentum Assessment */}
+                    {pathways.momentumAssessment && (
+                      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }}>
+                        <h3 className="text-sm font-bold text-emerald-400 mb-3 flex items-center gap-2 uppercase tracking-wider">
+                          <TrendingUp className="w-4 h-4" /> Momentum Assessment
+                        </h3>
+                        <div className="space-y-3">
+                          {/* Readiness bar */}
+                          <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-4">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-xs text-[var(--color-text-muted)] uppercase tracking-wider">Readiness to Resolve</span>
+                              <span className="text-lg font-bold text-emerald-400 font-mono">{pathways.momentumAssessment.readinessToResolve}/100</span>
+                            </div>
+                            <div className="h-2 bg-[var(--color-bg)] rounded-full overflow-hidden">
+                              <motion.div
+                                initial={{ width: 0 }}
+                                animate={{ width: `${pathways.momentumAssessment.readinessToResolve}%` }}
+                                transition={{ duration: 0.8, ease: "easeOut" }}
+                                className="h-full rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400"
+                              />
+                            </div>
+                            {pathways.momentumAssessment.recommendedNextMove && (
+                              <p className="text-xs text-emerald-300 mt-3 font-medium">
+                                <span className="text-[var(--color-text-muted)]">Recommended next move: </span>
+                                {pathways.momentumAssessment.recommendedNextMove}
+                              </p>
+                            )}
+                          </div>
+                          {/* Blockers & Catalysts */}
+                          <div className="grid grid-cols-2 gap-3">
+                            {pathways.momentumAssessment.blockers?.length > 0 && (
+                              <div className="bg-red-500/5 border border-red-500/20 rounded-lg p-3">
+                                <h4 className="text-[10px] font-bold text-red-400 uppercase tracking-wider mb-2">Blockers</h4>
+                                <ul className="space-y-1">
+                                  {pathways.momentumAssessment.blockers.map((b: string, i: number) => (
+                                    <li key={i} className="text-xs text-red-200 flex items-start gap-1.5">
+                                      <span className="text-red-500 mt-0.5 shrink-0">▪</span>{b}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                            {pathways.momentumAssessment.catalysts?.length > 0 && (
+                              <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-3">
+                                <h4 className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider mb-2">Catalysts</h4>
+                                <ul className="space-y-1">
+                                  {pathways.momentumAssessment.catalysts.map((c: string, i: number) => (
+                                    <li key={i} className="text-xs text-emerald-200 flex items-start gap-1.5">
+                                      <span className="text-emerald-500 mt-0.5 shrink-0">▪</span>{c}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </motion.div>
                     )}
