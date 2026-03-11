@@ -34,27 +34,33 @@ export function useConflictGraph(
     const edges: GraphEdge[] = [];
     const nodeIds = new Set<string>();
 
+    // Drop any malformed primitives that lack required fields
+    const safePrimitives = primitives.filter(
+      (p) => p && p.id && p.type && p.actorId,
+    );
+
     // Add actor nodes
     for (const actor of actors) {
       if (!nodeIds.has(actor.id)) {
         nodes.push({
           id: actor.id,
           type: "Actor",
-          label: actor.name,
-          description: actor.role,
+          label: actor.name ?? "Unknown",
+          description: actor.role ?? "",
         });
         nodeIds.add(actor.id);
       }
     }
 
     // Add primitive nodes + actor→primitive edges
-    for (const prim of primitives) {
+    for (const prim of safePrimitives) {
+      const desc = prim.description ?? "";
       if (!nodeIds.has(prim.id)) {
         nodes.push({
           id: prim.id,
           type: prim.type,
-          label: prim.description.slice(0, 30),
-          description: prim.description,
+          label: (desc || prim.type).slice(0, 30),
+          description: desc,
           actorId: prim.actorId,
         });
         nodeIds.add(prim.id);
@@ -70,7 +76,7 @@ export function useConflictGraph(
     // Infer cross-primitive edges
 
     // Claims from different actors → OPPOSES
-    const claims = primitives.filter((p) => p.type === "Claim");
+    const claims = safePrimitives.filter((p) => p.type === "Claim");
     for (let i = 0; i < claims.length; i++) {
       for (let j = i + 1; j < claims.length; j++) {
         if (claims[i].actorId !== claims[j].actorId) {
@@ -84,13 +90,13 @@ export function useConflictGraph(
     }
 
     // Interests from different actors → ALIGNS_WITH (same actor = natural grouping; different actor = compare)
-    const interests = primitives.filter((p) => p.type === "Interest");
+    const interests = safePrimitives.filter((p) => p.type === "Interest");
     for (let i = 0; i < interests.length; i++) {
       for (let j = i + 1; j < interests.length; j++) {
         if (interests[i].actorId !== interests[j].actorId) {
           // Use common-ground data from live session to decide alignment vs. conflict
-          const iDesc = interests[i].description.toLowerCase();
-          const jDesc = interests[j].description.toLowerCase();
+          const iDesc = (interests[i].description ?? "").toLowerCase();
+          const jDesc = (interests[j].description ?? "").toLowerCase();
           const commonGroundWords = (liveMediationState?.commonGround ?? [])
             .join(" ")
             .toLowerCase();
@@ -109,7 +115,7 @@ export function useConflictGraph(
     }
 
     // Constraints → block interests of same actor (Constraint BLOCKS Interest)
-    const constraints = primitives.filter((p) => p.type === "Constraint");
+    const constraints = safePrimitives.filter((p) => p.type === "Constraint");
     for (const constraint of constraints) {
       const actorInterests = interests.filter(
         (i) => i.actorId !== constraint.actorId,
@@ -125,7 +131,7 @@ export function useConflictGraph(
     }
 
     // Leverage → supports claims of same actor
-    const leverages = primitives.filter((p) => p.type === "Leverage");
+    const leverages = safePrimitives.filter((p) => p.type === "Leverage");
     for (const leverage of leverages) {
       const actorClaims = claims.filter(
         (c) => c.actorId === leverage.actorId,
@@ -140,7 +146,7 @@ export function useConflictGraph(
     }
 
     // Commitments → address interests of opposite actor
-    const commitments = primitives.filter((p) => p.type === "Commitment");
+    const commitments = safePrimitives.filter((p) => p.type === "Commitment");
     for (const commitment of commitments) {
       const oppositeInterests = interests.filter(
         (i) => i.actorId !== commitment.actorId,
@@ -155,7 +161,7 @@ export function useConflictGraph(
     }
 
     // Narratives → frame claims of same actor
-    const narratives = primitives.filter((p) => p.type === "Narrative");
+    const narratives = safePrimitives.filter((p) => p.type === "Narrative");
     for (const narrative of narratives) {
       const actorClaims = claims.filter(
         (c) => c.actorId === narrative.actorId,
@@ -183,7 +189,7 @@ export function useConflictGraph(
     }
 
     // Events → trigger claims (first claim of opposite/any actor)
-    const events = primitives.filter((p) => p.type === "Event");
+    const events = safePrimitives.filter((p) => p.type === "Event");
     for (const event of events) {
       if (claims.length > 0) {
         edges.push({
@@ -210,7 +216,7 @@ export function useConflictGraph(
         acc[t] =
           t === "Actor"
             ? actors.length
-            : primitives.filter((p) => p.type === t).length;
+            : safePrimitives.filter((p) => p.type === t).length;
         return acc;
       },
       {} as OntologyStats,
