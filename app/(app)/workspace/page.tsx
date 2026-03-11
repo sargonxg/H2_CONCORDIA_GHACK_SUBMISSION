@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Mic,
@@ -30,6 +30,13 @@ import {
   MessageCircle,
   X,
   BookOpen,
+  Clock,
+  Download,
+  Star,
+  History,
+  Filter,
+  GitMerge,
+  Timer,
 } from "lucide-react";
 import {
   getLiveSession,
@@ -38,7 +45,7 @@ import {
   analyzePathways,
   summarizeCase,
 } from "@/services/gemini-client";
-import type { Actor, Primitive, PrimitiveType, Case, LiveMediationState, OntologyStats, PartyProfile, GapNotification, CaseSummary } from "@/lib/types";
+import type { Actor, Primitive, PrimitiveType, Case, LiveMediationState, OntologyStats, PartyProfile, GapNotification, CaseSummary, TimelineEntry, PrimitiveCluster } from "@/lib/types";
 import { useConflictGraph } from "@/hooks/useConflictGraph";
 import ConflictGraph from "@/components/workspace/ConflictGraph";
 import OntologyHealthCheck from "@/components/workspace/OntologyHealthCheck";
@@ -246,13 +253,19 @@ export default function Workspace() {
   });
   const [showSettings, setShowSettings] = useState(false);
   const [activeTab, setActiveTab] = useState<
-    "transcript" | "structure" | "pathways" | "graph"
+    "transcript" | "structure" | "pathways" | "graph" | "timeline"
   >("transcript");
   const [selectedFramework, setSelectedFramework] = useState("");
   const [expandedPathways, setExpandedPathways] = useState<Set<number>>(new Set([0]));
   const [showSummary, setShowSummary] = useState(false);
   const [summaryData, setSummaryData] = useState<CaseSummary | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
+  const [sessionDuration, setSessionDuration] = useState(0);
+  const [showExport, setShowExport] = useState(false);
+  const [timelineFilter, setTimelineFilter] = useState<string>("all");
+  const [reconnectCount, setReconnectCount] = useState(0);
+  const [sessionToast, setSessionToast] = useState<string | null>(null);
+  const [highlightActorId, setHighlightActorId] = useState<string | null>(null);
 
   const [liveMediationState, setLiveMediationState] = useState<LiveMediationState | null>(null);
   const [gapNotifications, setGapNotifications] = useState<GapNotification[]>([]);
@@ -285,6 +298,8 @@ export default function Workspace() {
   // Continuous extraction during live sessions
   const autoExtractionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastAutoExtractLengthRef = useRef<number>(0);
+  const sessionDurationIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const autoSaveIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Styled transcript panel
   const transcriptEndRef = useRef<HTMLDivElement>(null);
@@ -336,6 +351,39 @@ export default function Workspace() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeCase?.transcript, autoScrollEnabled, status, isRecording]);
 
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (e.ctrlKey && e.key === "Enter") {
+        if (!isRecording && activeCase?.transcript) handleSimulateExtraction();
+      }
+      if (e.key === "Escape") {
+        setShowSummary(false);
+        setShowExport(false);
+        setShowSettings(false);
+      }
+      if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+        if (e.key === "1") setActiveTab("transcript");
+        if (e.key === "2") setActiveTab("structure");
+        if (e.key === "3") setActiveTab("pathways");
+        if (e.key === "4") setActiveTab("graph");
+        if (e.key === "5") setActiveTab("timeline");
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRecording, activeCase?.transcript]);
+
+  // Dismiss session toast after 5s
+  useEffect(() => {
+    if (!sessionToast) return;
+    const t = setTimeout(() => setSessionToast(null), 5000);
+    return () => clearTimeout(t);
+  }, [sessionToast]);
+
   const updateActiveCase = (updates: Partial<Case>) => {
     setCases((prev) =>
       prev.map((c) =>
@@ -371,6 +419,7 @@ export default function Workspace() {
             lastAutoExtractLengthRef.current = 0;
             aiTranscriptBuffer.current = "";
             userTranscriptBuffer.current = "";
+            setSessionDuration(0);
             setStatus("LIVE");
             setIsRecording(true);
             startAudioCapture();
@@ -378,6 +427,20 @@ export default function Workspace() {
             autoExtractionIntervalRef.current = setInterval(() => {
               autoExtractFromTranscript();
             }, 3 * 60 * 1000);
+            // Session duration timer with milestone toasts
+            sessionDurationIntervalRef.current = setInterval(() => {
+              setSessionDuration((prev) => {
+                const next = prev + 1;
+                if (next === 180) setSessionToast("3-minute mark — consider a brief reflection pause");
+                if (next === 600) setSessionToast("10 minutes — consider a phase transition check-in");
+                if (next === 900) setSessionToast("15 minutes — check in on energy and focus levels");
+                return next;
+              });
+            }, 1000);
+            // Auto-save every 30s
+            autoSaveIntervalRef.current = setInterval(() => {
+              localStorage.setItem("concordia_cases", JSON.stringify(casesRef.current));
+            }, 30000);
           },
           onmessage: async (message: any) => {
             if (sessionClosingRef.current) return;
@@ -525,6 +588,14 @@ export default function Workspace() {
               clearInterval(autoExtractionIntervalRef.current);
               autoExtractionIntervalRef.current = null;
             }
+            if (sessionDurationIntervalRef.current) {
+              clearInterval(sessionDurationIntervalRef.current);
+              sessionDurationIntervalRef.current = null;
+            }
+            if (autoSaveIntervalRef.current) {
+              clearInterval(autoSaveIntervalRef.current);
+              autoSaveIntervalRef.current = null;
+            }
             setStatus("DISCONNECTED");
             setIsRecording(false);
             stopAudioCapture();
@@ -536,6 +607,7 @@ export default function Workspace() {
           onreconnecting: () => {
             // Server or client is auto-reconnecting — keep UI alive, keep audio capture running
             setStatus("RECONNECTING");
+            setReconnectCount((prev) => prev + 1);
           },
           onreconnected: () => {
             // Session was successfully restored after a disconnect
@@ -567,6 +639,14 @@ export default function Workspace() {
     if (autoExtractionIntervalRef.current) {
       clearInterval(autoExtractionIntervalRef.current);
       autoExtractionIntervalRef.current = null;
+    }
+    if (sessionDurationIntervalRef.current) {
+      clearInterval(sessionDurationIntervalRef.current);
+      sessionDurationIntervalRef.current = null;
+    }
+    if (autoSaveIntervalRef.current) {
+      clearInterval(autoSaveIntervalRef.current);
+      autoSaveIntervalRef.current = null;
     }
     stopAudioCapture();
     if (sessionRef.current) {
@@ -1302,6 +1382,118 @@ export default function Workspace() {
     }
   };
 
+  const addTimelineEntry = useCallback((entry: Omit<TimelineEntry, "id" | "timestamp" | "elapsedSeconds" | "phase">) => {
+    const elapsed = sessionStartTimeRef.current
+      ? Math.floor((Date.now() - sessionStartTimeRef.current) / 1000)
+      : 0;
+    const newEntry: TimelineEntry = {
+      id: Date.now().toString() + Math.random(),
+      timestamp: new Date().toISOString(),
+      elapsedSeconds: elapsed,
+      phase: liveMediationState?.phase || "Opening",
+      ...entry,
+    };
+    setCases((prev) =>
+      prev.map((c) =>
+        c.id === activeCaseIdRef.current
+          ? { ...c, timeline: [...(c.timeline || []), newEntry] }
+          : c,
+      ),
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveMediationState?.phase]);
+
+  const wordOverlap = (a: string, b: string): number => {
+    const wordsA = new Set(a.toLowerCase().split(/\s+/).filter((w) => w.length > 3));
+    const wordsB = new Set(b.toLowerCase().split(/\s+/).filter((w) => w.length > 3));
+    let common = 0;
+    wordsA.forEach((w) => { if (wordsB.has(w)) common++; });
+    return wordsA.size + wordsB.size > 0 ? (2 * common) / (wordsA.size + wordsB.size) : 0;
+  };
+
+  const autoGroupPrimitives = () => {
+    if (!activeCase) return;
+    const clusters: PrimitiveCluster[] = [];
+    activeCase.actors.forEach((actor) => {
+      const actorPrims = activeCase.primitives.filter((p) => p.actorId === actor.id);
+      if (actorPrims.length === 0) return;
+      // Group by first significant word in description
+      const groups: Record<string, string[]> = {};
+      actorPrims.forEach((p) => {
+        const key = p.description.toLowerCase().split(/\s+/).find((w) => w.length > 4) || "general";
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(p.id);
+      });
+      Object.entries(groups).forEach(([keyword, ids]) => {
+        if (ids.length >= 2) {
+          clusters.push({
+            id: Date.now().toString() + Math.random(),
+            label: `${actor.name} — ${keyword}`,
+            description: `Auto-grouped by keyword "${keyword}"`,
+            primitiveIds: ids,
+            phase: liveMediationState?.phase || "Discovery",
+            createdAt: new Date().toISOString(),
+          });
+        }
+      });
+    });
+    updateActiveCase({ clusters });
+  };
+
+  const findMergeDuplicates = (): Array<[string, string]> => {
+    if (!activeCase) return [];
+    const pairs: Array<[string, string]> = [];
+    const prims = activeCase.primitives;
+    for (let i = 0; i < prims.length; i++) {
+      for (let j = i + 1; j < prims.length; j++) {
+        if (prims[i].type === prims[j].type && wordOverlap(prims[i].description, prims[j].description) > 0.6) {
+          pairs.push([prims[i].id, prims[j].id]);
+        }
+      }
+    }
+    return pairs;
+  };
+
+  const exportCaseJSON = () => {
+    if (!activeCase) return;
+    const blob = new Blob([JSON.stringify(activeCase, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `concordia-case-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportMarkdownReport = () => {
+    if (!activeCase) return;
+    const lines = [
+      `# CONCORDIA Case Report`,
+      `**Case:** ${activeCase.title}`,
+      `**Generated:** ${new Date().toLocaleString()}`,
+      ``,
+      `## Parties`,
+      `- ${activeCase.partyAName}`,
+      `- ${activeCase.partyBName}`,
+      ``,
+      `## Primitives (${activeCase.primitives.length})`,
+      ...activeCase.primitives.map((p) => {
+        const actor = activeCase.actors.find((a) => a.id === p.actorId);
+        return `- **[${p.type}]** ${p.description} *(${actor?.name || "Unknown"})*`;
+      }),
+      ``,
+      `## Transcript`,
+      activeCase.transcript || "_No transcript_",
+    ];
+    const blob = new Blob([lines.join("\n")], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `concordia-report-${Date.now()}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const handleAnalyzeWithFramework = async (fw?: string) => {
     if (!activeCase?.transcript) return;
     const frameworkToUse = fw ?? selectedFramework;
@@ -1654,6 +1846,34 @@ export default function Workspace() {
             )}
           </div>
 
+          {/* Export dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => setShowExport(!showExport)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:text-white hover:border-[var(--color-accent)] transition-colors"
+              title="Export"
+            >
+              <Download className="w-4 h-4" />
+              Export
+            </button>
+            {showExport && (
+              <div className="absolute top-full right-0 mt-1 w-52 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl shadow-xl z-50 overflow-hidden">
+                {[
+                  { label: "Export JSON", action: exportCaseJSON },
+                  { label: "Export Markdown Report", action: exportMarkdownReport },
+                  { label: "Copy Transcript", action: () => navigator.clipboard.writeText(activeCase?.transcript || "") },
+                  { label: "Copy Summary", action: () => summaryData && navigator.clipboard.writeText(summaryData.sessionOverview) },
+                ].map(({ label, action }) => (
+                  <button
+                    key={label}
+                    onClick={() => { action(); setShowExport(false); }}
+                    className="w-full text-left px-4 py-2.5 text-sm text-[var(--color-text-muted)] hover:text-white hover:bg-[var(--color-surface-hover)] transition-colors"
+                  >{label}</button>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div className="flex items-center gap-2 text-sm font-mono bg-[var(--color-bg)] px-3 py-1.5 rounded-md border border-[var(--color-border)]">
             <span
               className={`w-2 h-2 rounded-full ${
@@ -1669,6 +1889,12 @@ export default function Workspace() {
               }`}
             ></span>
             {status}
+            {(isRecording || status === "LIVE") && sessionDuration > 0 && (
+              <span className="text-[var(--color-text-muted)] ml-1 text-xs">
+                <Timer className="w-3 h-3 inline mr-0.5" />
+                {String(Math.floor(sessionDuration / 60)).padStart(2, "0")}:{String(sessionDuration % 60).padStart(2, "0")}
+              </span>
+            )}
           </div>
 
           {isRecording ? (
@@ -1848,6 +2074,35 @@ export default function Workspace() {
         )}
       </AnimatePresence>
 
+      {/* ─── SESSION TOAST ─── */}
+      <AnimatePresence>
+        {sessionToast && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            className="mx-6 mt-2 shrink-0 flex items-center gap-2 px-4 py-2 bg-indigo-500/10 border border-indigo-500/30 rounded-lg text-sm text-indigo-200"
+          >
+            <Clock className="w-4 h-4 shrink-0" />
+            {sessionToast}
+            <button onClick={() => setSessionToast(null)} className="ml-auto text-indigo-400 hover:text-white">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ─── RECONNECTION OVERLAY ─── */}
+      {status === "RECONNECTING" && (
+        <div className="mx-6 mt-2 shrink-0 flex items-center gap-3 px-4 py-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+          <Activity className="w-4 h-4 text-yellow-400 animate-spin shrink-0" />
+          <div className="flex-1">
+            <p className="text-sm text-yellow-200 font-medium">Reconnecting session…</p>
+            {reconnectCount > 0 && <p className="text-xs text-yellow-400/70">Attempt {reconnectCount}</p>}
+          </div>
+        </div>
+      )}
+
       {/* ─── MAIN CONTENT AREA ─── */}
       <div className="flex-1 flex overflow-hidden p-4 gap-4">
         {/* ─── LEFT: Party Profiles ─── */}
@@ -1989,29 +2244,14 @@ export default function Workspace() {
 
         {/* ─── CENTER: Tabbed Content ─── */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="flex gap-1 mb-3 shrink-0">
+          <div className="flex gap-1 mb-3 shrink-0 flex-wrap">
             {(
               [
-                {
-                  id: "transcript" as const,
-                  label: "Live Transcript",
-                  icon: FileText,
-                },
-                {
-                  id: "structure" as const,
-                  label: "Case Structure",
-                  icon: Database,
-                },
-                {
-                  id: "pathways" as const,
-                  label: "Resolution Pathways",
-                  icon: Lightbulb,
-                },
-                {
-                  id: "graph" as const,
-                  label: "Knowledge Graph",
-                  icon: Network,
-                },
+                { id: "transcript" as const, label: "Live Transcript", icon: FileText },
+                { id: "structure" as const, label: `Case Structure${activeCase?.primitives.length ? ` (${activeCase.primitives.length})` : ""}`, icon: Database },
+                { id: "pathways" as const, label: "Resolution Pathways", icon: Lightbulb },
+                { id: "graph" as const, label: "Knowledge Graph", icon: Network },
+                { id: "timeline" as const, label: "Timeline", icon: History },
               ] as const
             ).map((tab) => {
               const Icon = tab.icon;
@@ -2144,6 +2384,30 @@ export default function Workspace() {
                     {healthScore}%
                   </div>
                 </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={autoGroupPrimitives}
+                    disabled={!activeCase || activeCase.primitives.length < 2}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-[var(--color-bg)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:text-white hover:border-[var(--color-accent)] transition-colors disabled:opacity-40"
+                    title="Auto-group primitives by topic"
+                  >
+                    <GitMerge className="w-3.5 h-3.5" /> Auto-Group
+                  </button>
+                  <button
+                    onClick={() => {
+                      const pairs = findMergeDuplicates();
+                      if (pairs.length === 0) return;
+                      // Remove the second duplicate in each pair
+                      const toRemove = new Set(pairs.map(([, b]) => b));
+                      updateActiveCase({ primitives: activeCase!.primitives.filter((p) => !toRemove.has(p.id)) });
+                    }}
+                    disabled={!activeCase || activeCase.primitives.length < 2}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-[var(--color-bg)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:text-white hover:border-amber-500 transition-colors disabled:opacity-40"
+                    title="Merge near-duplicate primitives"
+                  >
+                    <Filter className="w-3.5 h-3.5" /> Merge Dupes
+                  </button>
+                </div>
               </div>
 
               <div className="flex-1 overflow-y-auto pr-2 space-y-4">
@@ -2186,10 +2450,11 @@ export default function Workspace() {
                     <div className="space-y-2 pl-4 border-l-2 border-[var(--color-surface-hover)]">
                       {activeCase.primitives
                         .filter((p) => p.actorId === actor.id)
+                        .sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0))
                         .map((prim) => (
                           <div
                             key={prim.id}
-                            className="flex items-start gap-2 group"
+                            className={`flex items-start gap-2 group rounded-lg px-2 py-1 transition-colors ${prim.resolved ? "opacity-50" : ""} ${prim.pinned ? "bg-amber-500/5 border border-amber-500/20" : ""}`}
                           >
                             <select
                               value={prim.type}
@@ -2213,9 +2478,23 @@ export default function Workspace() {
                                   description: e.target.value,
                                 })
                               }
-                              className="bg-transparent text-sm flex-1 focus:outline-none border-b border-transparent focus:border-[var(--color-accent)] px-1 text-white"
+                              className={`bg-transparent text-sm flex-1 focus:outline-none border-b border-transparent focus:border-[var(--color-accent)] px-1 ${prim.resolved ? "line-through text-[var(--color-text-muted)]" : "text-white"}`}
                               placeholder="Description..."
                             />
+                            <button
+                              onClick={() => updatePrimitive(prim.id, { pinned: !prim.pinned })}
+                              className={`opacity-0 group-hover:opacity-100 p-1 transition-opacity ${prim.pinned ? "text-amber-400 opacity-100" : "text-[var(--color-text-muted)] hover:text-amber-400"}`}
+                              title={prim.pinned ? "Unpin" : "Pin"}
+                            >
+                              <Star className="w-3 h-3" />
+                            </button>
+                            <button
+                              onClick={() => updatePrimitive(prim.id, { resolved: !prim.resolved })}
+                              className={`opacity-0 group-hover:opacity-100 p-1 transition-opacity ${prim.resolved ? "text-emerald-400 opacity-100" : "text-[var(--color-text-muted)] hover:text-emerald-400"}`}
+                              title={prim.resolved ? "Reopen" : "Mark resolved"}
+                            >
+                              <CheckCircle2 className="w-3 h-3" />
+                            </button>
                             <button
                               onClick={() => deletePrimitive(prim.id)}
                               className="opacity-0 group-hover:opacity-100 text-[var(--color-text-muted)] hover:text-[var(--color-danger)] p-1 transition-opacity"
@@ -2524,7 +2803,24 @@ export default function Workspace() {
             <div className="flex-1 flex gap-4 overflow-hidden">
               {/* Graph canvas */}
               <div className="flex-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl flex flex-col overflow-hidden">
-                <ConflictGraph nodes={graphNodes} edges={graphEdges} />
+                {/* Party highlight selector */}
+                <div className="flex items-center gap-2 px-3 pt-3 shrink-0">
+                  <span className="text-[10px] text-[var(--color-text-muted)] uppercase tracking-wider">Highlight:</span>
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => setHighlightActorId(null)}
+                      className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${!highlightActorId ? "bg-[var(--color-accent)] text-white" : "bg-[var(--color-bg)] text-[var(--color-text-muted)] border border-[var(--color-border)] hover:text-white"}`}
+                    >All</button>
+                    {activeCase?.actors.map((actor) => (
+                      <button
+                        key={actor.id}
+                        onClick={() => setHighlightActorId(highlightActorId === actor.id ? null : actor.id)}
+                        className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${highlightActorId === actor.id ? "bg-[var(--color-accent)] text-white" : "bg-[var(--color-bg)] text-[var(--color-text-muted)] border border-[var(--color-border)] hover:text-white"}`}
+                      >{actor.name}</button>
+                    ))}
+                  </div>
+                </div>
+                <ConflictGraph nodes={graphNodes} edges={graphEdges} highlightActorId={highlightActorId} />
               </div>
               {/* Health check sidebar */}
               <div className="w-72 shrink-0 overflow-y-auto">
@@ -2535,6 +2831,67 @@ export default function Workspace() {
                   partyAClaims={partyAClaims}
                   partyBClaims={partyBClaims}
                 />
+              </div>
+            </div>
+          )}
+          {/* ── TIMELINE TAB ── */}
+          {activeTab === "timeline" && (
+            <div className="flex-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-4 flex flex-col overflow-hidden">
+              <div className="flex items-center gap-2 mb-4 shrink-0">
+                <Filter className="w-4 h-4 text-[var(--color-text-muted)]" />
+                <div className="flex gap-1 flex-wrap">
+                  {["all", "utterance", "extraction", "phase-change", "escalation", "common-ground"].map((f) => (
+                    <button
+                      key={f}
+                      onClick={() => setTimelineFilter(f)}
+                      className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${timelineFilter === f ? "bg-[var(--color-accent)] text-white" : "bg-[var(--color-bg)] text-[var(--color-text-muted)] border border-[var(--color-border)] hover:text-white"}`}
+                    >{f === "all" ? "All Events" : f.replace(/-/g, " ")}</button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex-1 overflow-y-auto pr-2">
+                {(activeCase?.timeline?.filter((e) => timelineFilter === "all" || e.type === timelineFilter) || []).length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-full text-[var(--color-text-muted)]">
+                    <History className="w-10 h-10 mb-3 opacity-20" />
+                    <p className="text-sm">No timeline events yet</p>
+                    <p className="text-xs mt-1 opacity-60">Timeline is populated automatically during live sessions</p>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <div className="absolute left-4 top-0 bottom-0 w-px bg-[var(--color-border)]" />
+                    <div className="space-y-3 pl-12">
+                      {activeCase!.timeline!
+                        .filter((e) => timelineFilter === "all" || e.type === timelineFilter)
+                        .map((entry) => {
+                          const mm = String(Math.floor(entry.elapsedSeconds / 60)).padStart(2, "0");
+                          const ss = String(entry.elapsedSeconds % 60).padStart(2, "0");
+                          const typeColors: Record<string, string> = {
+                            utterance: "bg-indigo-500/20 border-indigo-500/40 text-indigo-300",
+                            extraction: "bg-emerald-500/20 border-emerald-500/40 text-emerald-300",
+                            "phase-change": "bg-violet-500/20 border-violet-500/40 text-violet-300",
+                            escalation: "bg-red-500/20 border-red-500/40 text-red-300",
+                            "common-ground": "bg-teal-500/20 border-teal-500/40 text-teal-300",
+                            reflection: "bg-amber-500/20 border-amber-500/40 text-amber-300",
+                          };
+                          return (
+                            <div key={entry.id} className="relative">
+                              <div className={`absolute -left-8 w-4 h-4 rounded-full border-2 ${typeColors[entry.type] || "bg-gray-500/20 border-gray-500/40 text-gray-300"} flex items-center justify-center`} style={{ top: "4px" }}>
+                                <div className="w-1.5 h-1.5 rounded-full bg-current" />
+                              </div>
+                              <div className={`rounded-lg border px-3 py-2 ${typeColors[entry.type] || "border-[var(--color-border)] text-[var(--color-text-muted)]"}`}>
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className="text-[10px] font-mono">{mm}:{ss}</span>
+                                  <span className="text-[10px] uppercase tracking-wider font-semibold opacity-80">{entry.type.replace(/-/g, " ")}</span>
+                                  {entry.actor && <span className="text-[10px] opacity-60">· {entry.actor}</span>}
+                                </div>
+                                <p className="text-xs text-white">{entry.content}</p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}

@@ -41,12 +41,14 @@ interface TooltipState {
 interface Props {
   nodes: GraphNode[];
   edges: GraphEdge[];
+  highlightActorId?: string | null;
 }
 
-export default function ConflictGraph({ nodes, edges }: Props) {
+export default function ConflictGraph({ nodes, edges, highlightActorId }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const simulationRef = useRef<d3.Simulation<GraphNode, GraphEdge> | null>(null);
+  const zoomRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
   const prevNodeIdsRef = useRef<Set<string>>(new Set());
   const [tooltip, setTooltip] = useState<TooltipState>({ visible: false, x: 0, y: 0, node: null });
 
@@ -110,6 +112,7 @@ export default function ConflictGraph({ nodes, edges }: Props) {
       .scaleExtent([0.2, 4])
       .on("zoom", (event) => root.attr("transform", event.transform));
     svg.call(zoom);
+    zoomRef.current = zoom;
 
     // ── Links ──
     const linkSel = root.append("g").attr("class", "links")
@@ -163,7 +166,7 @@ export default function ConflictGraph({ nodes, edges }: Props) {
     nodeSel.append("circle")
       .attr("r", (d) => nodeRadius(d.type))
       .attr("fill", (d) => NODE_COLORS[d.type] ?? "#64748b")
-      .attr("fill-opacity", 0.85)
+      .attr("fill-opacity", (d) => highlightActorId && d.type !== "Actor" && d.actorId !== highlightActorId ? 0.2 : 0.85)
       .attr("stroke", (d) => NODE_COLORS[d.type] ?? "#64748b")
       .attr("stroke-width", 2)
       .attr("filter", (d) => !prevNodeIdsRef.current.has(d.id) ? "url(#bloom)" : "none")
@@ -191,6 +194,7 @@ export default function ConflictGraph({ nodes, edges }: Props) {
       .attr("font-weight", "bold")
       .attr("fill", "white")
       .attr("pointer-events", "none")
+      .attr("opacity", (d) => highlightActorId && d.type !== "Actor" && d.actorId !== highlightActorId ? 0.2 : 1)
       .text((d) => d.type[0]);
 
     // Label below node
@@ -200,6 +204,7 @@ export default function ConflictGraph({ nodes, edges }: Props) {
       .attr("font-size", "8px")
       .attr("fill", "#d1d5db")
       .attr("pointer-events", "none")
+      .attr("opacity", (d) => highlightActorId && d.type !== "Actor" && d.actorId !== highlightActorId ? 0.2 : 1)
       .text((d) => d.label.length > 14 ? d.label.slice(0, 14) + "…" : d.label);
 
     // Tooltip events
@@ -296,6 +301,34 @@ export default function ConflictGraph({ nodes, edges }: Props) {
   return (
     <div ref={containerRef} className="relative flex-1 w-full h-full min-h-0">
       <svg ref={svgRef} className="w-full h-full bg-[var(--color-bg)] rounded-xl" />
+
+      {/* Zoom controls */}
+      <div className="absolute top-3 right-3 flex flex-col gap-1">
+        <button
+          onClick={() => {
+            if (!svgRef.current || !zoomRef.current) return;
+            d3.select(svgRef.current).transition().duration(300).call(zoomRef.current.scaleBy, 1.4);
+          }}
+          className="w-7 h-7 rounded bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:text-white flex items-center justify-center text-sm font-bold"
+          title="Zoom in"
+        >+</button>
+        <button
+          onClick={() => {
+            if (!svgRef.current || !zoomRef.current) return;
+            d3.select(svgRef.current).transition().duration(300).call(zoomRef.current.scaleBy, 0.7);
+          }}
+          className="w-7 h-7 rounded bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:text-white flex items-center justify-center text-sm font-bold"
+          title="Zoom out"
+        >−</button>
+        <button
+          onClick={() => {
+            if (!svgRef.current || !zoomRef.current) return;
+            d3.select(svgRef.current).transition().duration(300).call(zoomRef.current.transform, d3.zoomIdentity);
+          }}
+          className="w-7 h-7 rounded bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:text-white flex items-center justify-center text-[9px] font-medium"
+          title="Fit all"
+        >Fit</button>
+      </div>
 
       {/* Legend */}
       <div className="absolute bottom-3 left-3 flex flex-wrap gap-1.5 max-w-xs">
