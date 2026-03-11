@@ -3,8 +3,9 @@ import { analyzePathways } from "@/lib/ai-service";
 import { classifyApiError } from "@/lib/api-error";
 
 const schema = z.object({
-  transcript: z.string().min(1).max(50000),
-  caseStructure: z.record(z.any()).optional(),
+  transcript: z.string().min(1).max(100000),
+  // Accept either a pre-stringified JSON string OR a plain object — both are valid
+  caseStructure: z.union([z.string(), z.record(z.any())]).optional(),
   framework: z.string().optional(),
 });
 
@@ -13,14 +14,20 @@ export async function POST(request: Request) {
     const body = await request.json();
     const parsed = schema.safeParse(body);
     if (!parsed.success) {
-      return Response.json({ error: "Invalid request" }, { status: 400 });
+      return Response.json(
+        { error: "Invalid request", details: parsed.error.flatten() },
+        { status: 400 },
+      );
     }
     const { transcript, caseStructure, framework } = parsed.data;
-    const result = await analyzePathways(
-      transcript,
-      caseStructure ? JSON.stringify(caseStructure) : "",
-      framework,
-    );
+    // Normalize to string — clients may send a JSON string or a plain object
+    const caseStr =
+      typeof caseStructure === "string"
+        ? caseStructure
+        : caseStructure
+          ? JSON.stringify(caseStructure)
+          : "";
+    const result = await analyzePathways(transcript, caseStr, framework);
     return Response.json({ result });
   } catch (error) {
     const { message, status } = classifyApiError(error);

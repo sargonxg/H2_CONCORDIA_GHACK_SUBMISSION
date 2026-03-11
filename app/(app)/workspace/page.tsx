@@ -46,6 +46,7 @@ import {
   summarizeCase,
 } from "@/services/gemini-client";
 import type { Actor, Primitive, PrimitiveType, Case, LiveMediationState, OntologyStats, PartyProfile, GapNotification, CaseSummary, TimelineEntry, PrimitiveCluster } from "@/lib/types";
+import { safeJsonParse } from "@/lib/utils";
 import { useConflictGraph } from "@/hooks/useConflictGraph";
 import ConflictGraph from "@/components/workspace/ConflictGraph";
 import OntologyHealthCheck from "@/components/workspace/OntologyHealthCheck";
@@ -313,7 +314,8 @@ export default function Workspace() {
   useEffect(() => {
     const saved = localStorage.getItem("concordia_cases");
     if (saved) {
-      setCases(JSON.parse(saved));
+      const parsed = safeJsonParse(saved, null);
+      if (Array.isArray(parsed)) setCases(parsed);
     }
   }, []);
 
@@ -1271,12 +1273,23 @@ export default function Workspace() {
     setStatus("ANALYZING");
     try {
       const resultStr = await extractPrimitives(activeCase.transcript);
-      const result = JSON.parse(resultStr);
+      if (!resultStr) {
+        console.error("[Extraction] Empty response from extractPrimitives");
+        setStatus("ERROR");
+        return;
+      }
+      const result = safeJsonParse(resultStr, null);
+      if (!result) {
+        console.error("[Extraction] Failed to parse extraction result:", resultStr);
+        setStatus("ERROR");
+        return;
+      }
 
       let newActors = [...activeCase.actors];
       let newPrimitives = [...activeCase.primitives];
 
       result.actors?.forEach((a: any) => {
+        if (!a?.name) return;
         if (
           !newActors.find(
             (existing) =>
@@ -1292,19 +1305,21 @@ export default function Workspace() {
       });
 
       result.primitives?.forEach((p: any) => {
+        if (!p) return;
         const actor = newActors.find(
           (a) => a.name.toLowerCase() === (p.actorName ?? p.actor)?.toLowerCase(),
         );
         const actorId = actor ? actor.id : newActors[0]?.id;
         const primitiveType = p.primitiveType ?? p.type;
-        if (actorId) {
+        const desc: string = p.description ?? "";
+        if (actorId && desc) {
           newPrimitives.push({
             id: Date.now().toString() + Math.random(),
             type: PRIMITIVE_TYPES.includes(primitiveType as PrimitiveType)
               ? (primitiveType as PrimitiveType)
               : "Claim",
             actorId,
-            description: p.description,
+            description: desc,
           });
         }
       });
@@ -1323,10 +1338,11 @@ export default function Workspace() {
       ]);
 
       setResearch(researchRes);
-      try {
-        setPathways(JSON.parse(pathwaysResStr));
-      } catch (e) {
-        console.error("Failed to parse pathways", e);
+      const parsedPathways = safeJsonParse(pathwaysResStr, null);
+      if (parsedPathways) {
+        setPathways(parsedPathways);
+      } else {
+        console.error("[Pathways] Failed to parse pathways result:", pathwaysResStr);
       }
 
       setStatus("IDLE");
@@ -1347,23 +1363,30 @@ export default function Workspace() {
     lastAutoExtractLengthRef.current = currentLength;
     try {
       const resultStr = await extractPrimitives(currentCase.transcript);
-      const result = JSON.parse(resultStr);
+      if (!resultStr) return;
+      const result = safeJsonParse(resultStr, null);
+      if (!result) {
+        console.warn("[AutoExtract] Could not parse extraction result:", resultStr);
+        return;
+      }
       setCases((prev) =>
         prev.map((c) => {
           if (c.id !== activeCaseIdRef.current) return c;
           let newActors = [...c.actors];
           let newPrimitives = [...c.primitives];
           result.actors?.forEach((a: any) => {
+            if (!a?.name) return;
             if (!newActors.find((existing) => existing.name.toLowerCase() === a.name.toLowerCase())) {
               newActors.push({ id: Date.now().toString() + Math.random(), name: a.name, role: a.role || "Unknown" });
             }
           });
           result.primitives?.forEach((p: any) => {
+            if (!p) return;
             const actor = newActors.find((a) => a.name.toLowerCase() === (p.actorName ?? p.actor)?.toLowerCase());
             const actorId = actor ? actor.id : newActors[0]?.id;
             const primitiveType = p.primitiveType ?? p.type;
             const desc: string = p.description ?? "";
-            if (actorId && desc && !newPrimitives.some((existing) => existing.description.toLowerCase() === desc.toLowerCase())) {
+            if (actorId && desc && !newPrimitives.some((existing) => (existing.description ?? "").toLowerCase() === desc.toLowerCase())) {
               newPrimitives.push({
                 id: Date.now().toString() + Math.random(),
                 type: PRIMITIVE_TYPES.includes(primitiveType as PrimitiveType) ? (primitiveType as PrimitiveType) : "Claim",
@@ -1509,9 +1532,14 @@ export default function Workspace() {
         currentGraphContext,
         frameworkToUse || undefined,
       );
-      setPathways(JSON.parse(resultStr));
-      setExpandedPathways(new Set([0]));
-      setActiveTab("pathways");
+      const parsed = safeJsonParse(resultStr, null);
+      if (parsed) {
+        setPathways(parsed);
+        setExpandedPathways(new Set([0]));
+        setActiveTab("pathways");
+      } else {
+        console.error("[Pathways] Could not parse framework analysis result:", resultStr);
+      }
       setStatus("IDLE");
     } catch (err) {
       console.error("Framework analysis error:", err);
@@ -1532,7 +1560,7 @@ export default function Workspace() {
         commonGround: liveMediationState?.commonGround || [],
         tensionPoints: liveMediationState?.tensionPoints || [],
       });
-      setSummaryData(JSON.parse(resultStr));
+      setSummaryData(safeJsonParse(resultStr, null));
     } catch (err) {
       console.error("Summary generation error:", err);
     } finally {
