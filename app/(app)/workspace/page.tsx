@@ -53,6 +53,12 @@ import ConflictGraph from "@/components/workspace/ConflictGraph";
 import OntologyHealthCheck from "@/components/workspace/OntologyHealthCheck";
 import EnhancedPartyProfile from "@/components/workspace/EnhancedPartyProfile";
 import EscalationMeter from "@/components/workspace/EscalationMeter";
+import SessionControls from "@/components/workspace/SessionControls";
+import LiveStatusBar from "@/components/workspace/LiveStatusBar";
+import TranscriptPanel from "@/components/workspace/TranscriptPanel";
+import AgreementTracker from "@/components/workspace/AgreementTracker";
+import MediatorPlaybook from "@/components/workspace/MediatorPlaybook";
+import KeyboardShortcutsHelp from "@/components/workspace/KeyboardShortcutsHelp";
 
 const PRIMITIVE_TYPES: PrimitiveType[] = [
   "Actor",
@@ -296,6 +302,7 @@ export default function Workspace() {
   const [escalationBanner, setEscalationBanner] = useState<EscalationFlag | null>(null);
 
   const [demoMode, setDemoMode] = useState(false);
+  const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
   const demoTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   const sessionRef = useRef<any>(null);
@@ -381,9 +388,30 @@ export default function Workspace() {
 
   // Keyboard shortcuts
   useEffect(() => {
+    const isInputFocused = () => {
+      const tag = (document.activeElement as HTMLElement)?.tagName;
+      return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+    };
     const handler = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement).tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      // Space: start/stop
+      if (e.key === " " && !isInputFocused()) {
+        e.preventDefault();
+        if (isRecording) stopSession();
+        else startSession();
+      }
+      // Ctrl+E: run extraction
+      if ((e.metaKey || e.ctrlKey) && e.key === "e") {
+        e.preventDefault();
+        if (!isRecording && activeCase?.transcript) handleSimulateExtraction();
+      }
+      // Ctrl+Shift+S: generate summary
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === "S") {
+        e.preventDefault();
+        if (activeCase?.transcript) handleGenerateSummary();
+      }
+      // Legacy Ctrl+Enter: run extraction
       if (e.ctrlKey && e.key === "Enter") {
         if (!isRecording && activeCase?.transcript) handleSimulateExtraction();
       }
@@ -391,6 +419,11 @@ export default function Workspace() {
         setShowSummary(false);
         setShowExport(false);
         setShowSettings(false);
+        setShowShortcutsHelp(false);
+      }
+      // ?: show shortcuts help
+      if (e.key === "?" && !isInputFocused()) {
+        setShowShortcutsHelp(true);
       }
       if (!e.ctrlKey && !e.metaKey && !e.altKey) {
         if (e.key === "1") setActiveTab("transcript");
@@ -1629,14 +1662,6 @@ export default function Workspace() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [liveMediationState?.phase]);
 
-  const wordOverlap = (a: string, b: string): number => {
-    const wordsA = new Set(a.toLowerCase().split(/\s+/).filter((w) => w.length > 3));
-    const wordsB = new Set(b.toLowerCase().split(/\s+/).filter((w) => w.length > 3));
-    let common = 0;
-    wordsA.forEach((w) => { if (wordsB.has(w)) common++; });
-    return wordsA.size + wordsB.size > 0 ? (2 * common) / (wordsA.size + wordsB.size) : 0;
-  };
-
   const autoGroupPrimitives = () => {
     if (!activeCase) return;
     const clusters: PrimitiveCluster[] = [];
@@ -1943,372 +1968,51 @@ export default function Workspace() {
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          {/* Generate Summary button */}
-          <button
-            onClick={handleGenerateSummary}
-            disabled={!activeCase?.transcript || summaryLoading}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:text-white hover:border-[var(--color-accent)] transition-colors disabled:opacity-40"
-            title="Generate Case Summary"
-          >
-            <BookOpen className="w-4 h-4" />
-            Summary
-          </button>
-
-          <div className="relative">
-            <button
-              onClick={() => setShowSettings(!showSettings)}
-              className="p-2 hover:bg-[var(--color-surface-hover)] rounded-md text-[var(--color-text-muted)] hover:text-white transition-colors"
-              title="Mediator Settings"
-            >
-              <Settings2 className="w-5 h-5" />
-            </button>
-
-            {showSettings && (
-              <div className="absolute top-full right-0 mt-2 w-72 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl shadow-xl p-4 z-50">
-                <h3 className="text-sm font-semibold mb-3">Mediator Profile</h3>
-                <div className="space-y-3">
-                  {/* Mediator Style */}
-                  <div>
-                    <label className="text-xs text-[var(--color-text-muted)] block mb-1">Mediator Style</label>
-                    <div className="grid grid-cols-2 gap-1.5">
-                      <button
-                        onClick={() => setMediatorProfile({ ...mediatorProfile, style: "professional", voice: "Zephyr" })}
-                        className={`p-2 rounded-lg border text-left transition-all ${mediatorProfile.style === "professional" ? "border-[var(--color-accent)] bg-[var(--color-accent)]/10 text-white" : "border-[var(--color-border)] text-[var(--color-text-muted)] hover:border-[var(--color-accent)]/50"}`}
-                      >
-                        <div className="text-xs font-semibold">Professional</div>
-                        <div className="text-[10px] mt-0.5 leading-tight opacity-70">Formal, structured, framework-focused</div>
-                      </button>
-                      <button
-                        onClick={() => setMediatorProfile({ ...mediatorProfile, style: "empathic", voice: "Kore" })}
-                        className={`p-2 rounded-lg border text-left transition-all ${mediatorProfile.style === "empathic" ? "border-[var(--color-accent)] bg-[var(--color-accent)]/10 text-white" : "border-[var(--color-border)] text-[var(--color-text-muted)] hover:border-[var(--color-accent)]/50"}`}
-                      >
-                        <div className="text-xs font-semibold">Empathic</div>
-                        <div className="text-[10px] mt-0.5 leading-tight opacity-70">Warm, emotion-first, conversational</div>
-                      </button>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-xs text-[var(--color-text-muted)] block mb-1">Voice</label>
-                    <select
-                      value={mediatorProfile.voice}
-                      onChange={(e) => setMediatorProfile({ ...mediatorProfile, voice: e.target.value })}
-                      className="w-full bg-[var(--color-bg)] border border-[var(--color-border)] rounded text-sm p-1.5 focus:outline-none focus:border-[var(--color-accent)]"
-                    >
-                      <option value="Zephyr">Zephyr (Calm, Neutral)</option>
-                      <option value="Kore">Kore (Empathetic, Warm)</option>
-                      <option value="Puck">Puck (Direct, Clear)</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-xs text-[var(--color-text-muted)] block mb-1">Approach</label>
-                    <select
-                      value={mediatorProfile.approach}
-                      onChange={(e) => setMediatorProfile({ ...mediatorProfile, approach: e.target.value })}
-                      className="w-full bg-[var(--color-bg)] border border-[var(--color-border)] rounded text-sm p-1.5 focus:outline-none focus:border-[var(--color-accent)]"
-                    >
-                      <option value="Facilitative">Facilitative (Guide process)</option>
-                      <option value="Evaluative">Evaluative (Assess merits)</option>
-                      <option value="Transformative">Transformative (Empowerment)</option>
-                      <option value="Narrative">Narrative (Deconstruct stories)</option>
-                    </select>
-                  </div>
-                  {/* Psychological Profiling Toggle */}
-                  <div className="pt-2 border-t border-[var(--color-border)]">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="text-xs font-medium text-white">Deep Psychological Profiling</div>
-                        <div className="text-[10px] text-[var(--color-text-muted)] mt-0.5">Thomas-Kilmann · Plutchik · Trust model</div>
-                      </div>
-                      <button
-                        onClick={() => updateActiveCase({ profilingEnabled: activeCase?.profilingEnabled === false })}
-                        className={`relative w-10 h-5 rounded-full transition-colors ${activeCase?.profilingEnabled !== false ? "bg-[var(--color-accent)]" : "bg-[var(--color-border)]"}`}
-                      >
-                        <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${activeCase?.profilingEnabled !== false ? "translate-x-5" : "translate-x-0.5"}`} />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Export dropdown */}
-          <div className="relative">
-            <button
-              onClick={() => setShowExport(!showExport)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:text-white hover:border-[var(--color-accent)] transition-colors"
-              title="Export"
-            >
-              <Download className="w-4 h-4" />
-              Export
-            </button>
-            {showExport && (
-              <div className="absolute top-full right-0 mt-1 w-52 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl shadow-xl z-50 overflow-hidden">
-                {[
-                  { label: "Export Markdown", action: exportMarkdownReport },
-                  { label: "Export JSON", action: exportCaseJSON },
-                  { label: "Export Transcript", action: exportTranscript },
-                  { label: "Copy Transcript", action: () => navigator.clipboard.writeText(activeCase?.transcript || "") },
-                  { label: "Copy Summary", action: () => summaryData && navigator.clipboard.writeText(summaryData.sessionOverview) },
-                ].map(({ label, action }) => (
-                  <button
-                    key={label}
-                    onClick={() => { action(); setShowExport(false); }}
-                    className="w-full text-left px-4 py-2.5 text-sm text-[var(--color-text-muted)] hover:text-white hover:bg-[var(--color-surface-hover)] transition-colors"
-                  >{label}</button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2 text-sm font-mono bg-[var(--color-bg)] px-3 py-1.5 rounded-md border border-[var(--color-border)]">
-            <span
-              className={`w-2 h-2 rounded-full ${
-                demoMode
-                  ? "bg-amber-500 animate-pulse"
-                  : status === "RECONNECTING"
-                    ? "bg-yellow-500 animate-pulse"
-                    : isRecording
-                      ? "bg-red-500 animate-pulse"
-                      : status === "ANALYZING"
-                        ? "bg-amber-500 animate-pulse"
-                        : "bg-gray-500"
-              }`}
-            ></span>
-            {status}
-            {(isRecording || status === "LIVE") && sessionDuration > 0 && (
-              <span className="text-[var(--color-text-muted)] ml-1 text-xs">
-                <Timer className="w-3 h-3 inline mr-0.5" />
-                {String(Math.floor(sessionDuration / 60)).padStart(2, "0")}:{String(sessionDuration % 60).padStart(2, "0")}
-              </span>
-            )}
-          </div>
-
-          {isRecording ? (
-            <button
-              onClick={stopSession}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium transition-all bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 shadow-lg shadow-red-500/10"
-            >
-              <Square className="w-4 h-4" />
-              End Session
-            </button>
-          ) : (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={startSession}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium transition-all bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] shadow-lg shadow-[var(--color-accent)]/20"
-              >
-                <Mic className="w-4 h-4" />
-                Start Live Session
-              </button>
-              <button
-                onClick={startDemoSession}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-all bg-amber-500/10 text-amber-400 border border-amber-500/30 hover:bg-amber-500/20 text-sm"
-                title="Run a simulated demo session"
-              >
-                <Activity className="w-4 h-4" />
-                Demo
-              </button>
-            </div>
-          )}
-        </div>
+        <SessionControls
+          isRecording={isRecording}
+          status={status}
+          sessionDuration={sessionDuration}
+          demoMode={demoMode}
+          mediatorProfile={mediatorProfile}
+          setMediatorProfile={setMediatorProfile}
+          showSettings={showSettings}
+          setShowSettings={setShowSettings}
+          showExport={showExport}
+          setShowExport={setShowExport}
+          onStart={startSession}
+          onStop={stopSession}
+          onDemo={startDemoSession}
+          onExportMarkdown={exportMarkdownReport}
+          onExportJSON={exportCaseJSON}
+          onExportTranscript={exportTranscript}
+          onGenerateSummary={handleGenerateSummary}
+          hasTranscript={!!activeCase?.transcript}
+          summaryLoading={summaryLoading}
+          hasSummaryData={!!summaryData}
+          onCopySummary={() => summaryData && navigator.clipboard.writeText(summaryData.sessionOverview)}
+          onCopyTranscript={() => navigator.clipboard.writeText(activeCase?.transcript || "")}
+        />
       </header>
 
-      {/* ─── LIVE PHASE PROGRESS BAR ─── */}
-      {(isRecording || liveMediationState) && (
-        <div className="px-6 py-3 bg-[var(--color-surface)] border-b border-[var(--color-border)] shrink-0">
-          <div className="flex items-center gap-1">
-            {PHASES.map((phase, idx) => (
-              <div key={phase} className="flex items-center flex-1">
-                <div
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-mono uppercase tracking-wider transition-all ${
-                    idx === currentPhaseIdx
-                      ? "bg-[var(--color-accent)] text-white shadow-md shadow-[var(--color-accent)]/30"
-                      : idx < currentPhaseIdx
-                        ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                        : "bg-[var(--color-bg)] text-[var(--color-text-muted)] border border-[var(--color-border)]"
-                  }`}
-                >
-                  {idx < currentPhaseIdx ? (
-                    <CheckCircle2 className="w-3 h-3" />
-                  ) : idx === currentPhaseIdx ? (
-                    <Activity className="w-3 h-3 animate-pulse" />
-                  ) : (
-                    <Circle className="w-3 h-3" />
-                  )}
-                  {phase}
-                </div>
-                {idx < PHASES.length - 1 && (
-                  <div
-                    className={`flex-1 h-px mx-1 ${
-                      idx < currentPhaseIdx
-                        ? "bg-emerald-500/30"
-                        : "bg-[var(--color-border)]"
-                    }`}
-                  />
-                )}
-              </div>
-            ))}
-          </div>
+      {/* ─── LIVE STATUS BAR ─── */}
+      {(isRecording || liveMediationState || gapNotifications.some((n) => !n.dismissed) || escalationBanner || sessionToast || healthScore < 50) && (
+        <div className="bg-[var(--color-surface)] border-b border-[var(--color-border)] shrink-0 max-h-48 overflow-y-auto">
+          <LiveStatusBar
+            liveMediationState={liveMediationState}
+            gapNotifications={gapNotifications}
+            setGapNotifications={setGapNotifications}
+            status={status}
+            isRecording={isRecording}
+            escalationBanner={escalationBanner}
+            setEscalationBanner={setEscalationBanner}
+            sessionToast={sessionToast}
+            setSessionToast={setSessionToast}
+            healthScore={healthScore}
+            onOpenGraph={() => setActiveTab("graph")}
+            extractionNotice={extractionNotice}
+          />
         </div>
       )}
-
-      {/* ─── LIVE MEDIATOR ACTION BANNER ─── */}
-      <AnimatePresence>
-        {isRecording && liveMediationState && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            className="px-6 shrink-0"
-          >
-            <div className="mt-3 p-3 bg-[var(--color-accent)]/5 border border-[var(--color-accent)]/20 rounded-lg flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-[var(--color-accent)]/20 flex items-center justify-center shrink-0">
-                <Brain className="w-4 h-4 text-[var(--color-accent)]" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-0.5">
-                  <div className="text-[10px] font-mono uppercase tracking-wider text-[var(--color-accent)]">
-                    Mediator Focus
-                  </div>
-                  {/* Theory badge — parse framework tag from currentAction */}
-                  {liveMediationState.currentAction.match(/\[([^\]]+)\]/) && (
-                    <span className="text-[9px] px-1.5 py-0.5 rounded border border-violet-500/30 bg-violet-500/10 text-violet-400 font-mono shrink-0">
-                      <BookOpen className="w-2.5 h-2.5 inline mr-0.5" />
-                      {liveMediationState.currentAction.match(/\[([^\]]+)\]/)?.[1]}
-                    </span>
-                  )}
-                </div>
-                <p className="text-sm text-white truncate">
-                  {liveMediationState.currentAction.replace(/^\[[^\]]+\]\s*/, "")}
-                </p>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <MessageCircle className="w-3.5 h-3.5 text-[var(--color-text-muted)]" />
-                <span className="text-xs text-[var(--color-text-muted)]">Addressing: </span>
-                <span className="text-xs font-bold text-white">{liveMediationState.targetActor}</span>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ─── GAP NOTIFICATIONS ─── */}
-      <AnimatePresence>
-        {gapNotifications.filter((n) => !n.dismissed).slice(0, 2).map((notif) => (
-          <motion.div
-            key={notif.id}
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            className="px-6 shrink-0"
-          >
-            <div className={`mt-2 p-3 rounded-lg border flex items-start gap-3 ${
-              notif.priority === "critical"
-                ? "bg-red-500/5 border-red-500/20"
-                : notif.priority === "important"
-                  ? "bg-amber-500/5 border-amber-500/20"
-                  : "bg-[var(--color-surface)] border-[var(--color-border)]"
-            }`}>
-              <Search className={`w-4 h-4 shrink-0 mt-0.5 ${
-                notif.priority === "critical" ? "text-red-400" :
-                notif.priority === "important" ? "text-amber-400" : "text-[var(--color-text-muted)]"
-              }`} />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-0.5">
-                  <span className="text-[9px] font-mono uppercase tracking-wider text-[var(--color-text-muted)]">
-                    {notif.gapType.replace(/_/g, " ")} · {notif.priority}
-                  </span>
-                  <span className="text-[9px] text-[var(--color-text-muted)]">→ {notif.targetParty}</span>
-                </div>
-                <p className="text-xs text-white mb-1">{notif.description}</p>
-                <p className="text-[11px] text-[var(--color-accent)] italic">&ldquo;{notif.suggestedQuestion}&rdquo;</p>
-              </div>
-              <button
-                onClick={() => setGapNotifications((prev) => prev.map((n) => n.id === notif.id ? { ...n, dismissed: true } : n))}
-                className="text-[var(--color-text-muted)] hover:text-white transition-colors shrink-0"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </motion.div>
-        ))}
-      </AnimatePresence>
-
-      {/* ─── ESCALATION BANNER ─── */}
-      <AnimatePresence>
-        {escalationBanner && (
-          <motion.div
-            key={escalationBanner.id}
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            className="px-6 shrink-0"
-          >
-            <div className="mt-2 p-3 rounded-lg border border-red-500/40 bg-red-500/10 flex items-start gap-3">
-              <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-0.5">
-                  <span className="text-[9px] font-mono uppercase tracking-wider text-red-400">
-                    Escalation · {escalationBanner.category}
-                  </span>
-                  <span className="text-[9px] text-red-400/60">Severity {escalationBanner.severity}/10</span>
-                </div>
-                <p className="text-xs text-white mb-1">{escalationBanner.trigger}</p>
-                <p className="text-[11px] text-emerald-400 italic">De-escalation: {escalationBanner.deEscalationTechnique}</p>
-              </div>
-              <button onClick={() => setEscalationBanner(null)} className="text-red-400/60 hover:text-white transition-colors shrink-0">
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ─── ONTOLOGY HEALTH BANNER ─── */}
-      <AnimatePresence>
-        {healthScore < 50 && activeCase && activeCase.primitives.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            className="px-6 shrink-0"
-          >
-            <div className="mt-3 p-3 bg-amber-500/5 border border-amber-500/20 rounded-lg flex items-center gap-3">
-              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
-              <p className="text-xs text-amber-200 flex-1">
-                Ontology coverage is low ({healthScore}%). Open the{" "}
-                <button
-                  className="underline font-semibold"
-                  onClick={() => setActiveTab("graph")}
-                >
-                  Knowledge Graph
-                </button>{" "}
-                tab to see what&apos;s still needed.
-              </p>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ─── SESSION TOAST ─── */}
-      <AnimatePresence>
-        {sessionToast && (
-          <motion.div
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            className="mx-6 mt-2 shrink-0 flex items-center gap-2 px-4 py-2 bg-indigo-500/10 border border-indigo-500/30 rounded-lg text-sm text-indigo-200"
-          >
-            <Clock className="w-4 h-4 shrink-0" />
-            {sessionToast}
-            <button onClick={() => setSessionToast(null)} className="ml-auto text-indigo-400 hover:text-white">
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* ─── RECONNECTION OVERLAY ─── */}
       {status === "RECONNECTING" && (
@@ -2511,40 +2215,16 @@ export default function Workspace() {
           </AnimatePresence>
 
           {/* ── Agreements Panel ── */}
-          {agreements.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="bg-[var(--color-surface)] border border-emerald-500/30 rounded-xl p-4"
-            >
-              <h3 className="text-[10px] font-mono uppercase tracking-wider text-emerald-400 mb-2 flex items-center gap-1.5">
-                <Shield className="w-3.5 h-3.5" /> Agreements ({agreements.length})
-              </h3>
-              <div className="space-y-2">
-                {agreements.slice(-3).map((ag) => (
-                  <div key={ag.id} className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-2.5">
-                    <div className="flex items-center gap-1.5 mb-1">
-                      <span className="text-[10px] font-bold text-emerald-300">{ag.topic}</span>
-                      <div className="flex gap-1 ml-auto">
-                        <span className={`text-[8px] px-1 rounded font-mono ${ag.partyAAccepts ? "text-emerald-400 bg-emerald-400/10" : "text-gray-500 bg-gray-500/10"}`}>A</span>
-                        <span className={`text-[8px] px-1 rounded font-mono ${ag.partyBAccepts ? "text-emerald-400 bg-emerald-400/10" : "text-gray-500 bg-gray-500/10"}`}>B</span>
-                      </div>
-                    </div>
-                    <p className="text-[10px] text-[var(--color-text-muted)] leading-relaxed">{ag.terms}</p>
-                    {ag.conditions.length > 0 && (
-                      <ul className="mt-1 space-y-0.5">
-                        {ag.conditions.map((c, i) => (
-                          <li key={i} className="text-[9px] text-amber-300 flex items-start gap-1">
-                            <span className="text-amber-500 shrink-0">•</span>{c}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </motion.div>
-          )}
+          <AgreementTracker agreements={agreements} />
+
+          {/* ── Mediator Playbook ── */}
+          <MediatorPlaybook
+            phase={liveMediationState?.phase || "Opening"}
+            gapNotifications={gapNotifications}
+            missingPrimitives={PRIMITIVE_TYPES.filter(
+              (t) => !activeCase?.primitives.some((p) => p.type === t),
+            )}
+          />
         </div>
 
         {/* ─── CENTER: Tabbed Content ─── */}
@@ -2579,87 +2259,24 @@ export default function Workspace() {
 
           {/* ── TRANSCRIPT TAB ── */}
           {activeTab === "transcript" && (
-            <div className="flex-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-4 flex flex-col overflow-hidden">
-              {(isRecording || status === "LIVE" || status === "RECONNECTING") ? (
-                /* Styled live transcript panel */
-                <div
-                  className="flex-1 overflow-y-auto space-y-2 pr-1"
-                  onScroll={(e) => {
-                    const el = e.currentTarget;
-                    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
-                    setAutoScrollEnabled(atBottom);
-                  }}
-                >
-                  {extractionNotice && (
-                    <div className="flex items-center gap-2 px-3 py-1.5 bg-indigo-500/10 border border-indigo-500/30 rounded-lg text-xs text-indigo-300 mb-2">
-                      <Activity className="w-3 h-3 animate-pulse" />
-                      Structure updated from transcript
-                    </div>
-                  )}
-                  {activeCase?.transcript ? (
-                    activeCase.transcript.split("\n\n").map((line, i) => {
-                      const isConcordia = line.includes("[Concordia]:");
-                      const isSpeaker = line.includes("[Speaker]:");
-                      return (
-                        <div
-                          key={i}
-                          className={`text-sm leading-relaxed px-3 py-2 rounded-lg font-mono ${
-                            isConcordia
-                              ? "bg-indigo-500/10 border border-indigo-500/20 text-indigo-200"
-                              : isSpeaker
-                              ? "bg-sky-500/10 border border-sky-500/20 text-sky-200"
-                              : "text-[var(--color-text-muted)]"
-                          }`}
-                        >
-                          {line}
-                        </div>
-                      );
-                    })
-                  ) : (
-                    <p className="text-[var(--color-text-muted)] text-sm italic">
-                      Waiting for conversation…
-                    </p>
-                  )}
-                  <div ref={transcriptEndRef} />
-                </div>
-              ) : (
-                /* Editable textarea when not live */
-                <textarea
-                  value={activeCase?.transcript}
-                  onChange={(e) =>
-                    updateActiveCase({ transcript: e.target.value })
-                  }
-                  placeholder={`Enter initial context here, or start the Live Session to begin mediation between ${activeCase?.partyAName || "Party A"} and ${activeCase?.partyBName || "Party B"}...`}
-                  className="flex-1 bg-transparent border-none resize-none focus:ring-0 text-sm leading-relaxed text-white placeholder-[var(--color-text-muted)] font-mono"
-                />
-              )}
-              <div className="mt-3 pt-3 border-t border-[var(--color-border)] flex items-center justify-between">
-                {(isRecording || status === "LIVE") && !autoScrollEnabled && (
-                  <button
-                    onClick={() => {
-                      setAutoScrollEnabled(true);
-                      transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
-                    }}
-                    className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1"
-                  >
-                    <Activity className="w-3 h-3" />
-                    Scroll to latest
-                  </button>
-                )}
-                <div className="ml-auto">
-                  <button
-                    onClick={handleSimulateExtraction}
-                    disabled={
-                      !activeCase?.transcript || status === "ANALYZING" || isRecording
-                    }
-                    className="bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-white px-5 py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-50 flex items-center gap-2 shadow-md shadow-[var(--color-accent)]/20"
-                  >
-                    <Target className="w-4 h-4" />
-                    Analyze & Find Pathways
-                  </button>
-                </div>
-              </div>
-            </div>
+            <TranscriptPanel
+              transcript={activeCase?.transcript ?? ""}
+              isLive={isRecording || status === "LIVE" || status === "RECONNECTING"}
+              extractionNotice={extractionNotice}
+              autoScrollEnabled={autoScrollEnabled}
+              setAutoScrollEnabled={setAutoScrollEnabled}
+              transcriptEndRef={transcriptEndRef}
+              partyAName={activeCase?.partyAName ?? "Party A"}
+              partyBName={activeCase?.partyBName ?? "Party B"}
+              onTranscriptChange={(val) => updateActiveCase({ transcript: val })}
+              onScrollToLatest={() => {
+                setAutoScrollEnabled(true);
+                transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
+              }}
+              onAnalyze={handleSimulateExtraction}
+              isAnalyzing={status === "ANALYZING"}
+              isRecording={isRecording}
+            />
           )}
 
           {/* ── STRUCTURE TAB ── */}
@@ -3449,6 +3066,9 @@ export default function Workspace() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* ─── KEYBOARD SHORTCUTS HELP ─── */}
+      <KeyboardShortcutsHelp open={showShortcutsHelp} onClose={() => setShowShortcutsHelp(false)} />
     </div>
   );
 }

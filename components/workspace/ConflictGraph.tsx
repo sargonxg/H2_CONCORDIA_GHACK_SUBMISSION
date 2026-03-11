@@ -26,9 +26,46 @@ function edgeColor(type: EdgeType): string {
 }
 
 function nodeRadius(type: string): number {
-  if (type === "Actor") return 22;
-  if (type === "Claim" || type === "Interest") return 14;
-  return 11;
+  if (type === "Actor") return 28;
+  if (type === "Claim" || type === "Interest") return 16;
+  return 12;
+}
+
+// Node shape path generators
+function nodeShape(type: string, r: number): string {
+  switch (type) {
+    case "Claim": {
+      // Diamond
+      const d = r * 1.2;
+      return `M 0,${-d} L ${d},0 L 0,${d} L ${-d},0 Z`;
+    }
+    case "Interest": {
+      // Pentagon
+      const pts = Array.from({ length: 5 }, (_, i) => {
+        const angle = (i * 2 * Math.PI) / 5 - Math.PI / 2;
+        return `${r * Math.cos(angle)},${r * Math.sin(angle)}`;
+      });
+      return `M ${pts.join(" L ")} Z`;
+    }
+    case "Constraint": {
+      // Hexagon
+      const pts = Array.from({ length: 6 }, (_, i) => {
+        const angle = (i * 2 * Math.PI) / 6;
+        return `${r * Math.cos(angle)},${r * Math.sin(angle)}`;
+      });
+      return `M ${pts.join(" L ")} Z`;
+    }
+    case "Leverage": {
+      // Triangle
+      const pts = Array.from({ length: 3 }, (_, i) => {
+        const angle = (i * 2 * Math.PI) / 3 - Math.PI / 2;
+        return `${r * 1.1 * Math.cos(angle)},${r * 1.1 * Math.sin(angle)}`;
+      });
+      return `M ${pts.join(" L ")} Z`;
+    }
+    default:
+      return ""; // use circle
+  }
 }
 
 interface TooltipState {
@@ -50,7 +87,9 @@ export default function ConflictGraph({ nodes, edges, highlightActorId }: Props)
   const simulationRef = useRef<d3.Simulation<GraphNode, GraphEdge> | null>(null);
   const zoomRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
   const prevNodeIdsRef = useRef<Set<string>>(new Set());
+  const simNodesRef = useRef<GraphNode[]>([]);
   const [tooltip, setTooltip] = useState<TooltipState>({ visible: false, x: 0, y: 0, node: null });
+  const [hoveredEdge, setHoveredEdge] = useState<string | null>(null);
 
   const renderGraph = useCallback(() => {
     if (!svgRef.current || !containerRef.current) return;
@@ -62,7 +101,7 @@ export default function ConflictGraph({ nodes, edges, highlightActorId }: Props)
     const svg = d3.select(svgRef.current);
     svg.attr("width", width).attr("height", height);
 
-    // ── Defs: glow filter + arrowhead marker ──
+    // ── Defs: glow filter + arrowhead markers ──
     svg.select("defs").remove();
     const defs = svg.append("defs");
 
@@ -72,29 +111,41 @@ export default function ConflictGraph({ nodes, edges, highlightActorId }: Props)
     merge.append("feMergeNode").attr("in", "blur");
     merge.append("feMergeNode").attr("in", "SourceGraphic");
 
-    defs.append("marker")
-      .attr("id", "arrow")
-      .attr("viewBox", "0 -5 10 10")
-      .attr("refX", 18)
-      .attr("refY", 0)
-      .attr("markerWidth", 6)
-      .attr("markerHeight", 6)
-      .attr("orient", "auto")
-      .append("path")
-      .attr("d", "M0,-5L10,0L0,5")
-      .attr("fill", "#374151");
+    // Animated edge dash marker
+    defs.append("style").text(`
+      @keyframes dashDraw {
+        from { stroke-dashoffset: 100; }
+        to { stroke-dashoffset: 0; }
+      }
+      .edge-new { animation: dashDraw 0.6s ease-out forwards; }
+    `);
 
-    // Stop old simulation
+    // Multiple arrow markers by color
+    [["arrow-red", "#ef4444"], ["arrow-green", "#10b981"], ["arrow-gray", "#374151"]].forEach(([id, color]) => {
+      defs.append("marker")
+        .attr("id", id)
+        .attr("viewBox", "0 -5 10 10")
+        .attr("refX", 22)
+        .attr("refY", 0)
+        .attr("markerWidth", 5)
+        .attr("markerHeight", 5)
+        .attr("orient", "auto")
+        .append("path")
+        .attr("d", "M0,-5L10,0L0,5")
+        .attr("fill", color);
+    });
+
     simulationRef.current?.stop();
 
-    // Deep-clone nodes/edges so D3 can mutate them.
-    // Pre-initialise x/y so SVG attributes are never "undefined" before the
-    // first simulation tick fires (fixes "<line> attribute x2: Expected length, 'undefined'").
-    const simNodes: GraphNode[] = nodes.map((n, i) => ({
-      ...n,
-      x: n.x ?? width / 2 + Math.cos((i * 2 * Math.PI) / Math.max(nodes.length, 1)) * 60,
-      y: n.y ?? height / 2 + Math.sin((i * 2 * Math.PI) / Math.max(nodes.length, 1)) * 60,
-    }));
+    const simNodes: GraphNode[] = nodes.map((n, i) => {
+      const existing = simNodesRef.current.find((s) => s.id === n.id);
+      return {
+        ...n,
+        x: existing?.x ?? n.x ?? width / 2 + Math.cos((i * 2 * Math.PI) / Math.max(nodes.length, 1)) * 60,
+        y: existing?.y ?? n.y ?? height / 2 + Math.sin((i * 2 * Math.PI) / Math.max(nodes.length, 1)) * 60,
+      };
+    });
+
     const nodeById = new Map(simNodes.map((n) => [n.id, n]));
     const simEdges: any[] = edges
       .map((e) => ({
@@ -104,12 +155,11 @@ export default function ConflictGraph({ nodes, edges, highlightActorId }: Props)
       }))
       .filter((e) => e.source && e.target);
 
-    // ── Root group (zoomable) ──
     svg.select("g.root").remove();
     const root = svg.append("g").attr("class", "root");
 
     const zoom = d3.zoom<SVGSVGElement, unknown>()
-      .scaleExtent([0.2, 4])
+      .scaleExtent([0.15, 5])
       .on("zoom", (event) => root.attr("transform", event.transform));
     svg.call(zoom);
     zoomRef.current = zoom;
@@ -118,26 +168,50 @@ export default function ConflictGraph({ nodes, edges, highlightActorId }: Props)
     const linkSel = root.append("g").attr("class", "links")
       .selectAll<SVGLineElement, any>("line")
       .data(simEdges)
-      .join("line")
+      .join(
+        (enter) =>
+          enter
+            .append("line")
+            .attr("stroke-dasharray", "100")
+            .attr("stroke-dashoffset", "100")
+            .call((el) =>
+              el.transition().duration(600).attr("stroke-dashoffset", "0"),
+            ),
+      )
       .attr("stroke", (d) => edgeColor(d.type))
       .attr("stroke-width", 1.5)
-      .attr("stroke-opacity", 0.55)
-      .attr("marker-end", "url(#arrow)")
-      // Set initial coordinates from pre-initialised positions so SVG
-      // never renders with undefined/empty length attributes.
+      .attr("stroke-opacity", 0.5)
+      .attr("marker-end", (d) => {
+        const c = edgeColor(d.type);
+        if (c === "#ef4444") return "url(#arrow-red)";
+        if (c === "#10b981") return "url(#arrow-green)";
+        return "url(#arrow-gray)";
+      })
       .attr("x1", (d) => (d.source as GraphNode).x ?? 0)
       .attr("y1", (d) => (d.source as GraphNode).y ?? 0)
       .attr("x2", (d) => (d.target as GraphNode).x ?? 0)
-      .attr("y2", (d) => (d.target as GraphNode).y ?? 0);
+      .attr("y2", (d) => (d.target as GraphNode).y ?? 0)
+      .style("cursor", "pointer")
+      .on("mouseover", function (event, d) {
+        setHoveredEdge(d.type + String((d.source as any).id) + String((d.target as any).id));
+        d3.select(this).attr("stroke-opacity", 1).attr("stroke-width", 2.5);
+      })
+      .on("mouseout", function () {
+        setHoveredEdge(null);
+        d3.select(this).attr("stroke-opacity", 0.5).attr("stroke-width", 1.5);
+      });
 
-    // ── Link labels ──
+    // ── Edge labels — rendered as foreignObject for click-through, shown on hover via React state ──
+    // We use a g with text, always present but toggled via opacity
     const linkLabelSel = root.append("g").attr("class", "link-labels")
       .selectAll<SVGTextElement, any>("text")
       .data(simEdges)
       .join("text")
       .attr("font-size", "7px")
-      .attr("fill", "#6b7280")
+      .attr("fill", "#9ca3af")
       .attr("text-anchor", "middle")
+      .attr("pointer-events", "none")
+      .attr("opacity", 0) // hidden by default; shown on hover via tick
       .text((d) => d.type.replace(/_/g, " "));
 
     // ── Node groups ──
@@ -151,72 +225,87 @@ export default function ConflictGraph({ nodes, edges, highlightActorId }: Props)
         d3.drag<SVGGElement, GraphNode>()
           .on("start", (event, d) => {
             if (!event.active) simulationRef.current?.alphaTarget(0.3).restart();
-            d.fx = d.x;
-            d.fy = d.y;
+            d.fx = d.x; d.fy = d.y;
           })
           .on("drag", (event, d) => { d.fx = event.x; d.fy = event.y; })
           .on("end", (event, d) => {
             if (!event.active) simulationRef.current?.alphaTarget(0);
-            d.fx = null;
-            d.fy = null;
+            d.fx = null; d.fy = null;
           }),
       );
 
-    // Circles with BLOOM on new nodes
-    nodeSel.append("circle")
-      .attr("r", (d) => nodeRadius(d.type))
-      .attr("fill", (d) => NODE_COLORS[d.type] ?? "#64748b")
-      .attr("fill-opacity", (d) => highlightActorId && d.type !== "Actor" && d.actorId !== highlightActorId ? 0.2 : 0.85)
-      .attr("stroke", (d) => NODE_COLORS[d.type] ?? "#64748b")
-      .attr("stroke-width", 2)
-      .attr("filter", (d) => !prevNodeIdsRef.current.has(d.id) ? "url(#bloom)" : "none")
-      .style("transform-box", "fill-box")
-      .style("transform-origin", "center")
-      .each(function (d) {
-        if (!prevNodeIdsRef.current.has(d.id)) {
-          d3.select(this)
-            .style("transform", "scale(0)")
-            .transition()
-            .duration(600)
-            .ease(d3.easeElasticOut)
-            .style("transform", "scale(1)")
-            .on("end", function () {
+    // Add shapes
+    nodeSel.each(function (d) {
+      const g = d3.select(this);
+      const r = nodeRadius(d.type);
+      const path = nodeShape(d.type, r);
+      const isNew = !prevNodeIdsRef.current.has(d.id);
+      const fillOpacity = highlightActorId && d.type !== "Actor" && d.actorId !== highlightActorId ? 0.2 : 0.88;
+      const color = NODE_COLORS[d.type] ?? "#64748b";
+
+      if (path) {
+        // Shaped node
+        const pathEl = g.append("path")
+          .attr("d", path)
+          .attr("fill", color)
+          .attr("fill-opacity", fillOpacity)
+          .attr("stroke", color)
+          .attr("stroke-width", 2)
+          .style("transform-box", "fill-box")
+          .style("transform-origin", "center");
+        if (isNew) {
+          pathEl.attr("filter", "url(#bloom)").style("transform", "scale(0)")
+            .transition().duration(600).ease(d3.easeElasticOut)
+            .style("transform", "scale(1)").on("end", function () {
               d3.select(this).attr("filter", "none");
             });
         }
-      });
+      } else {
+        // Circle (Actor or Commitment/Event/Narrative)
+        const circEl = g.append("circle")
+          .attr("r", r)
+          .attr("fill", color)
+          .attr("fill-opacity", fillOpacity)
+          .attr("stroke", color)
+          .attr("stroke-width", d.type === "Actor" ? 3 : 2)
+          .style("transform-box", "fill-box")
+          .style("transform-origin", "center");
+        if (isNew) {
+          circEl.attr("filter", "url(#bloom)").style("transform", "scale(0)")
+            .transition().duration(600).ease(d3.easeElasticOut)
+            .style("transform", "scale(1)").on("end", function () {
+              d3.select(this).attr("filter", "none");
+            });
+        }
+      }
 
-    // Type icon text (first letter)
-    nodeSel.append("text")
-      .attr("text-anchor", "middle")
-      .attr("dominant-baseline", "central")
-      .attr("font-size", (d) => d.type === "Actor" ? "10px" : "8px")
-      .attr("font-weight", "bold")
-      .attr("fill", "white")
-      .attr("pointer-events", "none")
-      .attr("opacity", (d) => highlightActorId && d.type !== "Actor" && d.actorId !== highlightActorId ? 0.2 : 1)
-      .text((d) => d.type[0]);
+      // Type letter
+      g.append("text")
+        .attr("text-anchor", "middle")
+        .attr("dominant-baseline", "central")
+        .attr("font-size", d.type === "Actor" ? "11px" : "8px")
+        .attr("font-weight", "bold")
+        .attr("fill", "white")
+        .attr("pointer-events", "none")
+        .attr("opacity", fillOpacity)
+        .text(d.type[0]);
 
-    // Label below node
-    nodeSel.append("text")
-      .attr("text-anchor", "middle")
-      .attr("dy", (d) => nodeRadius(d.type) + 10)
-      .attr("font-size", "8px")
-      .attr("fill", "#d1d5db")
-      .attr("pointer-events", "none")
-      .attr("opacity", (d) => highlightActorId && d.type !== "Actor" && d.actorId !== highlightActorId ? 0.2 : 1)
-      .text((d) => d.label.length > 14 ? d.label.slice(0, 14) + "…" : d.label);
+      // Label below
+      g.append("text")
+        .attr("text-anchor", "middle")
+        .attr("dy", r + 11)
+        .attr("font-size", d.type === "Actor" ? "9px" : "7px")
+        .attr("fill", "#d1d5db")
+        .attr("pointer-events", "none")
+        .attr("opacity", fillOpacity)
+        .text(d.label.length > 16 ? d.label.slice(0, 16) + "…" : d.label);
+    });
 
-    // Tooltip events
+    // Tooltips
     nodeSel
       .on("mouseover", (event, d) => {
         const rect = containerRef.current!.getBoundingClientRect();
-        setTooltip({
-          visible: true,
-          x: event.clientX - rect.left + 12,
-          y: event.clientY - rect.top - 8,
-          node: d,
-        });
+        setTooltip({ visible: true, x: event.clientX - rect.left + 12, y: event.clientY - rect.top - 8, node: d });
       })
       .on("mousemove", (event) => {
         const rect = containerRef.current!.getBoundingClientRect();
@@ -226,10 +315,10 @@ export default function ConflictGraph({ nodes, edges, highlightActorId }: Props)
 
     // ── Simulation ──
     const simulation = d3.forceSimulation<GraphNode>(simNodes)
-      .force("link", d3.forceLink<GraphNode, any>(simEdges).id((d) => d.id).distance(80))
-      .force("charge", d3.forceManyBody().strength(-120))
+      .force("link", d3.forceLink<GraphNode, any>(simEdges).id((d) => d.id).distance(100))
+      .force("charge", d3.forceManyBody().strength(-150))
       .force("center", d3.forceCenter(width / 2, height / 2))
-      .force("collide", d3.forceCollide<GraphNode>(30))
+      .force("collide", d3.forceCollide<GraphNode>((d) => nodeRadius(d.type) + 8))
       .on("tick", () => {
         linkSel
           .attr("x1", (d) => (d.source as any).x ?? 0)
@@ -237,45 +326,76 @@ export default function ConflictGraph({ nodes, edges, highlightActorId }: Props)
           .attr("x2", (d) => (d.target as any).x ?? 0)
           .attr("y2", (d) => (d.target as any).y ?? 0);
 
+        // Edge labels follow midpoint, shown on hover
         linkLabelSel
           .attr("x", (d) => (((d.source as any).x ?? 0) + ((d.target as any).x ?? 0)) / 2)
-          .attr("y", (d) => (((d.source as any).y ?? 0) + ((d.target as any).y ?? 0)) / 2);
+          .attr("y", (d) => (((d.source as any).y ?? 0) + ((d.target as any).y ?? 0)) / 2)
+          .attr("opacity", (d) => {
+            const key = d.type + String((d.source as any).id) + String((d.target as any).id);
+            return key === hoveredEdge ? 1 : 0;
+          });
 
         nodeSel.attr("transform", (d) => `translate(${d.x ?? 0},${d.y ?? 0})`);
+
+        // Update mini-map
+        updateMiniMap(simNodes, width, height);
       });
 
     simulationRef.current = simulation;
+    simNodesRef.current = simNodes;
 
-    // Auto-fit after stabilisation
+    // Auto-fit
     simulation.on("end", () => {
       if (!svgRef.current || simNodes.length === 0) return;
       const xs = simNodes.map((n) => n.x ?? 0);
       const ys = simNodes.map((n) => n.y ?? 0);
-      const minX = Math.min(...xs) - 40;
-      const maxX = Math.max(...xs) + 40;
-      const minY = Math.min(...ys) - 40;
-      const maxY = Math.max(...ys) + 40;
+      const minX = Math.min(...xs) - 50;
+      const maxX = Math.max(...xs) + 50;
+      const minY = Math.min(...ys) - 50;
+      const maxY = Math.max(...ys) + 50;
       const scaleX = width / (maxX - minX || 1);
       const scaleY = height / (maxY - minY || 1);
       const scale = Math.min(scaleX, scaleY, 2);
       const tx = (width - scale * (minX + maxX)) / 2;
       const ty = (height - scale * (minY + maxY)) / 2;
-      svg.transition().duration(800).call(
-        zoom.transform,
-        d3.zoomIdentity.translate(tx, ty).scale(scale),
-      );
+      svg.transition().duration(800).call(zoom.transform, d3.zoomIdentity.translate(tx, ty).scale(scale));
     });
 
-    // Update prev ids
     prevNodeIdsRef.current = new Set(nodes.map((n) => n.id));
-  }, [nodes, edges]);
+  }, [nodes, edges, hoveredEdge]);
+
+  // ── Mini-map ──
+  const miniMapRef = useRef<SVGSVGElement>(null);
+  const MM_W = 120;
+  const MM_H = 70;
+
+  function updateMiniMap(simNodes: GraphNode[], fullW: number, fullH: number) {
+    if (!miniMapRef.current || simNodes.length === 0) return;
+    const mm = d3.select(miniMapRef.current);
+    const xs = simNodes.map((n) => n.x ?? 0);
+    const ys = simNodes.map((n) => n.y ?? 0);
+    const minX = Math.min(...xs) - 20, maxX = Math.max(...xs) + 20;
+    const minY = Math.min(...ys) - 20, maxY = Math.max(...ys) + 20;
+    const scaleX = MM_W / (maxX - minX || 1);
+    const scaleY = MM_H / (maxY - minY || 1);
+    const scale = Math.min(scaleX, scaleY);
+
+    mm.selectAll("circle.mm-node")
+      .data(simNodes)
+      .join("circle")
+      .attr("class", "mm-node")
+      .attr("cx", (d) => ((d.x ?? 0) - minX) * scale)
+      .attr("cy", (d) => ((d.y ?? 0) - minY) * scale)
+      .attr("r", (d) => Math.max(2, nodeRadius(d.type) * scale * 0.5))
+      .attr("fill", (d) => NODE_COLORS[d.type] ?? "#64748b")
+      .attr("opacity", 0.7);
+  }
 
   useEffect(() => {
     renderGraph();
     return () => { simulationRef.current?.stop(); };
   }, [renderGraph]);
 
-  // Re-render on resize
   useEffect(() => {
     const ro = new ResizeObserver(() => renderGraph());
     if (containerRef.current) ro.observe(containerRef.current);
@@ -304,34 +424,28 @@ export default function ConflictGraph({ nodes, edges, highlightActorId }: Props)
 
       {/* Zoom controls */}
       <div className="absolute top-3 right-3 flex flex-col gap-1">
-        <button
-          onClick={() => {
-            if (!svgRef.current || !zoomRef.current) return;
-            d3.select(svgRef.current).transition().duration(300).call(zoomRef.current.scaleBy, 1.4);
-          }}
-          className="w-7 h-7 rounded bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:text-white flex items-center justify-center text-sm font-bold"
-          title="Zoom in"
-        >+</button>
-        <button
-          onClick={() => {
-            if (!svgRef.current || !zoomRef.current) return;
-            d3.select(svgRef.current).transition().duration(300).call(zoomRef.current.scaleBy, 0.7);
-          }}
-          className="w-7 h-7 rounded bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:text-white flex items-center justify-center text-sm font-bold"
-          title="Zoom out"
-        >−</button>
-        <button
-          onClick={() => {
-            if (!svgRef.current || !zoomRef.current) return;
-            d3.select(svgRef.current).transition().duration(300).call(zoomRef.current.transform, d3.zoomIdentity);
-          }}
-          className="w-7 h-7 rounded bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:text-white flex items-center justify-center text-[9px] font-medium"
-          title="Fit all"
-        >Fit</button>
+        {[
+          { label: "+", action: () => svgRef.current && d3.select(svgRef.current).transition().duration(300).call(zoomRef.current!.scaleBy, 1.4) },
+          { label: "−", action: () => svgRef.current && d3.select(svgRef.current).transition().duration(300).call(zoomRef.current!.scaleBy, 0.7) },
+          { label: "Fit", action: () => svgRef.current && d3.select(svgRef.current).transition().duration(300).call(zoomRef.current!.transform, d3.zoomIdentity) },
+        ].map((btn) => (
+          <button
+            key={btn.label}
+            onClick={btn.action}
+            className="w-7 h-7 rounded bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:text-white flex items-center justify-center text-[10px] font-bold"
+          >
+            {btn.label}
+          </button>
+        ))}
       </div>
 
-      {/* Legend */}
-      <div className="absolute bottom-3 left-3 flex flex-wrap gap-1.5 max-w-xs">
+      {/* Mini-map */}
+      <div className="absolute top-3 left-3 bg-[var(--color-surface)]/80 border border-[var(--color-border)] rounded-lg overflow-hidden backdrop-blur-sm">
+        <svg ref={miniMapRef} width={MM_W} height={MM_H} className="block" />
+      </div>
+
+      {/* Node legend */}
+      <div className="absolute bottom-3 left-3 flex flex-wrap gap-x-3 gap-y-1 max-w-[180px]">
         {Object.entries(NODE_COLORS).map(([type, color]) => (
           <div key={type} className="flex items-center gap-1 text-[9px] text-[var(--color-text-muted)]">
             <span className="w-2 h-2 rounded-full inline-block" style={{ backgroundColor: color }} />
@@ -345,6 +459,7 @@ export default function ConflictGraph({ nodes, edges, highlightActorId }: Props)
         <div className="flex items-center gap-1"><span className="w-4 h-px bg-emerald-500 inline-block" /> Alignment</div>
         <div className="flex items-center gap-1"><span className="w-4 h-px bg-red-500 inline-block" /> Opposition</div>
         <div className="flex items-center gap-1"><span className="w-4 h-px bg-[#374151] inline-block" /> Relation</div>
+        <p className="text-[8px] opacity-50 italic">Hover edge for label</p>
       </div>
 
       {/* Tooltip */}
@@ -354,10 +469,7 @@ export default function ConflictGraph({ nodes, edges, highlightActorId }: Props)
           style={{ left: tooltip.x, top: tooltip.y }}
         >
           <div className="flex items-center gap-1.5 mb-1">
-            <span
-              className="w-2.5 h-2.5 rounded-full shrink-0"
-              style={{ backgroundColor: NODE_COLORS[tooltip.node.type] ?? "#64748b" }}
-            />
+            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: NODE_COLORS[tooltip.node.type] ?? "#64748b" }} />
             <span className="text-[10px] font-mono uppercase tracking-wider text-[var(--color-text-muted)]">
               {tooltip.node.type}
             </span>
