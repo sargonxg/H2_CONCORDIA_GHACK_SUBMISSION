@@ -45,7 +45,7 @@ import {
   analyzePathways,
   summarizeCase,
 } from "@/services/gemini-client";
-import type { Actor, Primitive, PrimitiveType, Case, LiveMediationState, OntologyStats, PartyProfile, GapNotification, CaseSummary, TimelineEntry, PrimitiveCluster } from "@/lib/types";
+import type { Actor, Primitive, PrimitiveType, Case, LiveMediationState, OntologyStats, PartyProfile, GapNotification, CaseSummary, TimelineEntry, PrimitiveCluster, Agreement, EscalationFlag, SolutionProposal } from "@/lib/types";
 import { safeJsonParse } from "@/lib/utils";
 import { useConflictGraph } from "@/hooks/useConflictGraph";
 import ConflictGraph from "@/components/workspace/ConflictGraph";
@@ -270,6 +270,10 @@ export default function Workspace() {
 
   const [liveMediationState, setLiveMediationState] = useState<LiveMediationState | null>(null);
   const [gapNotifications, setGapNotifications] = useState<GapNotification[]>([]);
+  const [agreements, setAgreements] = useState<Agreement[]>([]);
+  const [escalationScore, setEscalationScore] = useState(0);
+  const [activeProposal, setActiveProposal] = useState<SolutionProposal | null>(null);
+  const [escalationBanner, setEscalationBanner] = useState<EscalationFlag | null>(null);
 
   const [demoMode, setDemoMode] = useState(false);
   const demoTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -557,6 +561,62 @@ export default function Workspace() {
                       id: call.id,
                       name: call.name,
                       response: { result: "Gap notification displayed" },
+                    };
+                  }
+                  if (call.name === "captureAgreement") {
+                    const args = call.args;
+                    const agreement: Agreement = {
+                      id: Date.now().toString() + Math.random(),
+                      topic: args.topic || "",
+                      terms: args.terms || "",
+                      conditions: args.conditions || [],
+                      partyAAccepts: args.partyAAccepts ?? false,
+                      partyBAccepts: args.partyBAccepts ?? false,
+                      timestamp: new Date().toISOString(),
+                    };
+                    setAgreements((prev) => [...prev, agreement]);
+                    return {
+                      id: call.id,
+                      name: call.name,
+                      response: { result: "Agreement captured successfully" },
+                    };
+                  }
+                  if (call.name === "flagEscalation") {
+                    const args = call.args;
+                    const flag: EscalationFlag = {
+                      id: Date.now().toString() + Math.random(),
+                      trigger: args.trigger || "",
+                      category: args.category || "",
+                      severity: args.severity ?? 5,
+                      affectedParty: args.affectedParty || "Both",
+                      deEscalationTechnique: args.deEscalationTechnique || "",
+                      timestamp: new Date().toISOString(),
+                    };
+                    setEscalationScore((prev) => Math.min(100, prev + (args.severity ?? 5) * 10));
+                    setEscalationBanner(flag);
+                    setTimeout(() => setEscalationBanner(null), 8000);
+                    return {
+                      id: call.id,
+                      name: call.name,
+                      response: { result: "Escalation flagged and de-escalation displayed" },
+                    };
+                  }
+                  if (call.name === "proposeSolution") {
+                    const args = call.args;
+                    const proposal: SolutionProposal = {
+                      id: Date.now().toString() + Math.random(),
+                      title: args.title || "",
+                      description: args.description || "",
+                      framework: args.framework,
+                      addressesPartyANeeds: args.addressesPartyANeeds || [],
+                      addressesPartyBNeeds: args.addressesPartyBNeeds || [],
+                      timestamp: new Date().toISOString(),
+                    };
+                    setActiveProposal(proposal);
+                    return {
+                      id: call.id,
+                      name: call.name,
+                      response: { result: "Solution proposal displayed" },
                     };
                   }
                   return {
@@ -1400,6 +1460,28 @@ export default function Workspace() {
       );
       setExtractionNotice(true);
       setTimeout(() => setExtractionNotice(false), 3000);
+      // Inject ontology gap summary into the live session for context-aware follow-up
+      if (sessionRef.current?.sendContext) {
+        const updatedCase = casesRef.current.find((c) => c.id === activeCaseIdRef.current);
+        if (updatedCase) {
+          const typeCounts: Record<string, number> = {};
+          updatedCase.primitives.forEach((p) => {
+            typeCounts[p.type] = (typeCounts[p.type] || 0) + 1;
+          });
+          const missingTypes = (["Claim", "Interest", "Constraint", "Leverage", "Commitment", "Event", "Narrative"] as const)
+            .filter((t) => !typeCounts[t]);
+          const summary =
+            `[System Context] Ontology update: ${updatedCase.primitives.length} primitives across ${updatedCase.actors.length} actors. ` +
+            (missingTypes.length > 0
+              ? `Missing types: ${missingTypes.join(", ")}. Consider probing for these.`
+              : "All primitive types represented.");
+          try {
+            sessionRef.current.sendContext(summary);
+          } catch (e) {
+            console.warn("[AutoExtract] Failed to send context:", e);
+          }
+        }
+      }
     } catch (err) {
       console.warn("[AutoExtract] Background extraction failed:", err);
     }
@@ -2076,6 +2158,36 @@ export default function Workspace() {
         ))}
       </AnimatePresence>
 
+      {/* ─── ESCALATION BANNER ─── */}
+      <AnimatePresence>
+        {escalationBanner && (
+          <motion.div
+            key={escalationBanner.id}
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="px-6 shrink-0"
+          >
+            <div className="mt-2 p-3 rounded-lg border border-red-500/40 bg-red-500/10 flex items-start gap-3">
+              <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className="text-[9px] font-mono uppercase tracking-wider text-red-400">
+                    Escalation · {escalationBanner.category}
+                  </span>
+                  <span className="text-[9px] text-red-400/60">Severity {escalationBanner.severity}/10</span>
+                </div>
+                <p className="text-xs text-white mb-1">{escalationBanner.trigger}</p>
+                <p className="text-[11px] text-emerald-400 italic">De-escalation: {escalationBanner.deEscalationTechnique}</p>
+              </div>
+              <button onClick={() => setEscalationBanner(null)} className="text-red-400/60 hover:text-white transition-colors shrink-0">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* ─── ONTOLOGY HEALTH BANNER ─── */}
       <AnimatePresence>
         {healthScore < 50 && activeCase && activeCase.primitives.length > 0 && (
@@ -2268,6 +2380,93 @@ export default function Workspace() {
                 </ul>
               </motion.div>
             )}
+
+          {/* ── Active Proposal Card ── */}
+          <AnimatePresence>
+            {activeProposal && (
+              <motion.div
+                key={activeProposal.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="bg-gradient-to-b from-indigo-500/10 to-transparent border border-indigo-500/30 rounded-xl p-4"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-[10px] font-mono uppercase tracking-wider text-indigo-400 flex items-center gap-1.5">
+                    <Lightbulb className="w-3.5 h-3.5" /> Proposal
+                  </h3>
+                  <button onClick={() => setActiveProposal(null)} className="text-indigo-400/50 hover:text-white transition-colors">
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+                <p className="text-xs font-bold text-white mb-1">{activeProposal.title}</p>
+                {activeProposal.framework && (
+                  <span className="text-[9px] font-mono uppercase text-indigo-400/70">{activeProposal.framework}</span>
+                )}
+                <p className="text-[11px] text-[var(--color-text-muted)] mt-1 leading-relaxed">{activeProposal.description}</p>
+                {activeProposal.addressesPartyANeeds.length > 0 && (
+                  <div className="mt-2">
+                    <div className="text-[9px] uppercase tracking-wider text-sky-400 mb-1">Addresses Party A</div>
+                    <ul className="space-y-0.5">
+                      {activeProposal.addressesPartyANeeds.map((n, i) => (
+                        <li key={i} className="text-[10px] text-sky-200 flex items-start gap-1">
+                          <CheckCircle2 className="w-2.5 h-2.5 text-sky-500 mt-0.5 shrink-0" />{n}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {activeProposal.addressesPartyBNeeds.length > 0 && (
+                  <div className="mt-2">
+                    <div className="text-[9px] uppercase tracking-wider text-violet-400 mb-1">Addresses Party B</div>
+                    <ul className="space-y-0.5">
+                      {activeProposal.addressesPartyBNeeds.map((n, i) => (
+                        <li key={i} className="text-[10px] text-violet-200 flex items-start gap-1">
+                          <CheckCircle2 className="w-2.5 h-2.5 text-violet-500 mt-0.5 shrink-0" />{n}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* ── Agreements Panel ── */}
+          {agreements.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-[var(--color-surface)] border border-emerald-500/30 rounded-xl p-4"
+            >
+              <h3 className="text-[10px] font-mono uppercase tracking-wider text-emerald-400 mb-2 flex items-center gap-1.5">
+                <Shield className="w-3.5 h-3.5" /> Agreements ({agreements.length})
+              </h3>
+              <div className="space-y-2">
+                {agreements.slice(-3).map((ag) => (
+                  <div key={ag.id} className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-2.5">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <span className="text-[10px] font-bold text-emerald-300">{ag.topic}</span>
+                      <div className="flex gap-1 ml-auto">
+                        <span className={`text-[8px] px-1 rounded font-mono ${ag.partyAAccepts ? "text-emerald-400 bg-emerald-400/10" : "text-gray-500 bg-gray-500/10"}`}>A</span>
+                        <span className={`text-[8px] px-1 rounded font-mono ${ag.partyBAccepts ? "text-emerald-400 bg-emerald-400/10" : "text-gray-500 bg-gray-500/10"}`}>B</span>
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-[var(--color-text-muted)] leading-relaxed">{ag.terms}</p>
+                    {ag.conditions.length > 0 && (
+                      <ul className="mt-1 space-y-0.5">
+                        {ag.conditions.map((c, i) => (
+                          <li key={i} className="text-[9px] text-amber-300 flex items-start gap-1">
+                            <span className="text-amber-500 shrink-0">•</span>{c}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          )}
         </div>
 
         {/* ─── CENTER: Tabbed Content ─── */}

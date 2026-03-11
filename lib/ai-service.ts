@@ -151,7 +151,7 @@ function buildToolDeclarations(): any[] {
         currentAction: {
           type: Type.STRING,
           description:
-            "Brief mediator reasoning — include which framework you're drawing on (e.g. '[Fisher & Ury] Reframing positions as interests...')",
+            "Mediator reasoning formatted as: '[Framework] Action | Next: planned follow-up'. Example: '[Fisher & Ury] Reframing position as interest | Next: Ask Party B to react'",
         },
         missingItems: {
           type: Type.ARRAY,
@@ -177,6 +177,30 @@ function buildToolDeclarations(): any[] {
             partyB: partyProfileSchema,
           },
           description: "Deep psychological profiles for both parties",
+        },
+        discoveryProgress: {
+          type: Type.OBJECT,
+          description: "Tracks the 3-round Discovery protocol completion per party",
+          properties: {
+            currentParty: {
+              type: Type.STRING,
+              description: "partyA|partyB — who is currently being interviewed",
+            },
+            currentRound: {
+              type: Type.STRING,
+              description: "narrative|emotion|interests — current Discovery round",
+            },
+            partyARoundsComplete: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING },
+              description: "Completed rounds for partyA: narrative, emotion, interests",
+            },
+            partyBRoundsComplete: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING },
+              description: "Completed rounds for partyB: narrative, emotion, interests",
+            },
+          },
         },
         commonGround: {
           type: Type.ARRAY,
@@ -262,7 +286,117 @@ function buildToolDeclarations(): any[] {
     },
   };
 
-  return [updateMediationState, requestMissingInformation];
+  const captureAgreement: any = {
+    name: "captureAgreement",
+    description:
+      "Call when parties reach a concrete agreement or conditional commitment on any point. Captures exact terms for the agreement tracker. Use this for partial agreements too — any positive commitment is worth capturing.",
+    ...nonBlocking,
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        topic: {
+          type: Type.STRING,
+          description: "What the agreement is about",
+        },
+        terms: {
+          type: Type.STRING,
+          description: "The exact agreed terms, as specific as possible",
+        },
+        conditions: {
+          type: Type.ARRAY,
+          items: { type: Type.STRING },
+          description: "Any conditions or caveats attached to this agreement",
+        },
+        partyAAccepts: {
+          type: Type.BOOLEAN,
+          description: "Has partyA accepted or expressed agreement?",
+        },
+        partyBAccepts: {
+          type: Type.BOOLEAN,
+          description: "Has partyB accepted or expressed agreement?",
+        },
+      },
+      required: ["topic", "terms", "partyAAccepts", "partyBAccepts"],
+    },
+  };
+
+  const flagEscalation: any = {
+    name: "flagEscalation",
+    description:
+      "Call IMMEDIATELY when you detect escalation signals: blame, contempt, threats, stonewalling, or emotional flooding (Gottman's Four Horsemen). Do not wait. Apply de-escalation before continuing.",
+    ...nonBlocking,
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        trigger: {
+          type: Type.STRING,
+          description: "The specific phrase or behaviour that triggered escalation",
+        },
+        category: {
+          type: Type.STRING,
+          description: "blame|contempt|threat|stonewalling|flooding",
+        },
+        severity: {
+          type: Type.NUMBER,
+          description: "1-10 severity score (10 = crisis level)",
+        },
+        affectedParty: {
+          type: Type.STRING,
+          description: "Which party is escalating or most affected",
+        },
+        deEscalationTechnique: {
+          type: Type.STRING,
+          description:
+            "The de-escalation technique you are applying (label/validate/circuit-break/caucus/reframe)",
+        },
+      },
+      required: ["trigger", "category", "severity", "affectedParty", "deEscalationTechnique"],
+    },
+  };
+
+  const proposeSolution: any = {
+    name: "proposeSolution",
+    description:
+      "Propose a concrete resolution option during the Negotiation or Resolution phase. Displays as a highlighted solution card in the UI so both parties can see it. Call this whenever a promising option emerges.",
+    ...nonBlocking,
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        title: {
+          type: Type.STRING,
+          description: "Short title for the proposed solution",
+        },
+        description: {
+          type: Type.STRING,
+          description: "Full description of the proposed solution",
+        },
+        framework: {
+          type: Type.STRING,
+          description:
+            "Which mediation framework this draws from (e.g. 'Fisher & Ury', 'Transformative')",
+        },
+        addressesPartyANeeds: {
+          type: Type.ARRAY,
+          items: { type: Type.STRING },
+          description: "List of partyA's interests or needs this solution addresses",
+        },
+        addressesPartyBNeeds: {
+          type: Type.ARRAY,
+          items: { type: Type.STRING },
+          description: "List of partyB's interests or needs this solution addresses",
+        },
+      },
+      required: ["title", "description"],
+    },
+  };
+
+  return [
+    updateMediationState,
+    requestMissingInformation,
+    captureAgreement,
+    flagEscalation,
+    proposeSolution,
+  ];
 }
 
 // ── Live Audio Session ──
@@ -321,6 +455,21 @@ CORE PROTOCOL — PHASE PROGRESSION
 5. RESOLUTION — Narrow to viable pathways. Test agreements: "If X happened, would that address your concern about Y?"
 
 6. AGREEMENT — Summarize what has been agreed. Confirm with both parties. Outline next steps clearly.
+
+═══════════════════════════════════════════
+PHASE TRANSITION GATES (verify ALL before advancing)
+═══════════════════════════════════════════
+
+Opening → Discovery:   BOTH parties have stated what brought them here. Ground rules acknowledged.
+Discovery → Exploration: All 3 rounds (narrative/emotion/interests) complete for BOTH parties. Minimum: 2 Interests + 1 Narrative per party.
+Exploration → Negotiation: ≥1 Common Ground item identified. ZOPA assessment attempted. Both parties' narratives cross-referenced.
+Negotiation → Resolution: ≥2 resolution options generated. Both parties have reacted to each.
+Resolution → Agreement: ≥1 pathway accepted or conditionally agreed. Implementation steps discussed.
+
+NEVER skip a phase. Announce transitions explicitly:
+  "We've now heard from both of you in depth. I'd like to move into the Exploration phase, where we'll look at these perspectives together."
+Use the 'captureAgreement' tool whenever a partial or full agreement is reached on any point.
+Use 'flagEscalation' the moment you detect blame, contempt, threats, stonewalling, or emotional flooding.
 
 ═══════════════════════════════════════════
 CONFLICT STRUCTURE GRAMMAR (TACITUS 8 Primitives)
@@ -409,6 +558,25 @@ Level 4 (86–100): Crisis protocol — "I think it would be helpful to speak wi
 After every escalation event: update riskAssessment.escalation in partyProfiles.
 
 ═══════════════════════════════════════════
+ADVANCED TACTICS
+═══════════════════════════════════════════
+
+REALITY TESTING: "If we think about this from ${partyNames.partyB}'s perspective, what might they say?" — use to gently challenge fixed positions.
+CAUCUS SIMULATION: "I'd like to check in with each of you individually for a moment." — address each party separately when trust is low or tension is high.
+BRIDGING: When interests overlap — "I notice you both value [X]. What if we used that as a foundation for an agreement?" — always call captureAgreement if they respond positively.
+LOOPING: Periodically summarize and confirm — "Let me reflect back what I've heard from you so far. Did I capture that correctly?" — use at least once per Discovery round.
+IMPASSE BREAKING: "Imagine we're one year from now and this conflict has been fully resolved. What happened?" — use when both parties seem stuck.
+POWER BALANCING: Give more airtime to the quieter party. Open with their name. Explicitly validate their contributions before moving on.
+
+EMOTIONAL INTELLIGENCE:
+  - LABEL before probing: "I can hear the frustration in your voice."
+  - VALIDATE without agreeing: "It makes complete sense that you'd feel that way given what you've described."
+  - DIFFERENTIATE: Help parties separate the emotion (valid) from the interpretation (may be incomplete) from the demand (may not serve their deepest interest).
+  - SILENCE: After emotional moments, pause. Do not rush to fill the silence. Let it land.
+
+SOLUTION PROPOSALS: When a promising option emerges during Negotiation, call 'proposeSolution' immediately to display it visibly in the UI, then ask both parties to react.
+
+═══════════════════════════════════════════
 CRITICAL BEHAVIORAL RULES
 ═══════════════════════════════════════════
 - ALWAYS call 'updateMediationState' BEFORE you speak.
@@ -417,7 +585,8 @@ CRITICAL BEHAVIORAL RULES
 - ALWAYS validate emotion before probing.
 - ALWAYS announce structure updates aloud before calling updateMediationState.
 - ALWAYS cross-reference the other party's statements during Exploration.
-- Keep responses concise: 2-4 sentences per turn. Calm, measured, empathetic, authoritative.`;
+- Keep responses concise: 2-4 sentences per turn. Calm, measured, empathetic, authoritative.
+- Format 'currentAction' as: "[Framework] Action | Next: planned follow-up" — e.g. "[Fisher & Ury] Reframing position as interest | Next: Ask ${partyNames.partyB} to react"`;
 }
 
 export const createLiveSession = (
