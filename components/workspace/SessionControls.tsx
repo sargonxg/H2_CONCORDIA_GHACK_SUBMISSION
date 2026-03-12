@@ -74,22 +74,24 @@ export default function SessionControls({
   hasAgreements = false,
 }: Props) {
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex items-center gap-2 flex-wrap">
       {/* Summary */}
       <button
         onClick={onGenerateSummary}
         disabled={!hasTranscript || summaryLoading}
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:text-white hover:border-[var(--color-accent)] transition-colors disabled:opacity-40"
+        aria-label="Generate case summary"
+        className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:text-white hover:border-[var(--color-accent)] transition-colors disabled:opacity-40"
         title="Generate Case Summary (Ctrl+Shift+S)"
       >
         <BookOpen className="w-4 h-4" />
-        Summary
+        <span className="hidden md:inline">Summary</span>
       </button>
 
       {/* Settings */}
       <div className="relative">
         <button
           onClick={() => setShowSettings(!showSettings)}
+          aria-label="Mediator settings"
           className="p-2 hover:bg-[var(--color-surface-hover)] rounded-md text-[var(--color-text-muted)] hover:text-white transition-colors"
           title="Mediator Settings"
         >
@@ -172,10 +174,11 @@ export default function SessionControls({
       <div className="relative">
         <button
           onClick={() => setShowExport(!showExport)}
+          aria-label="Export case data"
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:text-white hover:border-[var(--color-accent)] transition-colors"
         >
           <Download className="w-4 h-4" />
-          Export
+          <span className="hidden md:inline">Export</span>
         </button>
         {showExport && (
           <div className="absolute top-full right-0 mt-1 w-52 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl shadow-xl z-50 overflow-hidden">
@@ -283,27 +286,30 @@ export default function SessionControls({
       {isRecording ? (
         <button
           onClick={onStop}
-          className="flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 transition-all"
+          aria-label="End session"
+          className="flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 transition-all"
         >
           <Square className="w-4 h-4" />
-          End Session
+          <span className="hidden sm:inline">End Session</span>
         </button>
       ) : (
         <div className="flex items-center gap-2">
           <button
             onClick={onStart}
+            aria-label="Start live session"
             title="Start live session (Space)"
-            className="flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] shadow-lg shadow-[var(--color-accent)]/20 transition-all"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] shadow-lg shadow-[var(--color-accent)]/20 transition-all"
           >
             <Mic className="w-4 h-4" />
-            Start Session
+            <span className="hidden sm:inline">Start Session</span>
           </button>
           <button
             onClick={onDemo}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium bg-amber-500/10 text-amber-400 border border-amber-500/30 hover:bg-amber-500/20 text-sm transition-all"
+            aria-label="Start demo session"
+            className="hidden sm:flex items-center gap-2 px-3 py-2.5 rounded-lg font-medium bg-amber-500/10 text-amber-400 border border-amber-500/30 hover:bg-amber-500/20 text-sm transition-all"
           >
             <Activity className="w-4 h-4" />
-            Demo
+            <span className="hidden md:inline">Demo</span>
           </button>
         </div>
       )}
