@@ -1,4 +1,4 @@
-import { GoogleGenAI, Type, Modality, Behavior } from "@google/genai";
+import { GoogleGenAI, Type, Modality, Behavior, EndSensitivity, ActivityHandling } from "@google/genai";
 import fs from "fs";
 import path from "path";
 import os from "os";
@@ -734,21 +734,59 @@ export const createLiveSession = (
       (resumptionHandle ? " (resuming session)" : " (new session)"),
   );
 
+  // ── Vertex AI-exclusive Live API features ─────────────────────────────────
+  //
+  //  enableAffectiveDialog  — model reads vocal emotion (tone, pace, tremor)
+  //                           for empathic response tuning and early flooding
+  //                           detection before words signal distress.
+  //
+  //  proactivity.proactiveAudio — co-listener mode: model does NOT auto-respond
+  //                               to every audio chunk. It listens silently while
+  //                               parties speak to each other and only interrupts
+  //                               when it detects escalation, a natural pause, or
+  //                               a direct address. Essential for mediation.
+  //
+  //  realtimeInputConfig — voice activity detection (VAD) tuning:
+  //    • END_SENSITIVITY_LOW   — more tolerant of pauses. Prevents the model
+  //                              cutting off speakers in the middle of emotional
+  //                              sentences where people pause to gather thoughts.
+  //    • silenceDurationMs:2500 — 2.5s of silence required before turn ends.
+  //                               Standard is ~500ms; 2.5s is better for mediation
+  //                               where emotional speakers often pause mid-sentence.
+  //    • NO_INTERRUPTION_HANDLING — model does not interrupt when new speech begins;
+  //                                 it waits to finish its response first. Prevents
+  //                                 the AI from talking over a party.
+  //
+  // ⚠️  ALL THREE are Vertex AI-only. API key mode rejects them with code=1007
+  //     "Unknown name" and closes the session immediately. Never include without
+  //     the _useVertexAI guard below.
+  //
+  // ⚠️  thinkingConfig is NOT a valid LiveConnectConfig field (generateContent only).
+  //     Including it causes immediate session close. DO NOT add it here.
+  // ───────────────────────────────────────────────────────────────────────────
+
+  const vertexOnlyConfig = _useVertexAI
+    ? {
+        enableAffectiveDialog: true,
+        proactivity: { proactiveAudio: true },
+        realtimeInputConfig: {
+          automaticActivityDetection: {
+            // Low end-of-speech sensitivity = more tolerant of pauses mid-sentence.
+            // Mediation parties often pause when emotional — we don't want to cut them off.
+            endOfSpeechSensitivity: EndSensitivity.END_SENSITIVITY_LOW,
+            // 2.5s of silence before the model considers a turn complete.
+            silenceDurationMs: 2500,
+          },
+          // Do not interrupt ongoing model speech when the user starts talking.
+          // Prevents the AI from talking over a party during emotional moments.
+          activityHandling: ActivityHandling.NO_INTERRUPTION,
+        },
+      }
+    : {};
+
   const config: any = {
     responseModalities: [Modality.AUDIO],
-    // ⚠️  enableAffectiveDialog and proactivity are Vertex AI-only features.
-    // The Gemini API key mode rejects them with code=1007 "Unknown name" error,
-    // closing the session immediately. Only include them in Vertex AI mode.
-    ...(_useVertexAI
-      ? {
-          enableAffectiveDialog: true,
-          proactivity: { proactiveAudio: true },
-        }
-      : {}),
-    // ⚠️  thinkingConfig is NOT a valid LiveConnectConfig field — it belongs in
-    // generateContent only. Including it here causes the Gemini API to reject the
-    // session and close the WebSocket immediately with no error message.
-    // DO NOT re-add thinkingConfig here.
+    ...vertexOnlyConfig,
     speechConfig: {
       voiceConfig: {
         prebuiltVoiceConfig: { voiceName: mediatorProfile.voice },
@@ -760,22 +798,34 @@ export const createLiveSession = (
       partyNames,
       context,
     ),
+    // Transcribe both parties' speech and the model's own speech.
+    // Results arrive as message.serverContent.inputTranscription.text
+    // and message.serverContent.outputTranscription.text respectively.
     inputAudioTranscription: {},
     outputAudioTranscription: {},
-    // Compress context window to keep long sessions alive (8K token sliding window)
+    // Sliding window compression keeps long mediation sessions (30min+) alive
+    // by summarizing older context instead of dropping it.
     contextWindowCompression: {
-      slidingWindow: {
-        targetTokens: 8192,
-      },
+      slidingWindow: {},
     },
-    // Enable session resumption — only include when actually resuming a prior session.
-    // An empty sessionResumption: {} can cause unexpected behavior on some API versions.
+    // Session resumption: {} enables handle tracking for the new session.
+    // Pass the handle when actually resuming a dropped session.
     ...(resumptionHandle
       ? { sessionResumption: { handle: resumptionHandle } }
       : { sessionResumption: {} }),
   };
 
-  console.log(`[Live] Connecting — model: ${_MODEL_LIVE}, voice: ${mediatorProfile.voice}, resume: ${!!resumptionHandle}`);
+  const activeFeatures = [
+    _useVertexAI ? "affectiveDialog" : null,
+    _useVertexAI ? "proactiveAudio" : null,
+    _useVertexAI ? "VAD(END_SENSITIVITY_LOW,2500ms,NO_INTERRUPT)" : null,
+    "transcription(in+out)",
+    "contextCompression",
+    "sessionResumption",
+  ].filter(Boolean).join(" | ");
+
+  console.log(`[Live] model=${_MODEL_LIVE} voice=${mediatorProfile.voice} resume=${!!resumptionHandle}`);
+  console.log(`[Live] features: ${activeFeatures}`);
 
   return ai.live.connect({
     model: _MODEL_LIVE,

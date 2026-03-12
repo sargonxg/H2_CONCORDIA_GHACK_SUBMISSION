@@ -74,10 +74,18 @@ export function handleWebSocketConnection(ws: WebSocket) {
               return;
             }
 
-            // Gate audio when a tool call is pending — prevents 1008 policy violation
+            // Gate audio when a tool call is pending — prevents 1008 policy violation.
+            // Safety: auto-clear after 8 s in case the browser never sends a tool response
+            // (e.g. tab hidden, JS freeze) — avoids permanently blocking the audio stream.
             if (message.toolCall) {
               console.log("[Live] Tool call received, gating audio input");
               toolCallPending = true;
+              setTimeout(() => {
+                if (toolCallPending) {
+                  console.warn("[Live] Tool response not received within 8s — re-enabling audio");
+                  toolCallPending = false;
+                }
+              }, 8000);
             }
 
             // Handle thinking content — log for debugging, don't forward to client
