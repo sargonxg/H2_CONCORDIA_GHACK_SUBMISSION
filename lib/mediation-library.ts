@@ -1352,6 +1352,239 @@ export const FRAMEWORKS: FrameworkEntry[] = [
     glaslStages: "2-7",
     tacitusPrimitives: ["Event", "Narrative", "Actor", "Interest"],
   },
+
+  // ── 21. Adam Curle — Progression Model ──────────────────────────────────
+  {
+    id: "curle",
+    name: "Conflict Progression Model",
+    shortName: "Curle",
+    authors: ["Adam Curle"],
+    year: 1971,
+    seminalWork: "Making Peace (1971)",
+    category: "transformation",
+    corePrinciples: [
+      "Conflicts progress through four stages based on awareness and power balance",
+      "Stage 1 — Latent: parties unaware of conflict or imbalance; needs EDUCATION",
+      "Stage 2 — Confrontation: aware but power-imbalanced; needs ADVOCACY to equalize power",
+      "Stage 3 — Negotiation: aware and roughly balanced; ready for MEDIATION",
+      "Stage 4 — Sustainable Peace: resolved and maintained; needs ONGOING MAINTENANCE",
+      "Mediation only works at Stage 3 — attempting it earlier fails or entrenches power imbalance",
+    ],
+    keyTechniques: [
+      {
+        name: "Readiness Assessment",
+        description:
+          "Evaluate both awareness of the conflict and power balance before choosing an intervention. Mediation is only appropriate when both are present.",
+        whenToUse: "At intake; before recommending mediation as the appropriate intervention.",
+      },
+      {
+        name: "Power Equalization",
+        description:
+          "Advocate for structural changes or coaching the less powerful party before bringing parties to the table.",
+        whenToUse: "When one party is significantly less resourced, informed, or empowered than the other.",
+      },
+      {
+        name: "Stage-Appropriate Intervention",
+        description:
+          "Match intervention type to conflict stage: education (Stage 1), advocacy (Stage 2), mediation (Stage 3), maintenance support (Stage 4).",
+        whenToUse: "Any intake assessment; reassess at each phase transition.",
+      },
+    ],
+    diagnosticQuestions: [
+      "Are both parties aware this conflict exists and what it involves?",
+      "Is there a significant power imbalance — legal, financial, informational — that should be addressed before mediation?",
+      "Is mediation the right tool here, or do we need advocacy or education first?",
+      "What would need to change for both parties to be genuinely ready to negotiate?",
+      "If an agreement is reached, who will maintain it and prevent regression?",
+    ],
+    bestFor: [
+      "Assessing readiness for mediation",
+      "Power-imbalanced disputes (employer/employee, landlord/tenant)",
+      "Community and structural conflicts",
+      "Cases where one party is more legally or financially sophisticated",
+    ],
+    limitations: [
+      "Requires honest assessment of power balance — can be uncomfortable to acknowledge",
+      "Advocacy phase may not be neutral — can feel like taking sides",
+      "Stage boundaries are not always clear-cut in practice",
+    ],
+    glaslStages: "1-6",
+    tacitusPrimitives: ["Leverage", "Constraint", "Event"],
+  },
+
+  // ── 22. Peter Coleman — Intractable Conflicts ────────────────────────────
+  {
+    id: "coleman",
+    name: "The Five Percent: Intractable Conflicts",
+    shortName: "Coleman",
+    authors: ["Peter T. Coleman"],
+    year: 2011,
+    seminalWork: "The Five Percent: Finding Solutions to Seemingly Impossible Conflicts (2011)",
+    category: "analysis",
+    corePrinciples: [
+      "~5% of conflicts become self-perpetuating 'attractor states' where conflict is the stable equilibrium",
+      "Attractor dynamics: feedback loops of grievance, narrative, and identity lock the conflict in place",
+      "Traditional resolution tactics (compromise, dialogue) fail or backfire in attractor conflicts",
+      "Required approach: PERTURBATION — disrupting the attractor landscape rather than negotiating within it",
+      "Complexity-aware mediation: introduce novelty (new information, new actors, new framings) to destabilize the pattern",
+    ],
+    keyTechniques: [
+      {
+        name: "Attractor Mapping",
+        description:
+          "Identify the feedback loops maintaining the conflict: which narratives, identities, relationships, and grievances keep pulling parties back into conflict?",
+        whenToUse: "When a conflict has persisted across multiple resolution attempts.",
+      },
+      {
+        name: "Perturbation Strategy",
+        description:
+          "Introduce strategic disruptions: new information that challenges core narratives, new actors who reframe the conflict, or changed circumstances that alter cost-benefit calculus.",
+        whenToUse: "When parties are deeply entrenched and conventional dialogue has failed repeatedly.",
+      },
+      {
+        name: "Complexity Diagnosis",
+        description:
+          "Ask: 'Is this conflict simple (resolve it), complicated (expertise needed), or complex (emergent — need to perturb)?' Choose intervention type accordingly.",
+        whenToUse: "At intake for long-running disputes; when prior mediation attempts have failed.",
+      },
+    ],
+    diagnosticQuestions: [
+      "Has this conflict become self-sustaining — does it persist even when circumstances change?",
+      "What feedback loops maintain it? What keeps pulling parties back into conflict?",
+      "Have previous resolution attempts failed or made things worse?",
+      "What new information, actor, or framing could disrupt the current attractor?",
+      "Is the goal here resolution, or destabilization of the conflict pattern?",
+    ],
+    bestFor: [
+      "Long-running disputes that have resisted prior resolution",
+      "Organizational conflicts where parties seem invested in the conflict itself",
+      "Family feuds and deeply entrenched personal conflicts",
+      "Identity-based conflicts with strong narrative lock-in",
+    ],
+    limitations: [
+      "Requires deep diagnostic work before intervention can be designed",
+      "Perturbation strategies carry risk of making things worse",
+      "Not appropriate for simple or first-occurrence disputes",
+    ],
+    glaslStages: "4-9",
+    tacitusPrimitives: ["Narrative", "Event", "Constraint", "Leverage"],
+  },
+
+  // ── 23. Ury/Brett/Goldberg — Interest-Rights-Power ──────────────────────
+  {
+    id: "ury-brett-goldberg",
+    name: "Interest-Rights-Power Framework",
+    shortName: "Ury/Brett/Goldberg",
+    authors: ["William Ury", "Jeanne Brett", "Stephen Goldberg"],
+    year: 1988,
+    seminalWork: "Getting Disputes Resolved: Designing Systems to Cut the Costs of Conflict (1988)",
+    category: "analysis",
+    corePrinciples: [
+      "Disputes can be resolved via three mechanisms: reconciling INTERESTS (cheapest, most durable), adjudicating RIGHTS (moderate cost), or exercising POWER (most costly, least durable)",
+      "The escalation ladder: unresolved interests → rights contest → power struggle",
+      "Good dispute systems build 'loop-back' procedures moving parties from power → rights → interests",
+      "Prevention beats resolution: design systems that resolve disputes at the interest level before they escalate",
+      "Cost of conflict has three components: transaction costs, satisfaction, and effects on the relationship",
+    ],
+    keyTechniques: [
+      {
+        name: "Mechanism Diagnosis",
+        description:
+          "Identify which mechanism parties are currently using: are they fighting with power, arguing rights, or exploring interests? The diagnosis determines the intervention.",
+        whenToUse: "At intake and at any impasse; shapes the entire intervention strategy.",
+      },
+      {
+        name: "Loop-Back Procedure",
+        description:
+          "When parties are in a rights or power contest, create a pathway back to interest-based dialogue before the expensive mechanism runs its course.",
+        whenToUse: "When parties have escalated to litigation, arbitration, or coercive tactics.",
+      },
+      {
+        name: "Dispute System Design",
+        description:
+          "For recurring disputes (organizational, labor-management), design a system with interest-based procedures as the first step, rights procedures as backup, and power procedures as last resort.",
+        whenToUse: "Organizational mediation; designing HR or community dispute processes.",
+      },
+    ],
+    diagnosticQuestions: [
+      "Are parties currently fighting with power, arguing rights, or exploring interests?",
+      "How do we loop them back toward interest-based dialogue?",
+      "What is the total cost of this conflict — transaction costs, satisfaction, relationship damage?",
+      "Is there a rights-based standard (law, contract, precedent) both parties would accept?",
+      "If interests can't be reconciled, what rights procedure would be least costly and most legitimate?",
+    ],
+    bestFor: [
+      "Organizational dispute system design",
+      "Labor-management relations",
+      "Recurring disputes in institutions",
+      "Cases where parties have escalated to legal or coercive tactics",
+    ],
+    limitations: [
+      "Requires parties to have some willingness to step back from the current mechanism",
+      "Rights and power mechanisms sometimes produce durable outcomes (clear precedent, decisive power shift)",
+      "Less applicable in purely interpersonal or emotional conflicts",
+    ],
+    glaslStages: "all",
+    tacitusPrimitives: ["Leverage", "Interest", "Claim", "Commitment"],
+  },
+
+  // ── 24. Chris Argyris — Ladder of Inference ─────────────────────────────
+  {
+    id: "argyris",
+    name: "Ladder of Inference",
+    shortName: "Argyris",
+    authors: ["Chris Argyris"],
+    year: 1970,
+    seminalWork: "Reasoning, Learning, and Action: Individual and Organizational (1982)",
+    category: "psychology",
+    corePrinciples: [
+      "People climb an invisible 'ladder' from observable data → selected data → interpreted data → assumptions → conclusions → beliefs → actions",
+      "We act on our conclusions as if they were facts, and rarely examine the inferential steps",
+      "Conflicts often arise because parties are operating at different rungs of their respective ladders",
+      "The reflexive loop: our beliefs filter which data we select, which reinforces those beliefs",
+      "Walking back down the ladder — to shared observable facts — creates a foundation for genuine dialogue",
+    ],
+    keyTechniques: [
+      {
+        name: "Ladder Walk-Down",
+        description:
+          "Take a party from their conclusion back to the observable data: 'What did you actually see or hear that led you to that conclusion? What data are you drawing on?'",
+        whenToUse: "When a party makes a sweeping judgment or attribution about the other.",
+      },
+      {
+        name: "Assumption Surfacing",
+        description:
+          "Make implicit assumptions explicit: 'When you say they're acting in bad faith, what assumption is underneath that? What would have to be true for that to be accurate?'",
+        whenToUse: "When parties have formed rigid beliefs about the other's motives or character.",
+      },
+      {
+        name: "Data Selection Challenge",
+        description:
+          "Gently highlight the data the party may not be focusing on: 'That's an important data point. Are there other data points that might point in a different direction?'",
+        whenToUse: "When confirmation bias is leading one party to cherry-pick evidence.",
+      },
+    ],
+    diagnosticQuestions: [
+      "At which rung of the ladder is each party operating — raw data, interpretation, assumption, or belief?",
+      "Can both parties agree on the observable facts, even if they interpret them differently?",
+      "What assumptions is each party making about the other's motives that may not be accurate?",
+      "What data might each party be selectively ignoring that contradicts their current beliefs?",
+      "If we walked both parties back to shared observable data, what would they agree on?",
+    ],
+    bestFor: [
+      "Workplace misunderstandings and attribution errors",
+      "Identity and character attacks",
+      "Conflicts driven by misinterpreted intent",
+      "Situations where parties have drawn firm conclusions from limited data",
+    ],
+    limitations: [
+      "Requires parties to be willing to examine their own reasoning — high defensiveness resistance",
+      "Walking down the ladder can feel invalidating if done clumsily",
+      "Some conclusions are accurate — not all inferences are errors",
+    ],
+    glaslStages: "1-4",
+    tacitusPrimitives: ["Narrative", "Claim", "Event"],
+  },
 ];
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -1359,12 +1592,12 @@ export const FRAMEWORKS: FrameworkEntry[] = [
 // ══════════════════════════════════════════════════════════════════════════════
 
 const PHASE_FRAMEWORK_AFFINITY: Record<string, string[]> = {
-  Opening: ["active-listening", "de-escalation", "reframing", "moore"],
-  Discovery: ["fisher-ury", "active-listening", "reframing", "mayer", "thomas-kilmann"],
-  Exploration: ["fisher-ury", "batna-protocol", "pruitt-kim", "deutsch"],
-  Negotiation: ["fisher-ury", "ury-past-no", "batna-protocol", "schelling", "pruitt-kim"],
-  Resolution: ["fisher-ury", "bush-folger", "winslade-monk", "lederach"],
-  Agreement: ["batna-protocol", "deutsch", "lederach"],
+  Opening: ["active-listening", "de-escalation", "reframing", "moore", "curle"],
+  Discovery: ["fisher-ury", "active-listening", "reframing", "mayer", "thomas-kilmann", "argyris"],
+  Exploration: ["fisher-ury", "batna-protocol", "pruitt-kim", "deutsch", "galtung", "ury-brett-goldberg"],
+  Negotiation: ["fisher-ury", "ury-past-no", "batna-protocol", "schelling", "pruitt-kim", "ury-brett-goldberg"],
+  Resolution: ["fisher-ury", "bush-folger", "winslade-monk", "lederach", "coleman"],
+  Agreement: ["batna-protocol", "deutsch", "lederach", "curle"],
 };
 
 function parseGlaslRange(range: string): { min: number; max: number } {

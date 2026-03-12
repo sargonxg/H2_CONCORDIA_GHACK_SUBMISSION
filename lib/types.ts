@@ -325,3 +325,21 @@ export type GraphEdge = {
 };
 
 export type OntologyStats = Record<PrimitiveType, number>;
+
+// ── Cognitive Distortion Type (Argyris-inspired) ──
+
+export type CognitiveDistortion = {
+  name: string;
+  description: string;
+  indicator: string;
+  intervention: string;
+};
+
+// ── Glasl Stage Assessment ──
+
+export type GlaslAssessment = {
+  stage: number;
+  intervention: string;
+  indicators: string[];
+  timestamp: string;
+};
