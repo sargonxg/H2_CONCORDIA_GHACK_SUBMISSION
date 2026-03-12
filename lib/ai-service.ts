@@ -736,13 +736,16 @@ export const createLiveSession = (
 
   const config: any = {
     responseModalities: [Modality.AUDIO],
-    enableAffectiveDialog: true,   // Emotional intelligence from raw audio
-    proactivity: {                  // Smart response gating — silent co-listener
+    // enableAffectiveDialog: native audio emotional intelligence (voice tone/tremor detection)
+    enableAffectiveDialog: true,
+    // proactivity: co-listener mode — model stays silent while parties talk to each other
+    proactivity: {
       proactiveAudio: true,
     },
-    thinkingConfig: {               // Reason before speaking — improves framework selection
-      includeThoughts: false,       // Use thoughts internally, don't vocalize them
-    },
+    // ⚠️  thinkingConfig is NOT a valid LiveConnectConfig field — it belongs in
+    // generateContent only. Including it here causes the Gemini API to reject the
+    // session and close the WebSocket immediately with no error message.
+    // DO NOT re-add thinkingConfig here.
     speechConfig: {
       voiceConfig: {
         prebuiltVoiceConfig: { voiceName: mediatorProfile.voice },
@@ -756,17 +759,19 @@ export const createLiveSession = (
     ),
     inputAudioTranscription: {},
     outputAudioTranscription: {},
-    // Keep at least 8K tokens of context during long sessions
+    // Compress context window to keep long sessions alive (8K token sliding window)
     contextWindowCompression: {
       slidingWindow: {
         targetTokens: 8192,
       },
     },
-    // Always enable session resumption for reconnection support
+    // Enable session resumption — pass handle only when actually resuming a prior session
     sessionResumption: resumptionHandle
       ? { handle: resumptionHandle }
       : {},
   };
+
+  console.log(`[Live] Connecting — model: ${_MODEL_LIVE}, voice: ${mediatorProfile.voice}, resume: ${!!resumptionHandle}`);
 
   return ai.live.connect({
     model: _MODEL_LIVE,

@@ -115,7 +115,17 @@ export function handleWebSocketConnection(ws: WebSocket) {
             }
           },
           onclose: (e: any) => {
-            console.log(`[Live] Session closed by server (code=${e?.code} reason=${e?.reason || "none"})`);
+            const code = e?.code ?? "?";
+            const reason = e?.reason || "none";
+            // Common close codes:
+            //   1000 = normal closure    1001 = going away
+            //   1006 = abnormal (no close frame received — network drop)
+            //   1008 = policy violation  (e.g. audio sent during tool call)
+            //   1011 = internal server error (config rejected, quota, etc.)
+            console.log(`[Live] Session closed — code=${code} reason="${reason}"`);
+            if (code === 1011 || (code !== 1000 && code !== 1001)) {
+              console.warn(`[Live] Abnormal close (${code}) — check API key, model access, and session config`);
+            }
             if (!tryReconnect("unexpected close")) {
               sessionClosing = true;
               if (ws.readyState === WebSocket.OPEN) {

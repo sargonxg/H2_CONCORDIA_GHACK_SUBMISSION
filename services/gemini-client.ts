@@ -56,8 +56,10 @@ export const getLiveSession = (
 
         if (msg.type === "open" && !resolved) {
           resolved = true;
-          callbacks.onopen?.();
-          resolve({
+          // Build the session handle object first, resolve the Promise with it,
+          // THEN fire onopen — this guarantees sessionRef.current is set in the
+          // caller before onopen's startAudioCapture() tries to use it.
+          const sessionHandle = {
             sendRealtimeInput: (input: any) => {
               if (ws.readyState === WebSocket.OPEN) {
                 ws.send(
@@ -88,7 +90,13 @@ export const getLiveSession = (
               }
               ws.close();
             },
-          });
+          };
+          // Resolve FIRST so the caller's await completes and sessionRef.current
+          // is set synchronously in the microtask queue before onopen's
+          // startAudioCapture() fires — eliminates the race condition where
+          // early audio frames are dropped because the session ref is null.
+          resolve(sessionHandle);
+          callbacks.onopen?.();
         } else if (msg.type === "reconnected") {
           // Server successfully reconnected the Gemini session via resumption handle
           console.log("[Live] Server reconnected session successfully");
