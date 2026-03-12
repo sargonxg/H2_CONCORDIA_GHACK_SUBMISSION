@@ -1585,6 +1585,419 @@ export const FRAMEWORKS: FrameworkEntry[] = [
     glaslStages: "1-4",
     tacitusPrimitives: ["Narrative", "Claim", "Event"],
   },
+
+  // ── 25. Rosenberg NVC ────────────────────────────────────────────────────
+  {
+    id: "rosenberg-nvc",
+    name: "Nonviolent Communication (NVC)",
+    shortName: "Rosenberg NVC",
+    authors: ["Marshall B. Rosenberg"],
+    year: 1999,
+    seminalWork: "Nonviolent Communication: A Language of Life (1999)",
+    category: "mediation",
+    corePrinciples: [
+      "Observation without evaluation — describe what happened factually, without interpreting or judging",
+      "Feelings — identify and name the specific emotion (not 'I feel that you...' which is a thought, but 'I feel frustrated' which is an emotion)",
+      "Needs — every feeling connects to a universal human need (autonomy, respect, safety, belonging, fairness, meaning)",
+      "Requests — make specific, doable, positive requests (what you want, not what you don't want)",
+      "Empathic listening — reflect back the other person's observations, feelings, needs, and requests before responding with your own",
+    ],
+    keyTechniques: [
+      {
+        name: "OFNR Sequence",
+        description: "Observation → Feeling → Need → Request. Guide each party through this four-step structure to express themselves without blame.",
+        whenToUse: "When parties use blame language, 'you always/never' statements, or character attacks",
+      },
+      {
+        name: "Needs Translation",
+        description: "Translate positions and demands into underlying universal needs. 'I want you fired' → 'I need to feel safe at work'",
+        whenToUse: "When parties state rigid positions — always dig for the need underneath",
+      },
+      {
+        name: "Enemy Image Dissolution",
+        description: "Help parties see the other as a human with needs rather than as an adversary. Ask: 'What need of theirs do you think they're trying to meet?'",
+        whenToUse: "When dehumanization or demonization is present",
+      },
+      {
+        name: "Empathy Before Education",
+        description: "Never give advice or solutions until the person feels fully heard. Reflect their feelings and needs first, repeatedly if needed.",
+        whenToUse: "Always — especially when a party is flooded or defensive",
+      },
+      {
+        name: "Self-Empathy Pause",
+        description: "When the mediator feels triggered or stuck, internally apply OFNR to yourself: What am I observing? What am I feeling? What do I need? What do I request of myself?",
+        whenToUse: "When you as mediator feel reactive or lost",
+      },
+    ],
+    diagnosticQuestions: [
+      "Are parties expressing feelings or judgments? (e.g., 'I feel abandoned' vs 'I feel that you don't care' — the second is a judgment)",
+      "Can each party name the specific need behind their demand?",
+      "Are requests specific and doable, or vague and open-ended?",
+      "Has each party been heard empathically before being asked to move?",
+    ],
+    bestFor: [
+      "Interpersonal conflicts",
+      "workplace disputes involving blame/criticism",
+      "family mediation",
+      "any conflict where emotional language dominates",
+      "cross-cultural disputes",
+    ],
+    limitations: [
+      "Can feel formulaic if applied mechanically",
+      "Requires genuine empathy, not just technique",
+      "Less effective when power dynamics are extreme",
+      "Not designed for structural/systemic conflicts",
+    ],
+    glaslStages: "1-5",
+    tacitusPrimitives: ["Interest", "Narrative", "Claim"],
+  },
+
+  // ── 26. Stone, Patton & Heen — Difficult Conversations ───────────────────
+  {
+    id: "stone-difficult-conversations",
+    name: "Difficult Conversations: The Three Conversations Model",
+    shortName: "Difficult Conversations",
+    authors: ["Douglas Stone", "Bruce Patton", "Sheila Heen"],
+    year: 1999,
+    seminalWork: "Difficult Conversations: How to Discuss What Matters Most (1999)",
+    category: "psychology",
+    corePrinciples: [
+      "Every difficult conversation is actually THREE conversations happening simultaneously",
+      "'What Happened?' Conversation — the disagreement about facts, intentions, and blame. Move from certainty to curiosity: 'How do we each see this differently?'",
+      "'Feelings Conversation' — emotions that are present but unaddressed. Unexpressed feelings leak into the conversation as blame, withdrawal, or aggression",
+      "'Identity Conversation' — internal: 'What does this say about me?' Am I competent? Am I a good person? Am I worthy of love? Identity threats cause the strongest reactions",
+      "Move from a 'message delivery' stance to a 'learning conversation' stance — your goal is to understand, not to be right",
+    ],
+    keyTechniques: [
+      {
+        name: "Three Conversation Mapping",
+        description: "For each party, map what's happening across all three layers: What Happened (their version of events), Feelings (emotions they're carrying), Identity (what's at stake for their self-image)",
+        whenToUse: "At the start of Discovery — to understand the full picture beyond surface claims",
+      },
+      {
+        name: "Contribution System vs. Blame",
+        description: "Shift from 'whose fault is it?' to 'how did we each contribute to this situation?' Both parties usually contributed something.",
+        whenToUse: "When parties are stuck in blame cycles",
+      },
+      {
+        name: "Identity Anchoring",
+        description: "Help parties adopt the 'And Stance': 'I made a mistake AND I'm still a good person.' This prevents all-or-nothing thinking about self.",
+        whenToUse: "When a party seems disproportionately defensive — they're protecting identity, not just position",
+      },
+      {
+        name: "The Third Story",
+        description: "Describe the situation from the perspective of a neutral observer who can see both sides. Start conversations from this 'third story' rather than from either party's version.",
+        whenToUse: "As the opening frame in Exploration phase",
+      },
+    ],
+    diagnosticQuestions: [
+      "Is this conflict about what happened, about unexpressed feelings, or about an identity threat?",
+      "Are emotions being expressed directly, or are they leaking out as blame and withdrawal?",
+      "What is at stake for each party's self-image? What are they afraid this situation says about them?",
+      "Can each party see their own contribution to the problem, or are they only assigning blame?",
+    ],
+    bestFor: [
+      "Workplace disagreements",
+      "relationship conflicts",
+      "any dispute where parties seem disproportionately reactive",
+      "situations with blame cycles",
+      "conflicts where 'the facts' are disputed",
+    ],
+    limitations: [
+      "Requires emotional awareness from both parties",
+      "Less applicable to pure resource-allocation disputes",
+      "Identity work can feel uncomfortable or invasive",
+    ],
+    glaslStages: "1-5",
+    tacitusPrimitives: ["Narrative", "Interest", "Event", "Claim"],
+  },
+
+  // ── 27. Lewicki Trust Repair ──────────────────────────────────────────────
+  {
+    id: "lewicki-trust-repair",
+    name: "Trust Repair and Rebuilding",
+    shortName: "Lewicki Trust Repair",
+    authors: ["Roy Lewicki", "Edward Tomlinson"],
+    year: 2006,
+    seminalWork: "Models of Interpersonal Trust Development (2006)",
+    category: "psychology",
+    corePrinciples: [
+      "Trust breaks differently depending on which trust dimension was violated: competence (ability), benevolence (goodwill), or integrity (values/principles)",
+      "Integrity-based trust is the hardest to repair — once someone believes you violated a core principle, apologies alone won't work",
+      "Trust repair requires matching the repair strategy to the violation type: competence violations need demonstration of capability, integrity violations need structural safeguards",
+      "Verbal repair (apology, explanation) must be followed by behavioral repair (consistent trustworthy behavior over time)",
+      "Trust is repaired incrementally through small acts, not through grand gestures",
+    ],
+    keyTechniques: [
+      {
+        name: "Violation Diagnosis",
+        description: "Identify which trust dimension was violated: Was it competence ('they messed up'), benevolence ('they don't care about me'), or integrity ('they lied/cheated')?",
+        whenToUse: "Whenever trust is a central issue in the conflict",
+      },
+      {
+        name: "Matched Repair Strategy",
+        description: "Competence violation → demonstrate improved capability. Benevolence violation → show genuine care through actions. Integrity violation → accept accountability + create structural safeguards (not just promises).",
+        whenToUse: "When designing agreement terms that address trust breakdown",
+      },
+      {
+        name: "Trust Calibration Exercise",
+        description: "Have each party rate their current trust in the other on 3 dimensions (ability 0-100, benevolence 0-100, integrity 0-100). This makes the invisible visible.",
+        whenToUse: "Before Negotiation phase — surfaces exactly what needs to be rebuilt",
+      },
+    ],
+    diagnosticQuestions: [
+      "Which dimension of trust was violated — competence, benevolence, or integrity?",
+      "Has the violating party acknowledged the specific violation, or just apologized generically?",
+      "What behavioral evidence (not just words) would begin to rebuild trust?",
+      "Are there structural safeguards that could reduce the need for personal trust?",
+    ],
+    bestFor: [
+      "Post-betrayal conflicts",
+      "workplace trust breakdowns",
+      "business partner disputes",
+      "any conflict where 'I don't trust them' is the core barrier",
+    ],
+    limitations: [
+      "Trust repair is slow — parties must accept incremental progress",
+      "Some integrity violations may be irreparable",
+      "Requires the violating party to accept accountability",
+    ],
+    glaslStages: "2-6",
+    tacitusPrimitives: ["Commitment", "Event", "Narrative", "Leverage"],
+  },
+
+  // ── 28. Shapiro Identity ──────────────────────────────────────────────────
+  {
+    id: "shapiro-identity",
+    name: "Negotiating the Nonnegotiable",
+    shortName: "Shapiro Identity",
+    authors: ["Daniel L. Shapiro"],
+    year: 2016,
+    seminalWork: "Negotiating the Nonnegotiable: How to Resolve Your Most Emotionally Charged Conflicts (2016)",
+    category: "psychology",
+    corePrinciples: [
+      "The most intractable conflicts aren't about resources — they're about IDENTITY. When people feel their identity is threatened, they become irrational, tribal, and absolutist",
+      "Five 'lures' pull people into identity-based conflict: vertigo (all-consuming emotional whirlpool), repetition compulsion (replaying old wounds), taboos (undiscussable topics), assault on the sacred (violation of core values), identity politics (us vs. them)",
+      "The 'Tribes Effect' — in conflict, we regress into tribal thinking: my group is good, their group is bad, and compromise equals betrayal",
+      "To negotiate the nonnegotiable: first address the identity threat, then the substance. Identity always comes first.",
+      "Integration, not compromise — find a resolution that honors both parties' core identities rather than asking either to abandon who they are",
+    ],
+    keyTechniques: [
+      {
+        name: "Identity Mapping",
+        description: "For each party, identify what aspects of their identity feel threatened: role, values, beliefs, group membership, self-image, sacred values.",
+        whenToUse: "When parties seem irrationally attached to a position — they're protecting identity, not interest",
+      },
+      {
+        name: "Vertigo Detection",
+        description: "Notice when a party has been 'consumed' by the conflict — they can't think about anything else, they see everything through the lens of this dispute. This is emotional vertigo.",
+        whenToUse: "When a party seems obsessive about the conflict or unable to consider alternatives",
+      },
+      {
+        name: "Taboo Surfacing",
+        description: "Identify the undiscussable — the topic everyone avoids because it's too threatening. Gently name it: 'I wonder if there's something here we haven't been able to say yet.'",
+        whenToUse: "When the conversation keeps circling the same points without progress — there's usually a taboo underneath",
+      },
+      {
+        name: "Relational Identity Integration",
+        description: "Help parties build a SHARED identity: 'We are two people trying to solve this together' rather than 'I am fighting against you.' Create a superordinate identity.",
+        whenToUse: "In Negotiation/Resolution — after identity threats have been addressed",
+      },
+    ],
+    diagnosticQuestions: [
+      "What aspect of their identity does each party feel this conflict threatens?",
+      "Are there taboos — topics that feel too dangerous to raise but that everyone knows are present?",
+      "Is either party caught in 'vertigo' — so consumed by the conflict that they can't see clearly?",
+      "Can the parties find a shared identity that transcends the conflict?",
+    ],
+    bestFor: [
+      "Identity-based disputes",
+      "values conflicts",
+      "religious/cultural clashes",
+      "organizational conflicts about mission/values",
+      "any 'nonnegotiable' position",
+      "family conflicts involving role identity",
+    ],
+    limitations: [
+      "Requires psychological sophistication from the mediator",
+      "Identity work can be uncomfortable",
+      "Not all parties are ready for this depth",
+      "Some identity positions may genuinely be incompatible",
+    ],
+    glaslStages: "3-7",
+    tacitusPrimitives: ["Narrative", "Interest", "Constraint", "Event"],
+  },
+
+  // ── 29. Solution-Focused Brief Approach ──────────────────────────────────
+  {
+    id: "solution-focused",
+    name: "Solution-Focused Brief Approach",
+    shortName: "Solution-Focused",
+    authors: ["Steve de Shazer", "Insoo Kim Berg"],
+    year: 1985,
+    seminalWork: "Keys to Solution in Brief Therapy (1985)",
+    category: "mediation",
+    corePrinciples: [
+      "Focus on solutions, not problems — 'What would you like instead?' not 'What's wrong?'",
+      "Exceptions contain the solution — times when the problem DIDN'T happen reveal what already works",
+      "Small steps first — one small change often creates cascading positive effects",
+      "The person is the expert on their own life — the mediator is expert on asking useful questions",
+      "If it works, do more of it. If it doesn't work, do something different. Simple as that.",
+    ],
+    keyTechniques: [
+      {
+        name: "Miracle Question",
+        description: "'Suppose tonight while you're asleep, a miracle happens and this conflict is completely resolved. When you wake up, what's the first thing you'd notice that tells you things are different?' This bypasses resistance and accesses the desired future.",
+        whenToUse: "When parties are stuck in problem-talk and can't envision resolution — especially good in Negotiation phase",
+      },
+      {
+        name: "Exception Finding",
+        description: "'Has there been a time recently when this problem was LESS intense, or when things went better between you? What was different then?' Exceptions reveal existing solutions.",
+        whenToUse: "In Discovery — to find resources and strengths, not just problems",
+      },
+      {
+        name: "Scaling Questions",
+        description: "'On a scale of 1-10, where 10 is fully resolved and 1 is the worst it's ever been, where are you now? What would one point higher look like?'",
+        whenToUse: "To measure progress, identify next steps, and make abstract concepts concrete",
+      },
+      {
+        name: "Coping Questions",
+        description: "'Given how difficult this has been, how have you managed to cope? What's kept you going?' This builds agency and self-efficacy even in distress.",
+        whenToUse: "When parties feel helpless or hopeless",
+      },
+      {
+        name: "Pre-Session Change",
+        description: "'Since you decided to come to this mediation, has anything already started to shift?' Often the decision to mediate itself begins the change.",
+        whenToUse: "At the very start of the session — captures momentum",
+      },
+    ],
+    diagnosticQuestions: [
+      "Are we spending too much time analyzing the problem and not enough time building the solution?",
+      "What exceptions to the problem already exist? What's already working?",
+      "Can each party describe what they WANT (positive) rather than what they DON'T want (negative)?",
+      "What's the smallest step that would represent real progress?",
+    ],
+    bestFor: [
+      "Any conflict where parties are overwhelmed by problem-talk",
+      "conflicts that feel intractable but actually have moments of peace",
+      "short mediation sessions",
+      "individuals/couples",
+      "workplace disputes where quick progress is needed",
+    ],
+    limitations: [
+      "May bypass necessary emotional processing",
+      "Can feel dismissive if used before parties feel heard",
+      "Not suited for deeply structural or systemic conflicts",
+      "Parties must have SOME capacity for future-thinking",
+    ],
+    glaslStages: "1-4",
+    tacitusPrimitives: ["Interest", "Commitment", "Event"],
+  },
+
+  // ── 30. Mnookin Beyond Winning ────────────────────────────────────────────
+  {
+    id: "mnookin-beyond-winning",
+    name: "Beyond Winning: The Tension Management Framework",
+    shortName: "Mnookin Tensions",
+    authors: ["Robert Mnookin", "Scott Peppet", "Andrew Tulumello"],
+    year: 2000,
+    seminalWork: "Beyond Winning: Negotiating to Create Value in Deals and Disputes (2000)",
+    category: "negotiation",
+    corePrinciples: [
+      "Every negotiation involves managing THREE tensions simultaneously — not resolving them, but managing them dynamically",
+      "Tension 1: Creating value vs. Distributing value — you need to expand the pie AND divide it fairly",
+      "Tension 2: Empathy vs. Assertiveness — understand their perspective AND advocate for your own",
+      "Tension 3: Agent vs. Principal — the negotiator's interests may diverge from the party's interests",
+      "The goal is not to eliminate these tensions but to be AWARE of them and manage them skillfully",
+    ],
+    keyTechniques: [
+      {
+        name: "Value Creation First",
+        description: "Before distributing, brainstorm options that create value for both. Trade on differences (different priorities, risk tolerance, time horizons).",
+        whenToUse: "In Negotiation phase before parties start dividing",
+      },
+      {
+        name: "Empathy-Assertiveness Balance",
+        description: "Model for parties how to hold both: 'I understand your concern about X, AND my need for Y is genuine too.' The word 'and' replaces 'but'.",
+        whenToUse: "When parties see understanding the other as weakness",
+      },
+      {
+        name: "Behind-the-Table Analysis",
+        description: "Understand the pressures BEHIND each party — who are they accountable to? What constraints do they face from their own side?",
+        whenToUse: "When a party seems unable to be flexible — they may face internal pressure",
+      },
+    ],
+    diagnosticQuestions: [
+      "Are we stuck in value-distribution (zero-sum) when value-creation is possible?",
+      "Is either party sacrificing empathy for assertiveness, or vice versa?",
+      "What pressures does each party face from their own 'behind-the-table' constituents?",
+    ],
+    bestFor: [
+      "Complex negotiations",
+      "business disputes",
+      "multi-party situations",
+      "disputes involving agents/lawyers/representatives",
+    ],
+    limitations: [
+      "More analytical than emotional — pair with NVC or SFBT for emotionally charged disputes",
+      "Assumes some negotiation sophistication",
+    ],
+    glaslStages: "1-5",
+    tacitusPrimitives: ["Interest", "Constraint", "Leverage", "Claim"],
+  },
+
+  // ── 31. Follett Creative Integration ─────────────────────────────────────
+  {
+    id: "follett-integration",
+    name: "Creative Integration",
+    shortName: "Follett Integration",
+    authors: ["Mary Parker Follett"],
+    year: 1924,
+    seminalWork: "Creative Experience (1924)",
+    category: "transformation",
+    corePrinciples: [
+      "Three responses to conflict: domination (one side wins), compromise (both lose something), integration (a creative third option that satisfies both fully)",
+      "Integration is always worth seeking — it's harder to find but produces the most durable outcomes",
+      "'Bring the differences out into the open' — don't suppress disagreement, USE it as the raw material for creative solutions",
+      "Power should be 'power-with' (joint), not 'power-over' (coercive) — genuine authority comes from the situation, not from the person",
+      "The law of the situation — let the facts and the situation determine the right action, not either party's will",
+    ],
+    keyTechniques: [
+      {
+        name: "Integration Search",
+        description: "After hearing both positions, ask: 'Is there a third option that fully satisfies both of your core needs — not a compromise where you each give up something, but a creative solution where you each get what matters most?'",
+        whenToUse: "In Negotiation — after interests are clear but before compromise is offered",
+      },
+      {
+        name: "Difference as Resource",
+        description: "Instead of minimizing differences, highlight them: 'Your different perspectives are actually a resource here — they might point us toward a solution neither of you would have found alone.'",
+        whenToUse: "When parties are frustrated by their differences",
+      },
+      {
+        name: "Power-With Reframe",
+        description: "Shift from 'who has more power' to 'how do we pool our different forms of influence to solve this together?'",
+        whenToUse: "When power dynamics are creating adversarial framing",
+      },
+    ],
+    diagnosticQuestions: [
+      "Have we genuinely searched for an integrative solution, or jumped to compromise too quickly?",
+      "Are we treating the parties' differences as obstacles or as resources?",
+      "Is power being exercised 'over' the other party, or 'with' them?",
+    ],
+    bestFor: [
+      "Any conflict where compromise feels inadequate",
+      "creative problem-solving disputes",
+      "team/organizational conflicts",
+      "disputes where novel solutions are possible",
+    ],
+    limitations: [
+      "Integration isn't always possible — some interests are genuinely incompatible",
+      "Requires creative thinking capacity from parties",
+      "Time-intensive",
+    ],
+    glaslStages: "1-4",
+    tacitusPrimitives: ["Interest", "Claim", "Constraint", "Commitment"],
+  },
 ];
 
 // ══════════════════════════════════════════════════════════════════════════════

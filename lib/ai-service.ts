@@ -756,6 +756,13 @@ MEDIATION FRAMEWORKS (prefix currentAction)
 [Schelling] Find the natural focal point both would independently gravitate toward.
 [Galtung ABC] Attitude + Behavior + Contradiction — address all three or it won't hold.
 [Deutsch] Cooperative process → cooperative outcome. Shift the process, not just the content.
+[NVC] — Observation → Feeling → Need → Request. Translate positions into universal human needs.
+[Difficult Conversations] — Three layers: What Happened + Feelings + Identity. Address the identity threat first.
+[Lewicki Trust] — Diagnose which trust dimension broke (ability/benevolence/integrity). Match the repair strategy.
+[Shapiro Identity] — Is this about identity, not interests? Surface the taboo. Dissolve enemy images.
+[Solution-Focused] — Miracle question. Exception finding. Scaling. What's already working?
+[Mnookin Tensions] — Create value before distributing it. Empathy AND assertiveness. Behind-the-table pressures.
+[Follett] — Seek integration (creative third option), not just compromise. Differences are a resource.
 
 Format currentAction: "[Framework] Action | Next: planned follow-up"
 
@@ -1025,6 +1032,13 @@ Draw upon established frameworks:
 - Pruitt Dual Concern Model — Map concern-for-self vs concern-for-other; feasibility matters
 - Galtung ABC Triangle — Attitude + Behavior + Contradiction; address all three
 - Curle Progression Model — Assess readiness: education → advocacy → mediation → maintenance
+- Nonviolent Communication (Rosenberg NVC) — OFNR sequence; translate positions into universal human needs
+- Difficult Conversations (Stone/Patton/Heen) — Three layers: What Happened + Feelings + Identity; address identity threat first
+- Trust Repair (Lewicki) — Diagnose competence/benevolence/integrity violation; match repair strategy
+- Negotiating the Nonnegotiable (Shapiro) — Identity-based conflict; surface taboos; dissolve enemy images
+- Solution-Focused Brief Approach (de Shazer/Berg) — Miracle question; exception finding; scaling; build on what works
+- Beyond Winning (Mnookin) — Create value before distributing; empathy AND assertiveness; behind-the-table pressures
+- Creative Integration (Follett) — Seek integration not just compromise; differences as resource; power-with not power-over
 - Schelling Focal Points — Construct salient, "natural" solutions parties independently converge on
 - Coleman Intractable Conflicts — Attractor dynamics; perturb rather than negotiate within the loop
 - Ury/Brett/Goldberg Interest-Rights-Power — Diagnose mechanism; loop parties back toward interests

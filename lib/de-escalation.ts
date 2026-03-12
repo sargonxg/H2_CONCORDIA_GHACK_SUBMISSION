@@ -181,6 +181,30 @@ export const COGNITIVE_DISTORTIONS = [
     indicator: "But they said X first, so...",
     intervention: "Let's step back from that number and look at what the objective criteria suggest",
   },
+  {
+    name: "Naïve Realism",
+    description: "Believing you see the world objectively and anyone who disagrees is biased or irrational",
+    indicator: "It's obvious that... / Anyone can see that... / They're just being unreasonable",
+    intervention: "What if they see different facts than you do, and both sets of facts are real?",
+  },
+  {
+    name: "Projection",
+    description: "Attributing your own feelings or motives to the other party",
+    indicator: "They're doing this because they want to hurt me (when actually the speaker feels hurt)",
+    intervention: "Is it possible that's what YOU'RE feeling, rather than what they intend?",
+  },
+  {
+    name: "Splitting / All-or-Nothing",
+    description: "Seeing the other party as entirely bad and self as entirely good",
+    indicator: "They're always... / I never... / Everything they do...",
+    intervention: "Can you think of a time when they acted well, or a time when this situation was more nuanced?",
+  },
+  {
+    name: "Catastrophizing",
+    description: "Imagining the worst possible outcome and treating it as certain",
+    indicator: "If we don't resolve this, everything will... / This will ruin...",
+    intervention: "What's the most likely outcome? And what's the best possible outcome?",
+  },
 ];
 
 // ── Glasl Stage Detection ──
