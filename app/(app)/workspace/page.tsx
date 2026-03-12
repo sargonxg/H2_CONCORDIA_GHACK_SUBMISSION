@@ -395,7 +395,7 @@ export default function Workspace() {
   const toolCallPendingRef = useRef(false);
   const audioContextRef = useRef<AudioContext | null>(null);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
-  const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const processorRef = useRef<AudioWorkletNode | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
   // Shared playback AudioContext and queue for sequential audio playback
@@ -1086,7 +1086,6 @@ export default function Workspace() {
       const audioContext = new AudioContext({ sampleRate: 16000 });
       audioContextRef.current = audioContext;
 
-      // Resume AudioContext in case browser suspended it
       if (audioContext.state === "suspended") {
         await audioContext.resume();
       }
@@ -1094,34 +1093,31 @@ export default function Workspace() {
       const source = audioContext.createMediaStreamSource(stream);
       sourceRef.current = source;
 
-      const processor = audioContext.createScriptProcessor(4096, 1, 1);
-      processorRef.current = processor;
+      // Use AudioWorkletNode instead of the deprecated ScriptProcessorNode.
+      // The worklet runs in a dedicated audio thread — no main-thread blocking.
+      await audioContext.audioWorklet.addModule("/pcm-processor.js");
+      const workletNode = new AudioWorkletNode(audioContext, "pcm-processor");
+      processorRef.current = workletNode;
 
-      source.connect(processor);
-      processor.connect(audioContext.destination);
-
-      processor.onaudioprocess = (e) => {
+      workletNode.port.onmessage = (e) => {
         // Skip audio frames while a tool call is pending to prevent 1008 errors
         if (toolCallPendingRef.current) return;
+        if (!isSessionOpen()) return;
 
-        const inputData = e.inputBuffer.getChannelData(0);
-        const pcm16 = new Int16Array(inputData.length);
-        for (let i = 0; i < inputData.length; i++) {
-          pcm16[i] = Math.max(-1, Math.min(1, inputData[i])) * 0x7fff;
-        }
-
+        const { pcm16 } = e.data as { pcm16: Int16Array };
         const base64 = arrayBufferToBase64(pcm16.buffer);
 
-        if (isSessionOpen()) {
-          try {
-            sessionRef.current.sendRealtimeInput({
-              audio: { data: base64, mimeType: "audio/pcm;rate=16000" },
-            });
-          } catch (e) {
-            // Session closed mid-send, ignore
-          }
+        try {
+          sessionRef.current.sendRealtimeInput({
+            audio: { data: base64, mimeType: "audio/pcm;rate=16000" },
+          });
+        } catch {
+          // Session closed mid-send, ignore
         }
       };
+
+      source.connect(workletNode);
+      workletNode.connect(audioContext.destination);
     } catch (err) {
       console.error("Error capturing audio:", err);
     }
@@ -1129,6 +1125,7 @@ export default function Workspace() {
 
   const stopAudioCapture = () => {
     if (processorRef.current) {
+      processorRef.current.port.onmessage = null;
       processorRef.current.disconnect();
       processorRef.current = null;
     }
