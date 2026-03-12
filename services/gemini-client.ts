@@ -45,6 +45,8 @@ export const getLiveSession = (
           context,
           mediatorProfile,
           partyNames,
+          createRoom: (callbacks as any).createRoom ?? false,
+          caseId: (callbacks as any).caseId,
         }),
       );
       startKeepAlive();
@@ -54,7 +56,10 @@ export const getLiveSession = (
       try {
         const msg = JSON.parse(event.data);
 
-        if (msg.type === "open" && !resolved) {
+        if (msg.type === "roomCreated" && !resolved) {
+          // Room mode: server created a room, session will open separately
+          callbacks.onRoomCreated?.(msg.roomCode);
+        } else if (msg.type === "open" && !resolved) {
           resolved = true;
           // Build the session handle object first, resolve the Promise with it,
           // THEN fire onopen — this guarantees sessionRef.current is set in the
@@ -144,6 +149,86 @@ export const getLiveSession = (
         // Unexpected close — notify the UI
         callbacks.onclose?.();
       }
+    };
+  });
+};
+
+// ── Room join (separate device) ───────────────────────────────────────────────
+export const joinRoomSession = (
+  roomCode: string,
+  name: string,
+  callbacks: {
+    onJoined?: (partyId: string) => void;
+    onPartyJoined?: (partyId: string, name: string) => void;
+    onmessage?: (data: any) => void;
+    onclose?: () => void;
+    onerror?: (err: string) => void;
+  },
+): Promise<any> => {
+  return new Promise((resolve, reject) => {
+    const protocol = location.protocol === "https:" ? "wss:" : "ws:";
+    const wsUrl = `${protocol}//${location.host}/api/live`;
+    let resolved = false;
+
+    const ws = new WebSocket(wsUrl);
+    let keepAliveInterval: ReturnType<typeof setInterval> | null = null;
+
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ type: "join", roomCode: roomCode.toUpperCase(), name }));
+      keepAliveInterval = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "ping" }));
+      }, 25000);
+    };
+
+    ws.onmessage = (event: MessageEvent) => {
+      try {
+        const msg = JSON.parse(event.data);
+        if (msg.type === "joined" && !resolved) {
+          resolved = true;
+          const handle = {
+            sendRealtimeInput: (input: any) => {
+              if (ws.readyState === WebSocket.OPEN)
+                ws.send(JSON.stringify({ type: "audio", audio: input.audio }));
+            },
+            sendToolResponse: (resp: any) => {
+              if (ws.readyState === WebSocket.OPEN)
+                ws.send(JSON.stringify({ type: "toolResponse", functionResponses: resp.functionResponses }));
+            },
+            sendContext: (text: string) => {
+              if (ws.readyState === WebSocket.OPEN)
+                ws.send(JSON.stringify({ type: "context", text }));
+            },
+            close: () => {
+              if (keepAliveInterval) clearInterval(keepAliveInterval);
+              if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "close" }));
+              ws.close();
+            },
+          };
+          resolve(handle);
+          callbacks.onJoined?.(msg.partyId);
+        } else if (msg.type === "partyJoined") {
+          callbacks.onPartyJoined?.(msg.partyId, msg.name);
+        } else if (msg.type === "message") {
+          callbacks.onmessage?.(msg.data);
+        } else if (msg.type === "error") {
+          if (!resolved) { resolved = true; reject(new Error(msg.error)); }
+          callbacks.onerror?.(msg.error);
+        } else if (msg.type === "close") {
+          if (keepAliveInterval) clearInterval(keepAliveInterval);
+          callbacks.onclose?.();
+        }
+      } catch (e) {
+        console.error("Room WS parse error:", e);
+      }
+    };
+
+    ws.onerror = () => {
+      if (!resolved) { resolved = true; reject(new Error("Room WebSocket failed")); }
+    };
+    ws.onclose = () => {
+      if (keepAliveInterval) clearInterval(keepAliveInterval);
+      if (!resolved) { resolved = true; reject(new Error("Room WebSocket closed")); }
+      else callbacks.onclose?.();
     };
   });
 };

@@ -74,3 +74,160 @@ describe('ESCALATION_TRIGGERS', () => {
     });
   });
 });
+
+// ── COGNITIVE_DISTORTIONS ─────────────────────────────────────────────────────
+import { COGNITIVE_DISTORTIONS, detectGlaslStage } from '@/lib/de-escalation';
+
+describe('COGNITIVE_DISTORTIONS', () => {
+  it('has at least 10 entries', () => {
+    expect(COGNITIVE_DISTORTIONS.length).toBeGreaterThanOrEqual(10);
+  });
+
+  it('every entry has name and intervention', () => {
+    COGNITIVE_DISTORTIONS.forEach((d) => {
+      expect(typeof d.name).toBe('string');
+      expect(d.name.length).toBeGreaterThan(0);
+      expect(typeof d.intervention).toBe('string');
+      expect(d.intervention.length).toBeGreaterThan(0);
+    });
+  });
+
+  it('every entry has a description', () => {
+    COGNITIVE_DISTORTIONS.forEach((d) => {
+      expect(typeof d.description).toBe('string');
+      expect(d.description.length).toBeGreaterThan(0);
+    });
+  });
+
+  it('includes Fundamental Attribution Error', () => {
+    const names = COGNITIVE_DISTORTIONS.map((d) => d.name);
+    expect(names).toContain('Fundamental Attribution Error');
+  });
+
+  it('includes Zero-Sum Thinking', () => {
+    const names = COGNITIVE_DISTORTIONS.map((d) => d.name);
+    expect(names).toContain('Zero-Sum Thinking');
+  });
+
+  it('includes Anchoring', () => {
+    const names = COGNITIVE_DISTORTIONS.map((d) => d.name);
+    expect(names).toContain('Anchoring');
+  });
+
+  it('includes Catastrophizing', () => {
+    const names = COGNITIVE_DISTORTIONS.map((d) => d.name);
+    expect(names).toContain('Catastrophizing');
+  });
+});
+
+// ── detectGlaslStage ──────────────────────────────────────────────────────────
+describe('detectGlaslStage', () => {
+  it('returns stage 1 for early-stage dialogue', () => {
+    const result = detectGlaslStage({
+      personalAttacks: false,
+      coalitionBuilding: false,
+      threats: false,
+      lossOfFace: false,
+      destructiveBehavior: false,
+      empathyPresent: true,
+      dialogueWillingness: true,
+    });
+    expect(result.stage).toBe(1);
+  });
+
+  it('returns stage 2 for dialogue willingness without empathy', () => {
+    const result = detectGlaslStage({
+      personalAttacks: false,
+      coalitionBuilding: false,
+      threats: false,
+      lossOfFace: false,
+      destructiveBehavior: false,
+      empathyPresent: false,
+      dialogueWillingness: true,
+    });
+    expect(result.stage).toBe(2);
+    expect(result.intervention).toContain('dialogue');
+  });
+
+  it('returns stage 3 for personal attacks without empathy', () => {
+    const result = detectGlaslStage({
+      personalAttacks: true,
+      coalitionBuilding: false,
+      threats: false,
+      lossOfFace: false,
+      destructiveBehavior: false,
+      empathyPresent: false,
+      dialogueWillingness: false,
+    });
+    expect(result.stage).toBe(3);
+  });
+
+  it('returns stage 4 for coalition building', () => {
+    const result = detectGlaslStage({
+      personalAttacks: true,
+      coalitionBuilding: true,
+      threats: false,
+      lossOfFace: false,
+      destructiveBehavior: false,
+      empathyPresent: false,
+      dialogueWillingness: false,
+    });
+    expect(result.stage).toBe(4);
+  });
+
+  it('returns stage 5 for loss of face', () => {
+    const result = detectGlaslStage({
+      personalAttacks: true,
+      coalitionBuilding: false,
+      threats: false,
+      lossOfFace: true,
+      destructiveBehavior: false,
+      empathyPresent: false,
+      dialogueWillingness: false,
+    });
+    expect(result.stage).toBe(5);
+  });
+
+  it('returns stage 6 for threats', () => {
+    const result = detectGlaslStage({
+      personalAttacks: true,
+      coalitionBuilding: true,
+      threats: true,
+      lossOfFace: true,
+      destructiveBehavior: false,
+      empathyPresent: false,
+      dialogueWillingness: false,
+    });
+    expect(result.stage).toBe(6);
+  });
+
+  it('returns stage 7 for destructive behavior', () => {
+    const result = detectGlaslStage({
+      personalAttacks: true,
+      coalitionBuilding: true,
+      threats: true,
+      lossOfFace: true,
+      destructiveBehavior: true,
+      empathyPresent: false,
+      dialogueWillingness: false,
+    });
+    expect(result.stage).toBe(7);
+    expect(result.intervention).toContain('Arbitration');
+  });
+
+  it('every result has a stage number and intervention string', () => {
+    const scenarios = [
+      { personalAttacks: false, coalitionBuilding: false, threats: false, lossOfFace: false, destructiveBehavior: false, empathyPresent: true, dialogueWillingness: true },
+      { personalAttacks: true, coalitionBuilding: false, threats: false, lossOfFace: false, destructiveBehavior: false, empathyPresent: false, dialogueWillingness: false },
+      { personalAttacks: true, coalitionBuilding: true, threats: true, lossOfFace: true, destructiveBehavior: true, empathyPresent: false, dialogueWillingness: false },
+    ];
+    scenarios.forEach((s) => {
+      const result = detectGlaslStage(s);
+      expect(typeof result.stage).toBe('number');
+      expect(result.stage).toBeGreaterThanOrEqual(1);
+      expect(result.stage).toBeLessThanOrEqual(9);
+      expect(typeof result.intervention).toBe('string');
+      expect(result.intervention.length).toBeGreaterThan(0);
+    });
+  });
+});

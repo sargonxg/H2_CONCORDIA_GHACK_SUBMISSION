@@ -6,8 +6,33 @@ import {
 } from '@/lib/mediation-library';
 
 describe('FRAMEWORKS', () => {
-  it('has at least 6 frameworks', () => {
-    expect(FRAMEWORKS.length).toBeGreaterThanOrEqual(6);
+  it('has at least 31 frameworks', () => {
+    expect(FRAMEWORKS.length).toBeGreaterThanOrEqual(31);
+  });
+
+  it('includes rosenberg-nvc', () => {
+    const ids = FRAMEWORKS.map((f) => f.id);
+    expect(ids).toContain('rosenberg-nvc');
+  });
+
+  it('includes shapiro-identity', () => {
+    const ids = FRAMEWORKS.map((f) => f.id);
+    expect(ids).toContain('shapiro-identity');
+  });
+
+  it('includes solution-focused', () => {
+    const ids = FRAMEWORKS.map((f) => f.id);
+    expect(ids).toContain('solution-focused');
+  });
+
+  it('includes fisher-ury', () => {
+    const ids = FRAMEWORKS.map((f) => f.id);
+    expect(ids).toContain('fisher-ury');
+  });
+
+  it('includes glasl', () => {
+    const ids = FRAMEWORKS.map((f) => f.id);
+    expect(ids).toContain('glasl');
   });
 
   it('every framework has required fields', () => {
@@ -32,12 +57,39 @@ describe('FRAMEWORKS', () => {
     });
   });
 
-  it('every framework has a valid glaslStages value', () => {
-    const validRanges = ['1-3', '4-6', '7-9', 'all', '1-9'];
+  it('every framework has a glaslStages string', () => {
     FRAMEWORKS.forEach((f) => {
       expect(typeof f.glaslStages).toBe('string');
       expect(f.glaslStages.length).toBeGreaterThan(0);
     });
+  });
+
+  it('glaslStages values match known patterns', () => {
+    const validPattern = /^(\d+-\d+|all|\d+)$/;
+    FRAMEWORKS.forEach((f) => {
+      expect(validPattern.test(f.glaslStages)).toBe(true);
+    });
+  });
+
+  it('rosenberg-nvc has correct category and glaslStages', () => {
+    const fw = FRAMEWORKS.find((f) => f.id === 'rosenberg-nvc');
+    expect(fw).toBeDefined();
+    expect(fw!.glaslStages).toBeTruthy();
+    expect(fw!.corePrinciples.length).toBeGreaterThan(0);
+  });
+
+  it('shapiro-identity has glaslStages and tacitusPrimitives', () => {
+    const fw = FRAMEWORKS.find((f) => f.id === 'shapiro-identity');
+    expect(fw).toBeDefined();
+    expect(fw!.glaslStages).toBeTruthy();
+    expect(fw!.tacitusPrimitives.length).toBeGreaterThan(0);
+  });
+
+  it('solution-focused has glaslStages and keyTechniques', () => {
+    const fw = FRAMEWORKS.find((f) => f.id === 'solution-focused');
+    expect(fw).toBeDefined();
+    expect(fw!.glaslStages).toBeTruthy();
+    expect(fw!.keyTechniques.length).toBeGreaterThan(0);
   });
 });
 

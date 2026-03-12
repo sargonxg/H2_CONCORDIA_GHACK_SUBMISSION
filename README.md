@@ -2,7 +2,7 @@
 
 **Real-Time AI Mediation Platform**
 
-> Built for the Google Cloud Hackathon by **Giulio Catanzariti** — [TACITUS](https://tacitus.me)
+> Built for the Google Gemini API Developer Competition by **Giulio Catanzariti** — [TACITUS](https://tacitus.me)
 
 ---
 
@@ -14,116 +14,111 @@ The system is grounded in the **TACITUS Conflict Grammar**: an eight-primitive o
 
 ---
 
-## Improvements Summary (v2)
-
-All improvements were implemented across three development prompts:
-
-| # | Area | Improvement | Files |
-|---|------|-------------|-------|
-| 1.1 | Transcript | Buffered word-by-word fragments, flushed on `turnComplete`/`toolCall` with `[MM:SS]` timestamps | `workspace/page.tsx` |
-| 1.2 | System Instruction | 7-rule turn-taking protocol, 3-round structured Discovery, Exploration cross-referencing, conflict structure announcements | `lib/ai-service.ts` |
-| 1.3 | Auto-Extraction | Background extraction every 3 min, duplicate-aware merge, extraction notice toast | `workspace/page.tsx` |
-| 1.4 | Transcript Panel | Styled live panel with indigo/sky color-coding, auto-scroll, "Scroll to latest" button, editable textarea fallback | `workspace/page.tsx` |
-| 2.1 | Resolution Engine | `analyzePathways()` returns rich `PathwaysResult` with ZOPA, framework fit, executive summary, trade-offs, implementation steps | `lib/ai-service.ts`, `services/gemini-client.ts`, `app/api/analyze/route.ts` |
-| 2.2 | Mediator Styles | Professional / Empathic style selector; style-dependent system instruction preamble; auto-sets voice | `workspace/page.tsx`, `lib/ai-service.ts` |
-| 2.3 | Profiling Toggle | `profilingEnabled` field on Case; toggle in settings; ON shows EnhancedPartyProfile + EscalationMeter, OFF shows simple cards | `workspace/page.tsx`, `lib/types.ts` |
-| 2.4 | Case Summary | `summarizeCase()` in ai-service + `/api/summarize` route + modal with Copy/Export-as-Markdown | `lib/ai-service.ts`, `app/api/summarize/route.ts`, `workspace/page.tsx` |
-| 3.1 | Primitive Management | `PrimitiveCluster` type, Auto-Group, per-primitive Pin/Resolve, Merge Duplicates, primitive count in tab label | `workspace/page.tsx`, `lib/types.ts` |
-| 3.2 | Timeline | `TimelineEntry` type, Timeline tab with type icons, elapsed timestamps, and filter controls | `workspace/page.tsx`, `lib/types.ts` |
-| 3.3 | Export | Export dropdown: JSON, Markdown report, Copy Transcript, Copy Summary | `workspace/page.tsx` |
-| 3.4 | Session Polish | Duration timer, milestone toasts, auto-save every 30s, reconnection overlay with attempt count, rate-limit retry (5s/10s/20s) | `workspace/page.tsx`, `services/gemini-client.ts` |
-| 3.5 | Graph Polish | Zoom controls (+/−/Fit All), highlight-by-party toggle | `components/workspace/ConflictGraph.tsx` |
-| 3.6 | Keyboard Shortcuts | `1-5` switch tabs, `Ctrl+Enter` analyze, `Escape` close modals | `workspace/page.tsx` |
-
----
-
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                        BROWSER (React 19)                       │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌───────────────┐  │
-│  │ AudioCtx │  │  D3.js   │  │ Recharts │  │  Transcript   │  │
-│  │ PCM 16K  │  │  Force   │  │ Profiles │  │  Panel + TTS  │  │
-│  │ Capture  │  │  Graph   │  │ & Gauges │  │  Playback     │  │
-│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └───────┬───────┘  │
-│       │             │              │                 │          │
-│       └─────────────┴──────────────┴─────────────────┘         │
-│                             │ WebSocket + REST                  │
-└─────────────────────────────┼───────────────────────────────────┘
-                              │
-┌─────────────────────────────┼───────────────────────────────────┐
-│            CLOUD RUN (single container, port 8080)              │
-│  ┌──────────────────────────┼───────────────────────────────┐   │
-│  │          server.ts (HTTP + WebSocket)                    │   │
-│  │                          │                               │   │
-│  │  ┌───────────────────┐   │  ┌──────────────────────────┐ │   │
-│  │  │  Next.js App      │   │  │     ws-handler.ts        │ │   │
-│  │  │  Router           │   │  │  ┌─────────────────────┐ │ │   │
-│  │  │  /api/extract     │   │  │  │  Gemini Live Audio  │ │ │   │
-│  │  │  /api/analyze     │   │  │  │  ┌─────────────────┐│ │ │   │
-│  │  │  /api/chat        │   │  │  │  │ Affective Dialog││ │ │   │
-│  │  │  /api/summarize   │   │  │  │  │ Proactive Audio ││ │ │   │
-│  │  │  /api/transcribe  │   │  │  │  │ Tool Calling ×7 ││ │ │   │
-│  │  │  /api/tts         │   │  │  │  │ Session Resume  ││ │ │   │
-│  │  │  /api/research    │   │  │  │  │ Context Compress││ │ │   │
-│  │  └───────────────────┘   │  │  │  └─────────────────┘│ │ │   │
-│  │                          │  │  └─────────────────────┘ │ │   │
-│  │                          ↓  │     ↕ bidirectional      │ │   │
-│  │                  Gemini 2.5 Flash   Audio + Tool Calls  │ │   │
-│  │                  (text/extraction)  + State Updates     │ │   │
-│  └──────────────────────────────────────────────────────────┘   │
+│                        Browser (Next.js)                        │
+│                                                                 │
+│  ┌─────────────┐  ┌──────────────┐  ┌──────────────────────┐   │
+│  │  Workspace  │  │  Landing     │  │  Library / Advisor   │   │
+│  │  Page       │  │  Page        │  │  Pages               │   │
+│  └──────┬──────┘  └──────────────┘  └──────────────────────┘   │
+│         │ WebSocket (wss://)                                    │
+└─────────┼───────────────────────────────────────────────────────┘
+          │
+┌─────────┼───────────────────────────────────────────────────────┐
+│         │        Node.js Custom Server (server.ts)              │
+│  ┌──────▼──────────────────────┐                               │
+│  │  WebSocket Handler          │                               │
+│  │  (lib/ws-handler.ts)        │◄──── Room Manager             │
+│  └──────┬──────────────────────┘      (lib/room-manager.ts)    │
+│         │ Google GenAI Live API                                │
+│  ┌──────▼──────────────────────┐                               │
+│  │  Gemini 2.0 Flash Live      │                               │
+│  │  (Multimodal, Real-time)    │                               │
+│  └─────────────────────────────┘                               │
+│                                                                 │
+│  REST API Routes (/app/api/*)                                   │
+│  ├── /api/health       ─ health check                          │
+│  ├── /api/extract      ─ primitive extraction                   │
+│  ├── /api/chat         ─ advisor chat                          │
+│  ├── /api/analyze      ─ pathway analysis                      │
+│  ├── /api/summarize    ─ session summary                       │
+│  ├── /api/transcribe   ─ audio transcription                   │
+│  ├── /api/tts          ─ text-to-speech                        │
+│  ├── /api/research     ─ grounded research                     │
+│  ├── /api/process-document ─ document ingestion               │
+│  ├── /api/generate-agreement ─ settlement agreement           │
+│  └── /api/live         ─ WebSocket proxy                       │
 └─────────────────────────────────────────────────────────────────┘
 ```
-
-A single Node.js process (`server.ts` → compiled `server.js`) runs both the Next.js App Router for HTTP requests and a WebSocket server on `/api/live` for live audio sessions. All AI calls happen server-side — credentials never reach the browser.
 
 ---
 
 ## Features
 
 ### Core Mediation
-- **Live Audio Mediation** — Two-party sessions with a real-time AI mediator voice (Gemini Live Audio API)
-- **7-Rule Turn-Taking Protocol** — Structured 3-round Discovery, phase-aware Exploration cross-referencing, and conflict structure announcements baked into the system instruction
-- **Buffered Transcript** — Word-by-word fragments buffered and flushed on `turnComplete`/`toolCall` with `[MM:SS]` timestamps; color-coded live panel (indigo = Concordia, sky = Speaker)
-- **Continuous Background Extraction** — Auto-extracts TACITUS primitives every 3 minutes during live sessions; duplicate-aware merge; subtle extraction notice toast
-- **TACITUS Conflict Grammar** — 8 primitive types extracted in real time from live transcript
+- **Live AI Mediator** — Gemini 2.0 Flash Live streams real-time audio, speaks to both parties, and adapts its approach based on escalation level and Glasl stage
+- **TACITUS Primitive Extraction** — Automatic identification of Actors, Claims, Interests, Constraints, Leverage, Commitments, Events, and Narratives from speech
+- **Live Knowledge Graph** — D3-powered force-directed graph showing relationships between all conflict primitives
+- **Session Timeline** — Chronological event log with phase transitions, escalation markers, and key moments
 
-### Analysis & Resolution
-- **Conflict Knowledge Graph** — D3 force-directed graph of all conflict primitives, updated live as the AI speaks; zoom controls (+/−/Fit All); highlight-by-party mode
-- **Psychological Profiling** — Per-party emotional state, conflict style (Thomas-Kilmann), trust scores (Mayer/Davis/Schoorman), and risk assessment (toggleable)
-- **Escalation Meter** — Live semicircle gauge tracking session tension
-- **Resolution Pathways** — Rich AI-generated proposals with trade-offs per party, feasibility rating, implementation steps, and framework tagging
-- **ZOPA Analysis** — Automatic identification of the Zone of Possible Agreement with visual range bars
-- **Framework Fit Scoring** — Ranks 6+ mediation frameworks (0–100) and lets you re-run analysis locked to a single framework
-- **Psychological Dynamics** — Surface hidden dynamics from the conversation (attribution errors, identity threat, power asymmetries)
-- **Case Summary** — Generate a structured markdown summary with session overview, key claims, core interests, agreements, tensions, and recommended next steps; copyable or exportable as `.md`
+### Analysis & Intelligence
+- **Escalation Detection** — Real-time Gottman Four Horsemen analysis (blame, contempt, threat, stonewalling) with 0–100 scoring
+- **Glasl Stage Mapping** — Seven-stage model automatically detected from conversation indicators
+- **Cognitive Distortion Identification** — Detects 10+ distortions (Fundamental Attribution Error, Zero-Sum Thinking, Anchoring, Catastrophizing, etc.)
+- **Pathway Analysis** — AI-generated resolution pathways with ZOPA analysis, BATNA assessment, and ranked options
+- **31 Theoretical Frameworks** — Fisher & Ury, Lederach, Rosenberg NVC, Shapiro Identity-Based Conflict, solution-focused mediation, and 26 more
 
-### Case Structure
-- **Per-Primitive Pin & Resolve** — Star-pin important primitives (sorted to top); mark resolved (strikethrough); both persisted in case state
-- **Auto-Group** — Clusters primitives by actor + keyword; creates `PrimitiveCluster` records
-- **Merge Duplicates** — Detects near-duplicate primitives (>60% word overlap, same type) and removes them
-- **Primitive Count in Tab Label** — Live count badge: "Case Structure (14)"
+### Resolution Tools
+- **Blind Bidding** — Smartsettle ONE–inspired RCB algorithm; parties submit confidential value ranges; system settles at overlap midpoint weighted by range width
+- **Settlement Agreement Generation** — AI-drafted HTML settlement document with preamble, numbered terms, responsible parties, and deadlines
+- **Case Summary** — Comprehensive structured summary with key claims, core interests, areas of agreement, and recommended next steps
+- **Caucus Mode** — Private conversations with individual parties during live sessions
 
-### Session Management
-- **Session Duration Timer** — Live `MM:SS` counter in the status bar; milestone toasts at 3 min, 10 min, 15 min
-- **Auto-save** — Writes case state to `localStorage` every 30 seconds during live sessions
-- **Rate Limit Retry** — API calls automatically retry up to 3 times on 429 with exponential backoff (5s, 10s, 20s)
-- **Reconnection Overlay** — Yellow banner with attempt counter shown during WebSocket reconnects
-- **Timeline Tab** — Chronological event log (utterance, extraction, phase-change, escalation, common-ground, reflection) with type icons, elapsed timestamps, and filter controls
-
-### Export
-- **Export Dropdown** — JSON case export, Markdown report, Copy Transcript, Copy Summary — all from a single toolbar button
+### Collaboration
+- **Multi-Party Rooms** — Party A creates a room code (e.g., `H7KR2N`); Party B joins on any device via `?join=CODE` URL; both parties share a single Gemini Live session
+- **Document Upload** — PDF/text document ingestion; AI extracts key facts and integrates into case context
+- **Export Options** — Markdown, JSON, transcript, case summary, settlement agreement
 
 ### UX
-- **Mediator Styles** — Professional (Zephyr voice) or Empathic (Kore voice) — changes system instruction preamble and AI personality
-- **Keyboard Shortcuts** — `1-5` switch tabs; `Ctrl+Enter` → Analyze; `Escape` → close modals
-- **Advisor Chat** — Ask the AI strategic questions about any conflict scenario
-- **Audio Transcription** — Record and transcribe audio via Gemini
-- **Text-to-Speech** — Generate natural mediator voice from text
-- **Resolution Library** — Reference guide to 30+ established mediation frameworks
-- **Session Resumption** — Automatic reconnection with resumption handles if the Gemini session drops
-- **Demo Mode** — Full interactive UI at `/demo` with no API keys required
+- **Mobile-First** — Panel tab strip, floating mic FAB, fixed bottom status bar for small screens
+- **Demo Mode** — Simulated dispute replay for presentations without live microphone
+- **Accessibility** — `focus-visible` rings, `prefers-reduced-motion` support, aria-labels on all icon-only controls
+
+---
+
+## TACITUS Conflict Grammar
+
+| Primitive | Symbol | Description | Example |
+|-----------|--------|-------------|---------|
+| **Actor** | A | Any party with agency in the dispute | "Alice (claimant)", "ABC Corp (respondent)" |
+| **Claim** | C | A stated position or demand | "I am owed $15,000 in unpaid wages" |
+| **Interest** | I | The underlying need behind a claim | "Financial stability", "recognition" |
+| **Constraint** | K | A hard limit neither party can cross | "Cannot exceed budget cap", "legal deadline" |
+| **Leverage** | L | A resource giving bargaining power | "Signed contract", "industry contacts" |
+| **Commitment** | O | An agreed action or obligation | "Will deliver by Friday", "pay in instalments" |
+| **Event** | E | A historical fact anchoring the dispute | "Contract signed 2023-01-15", "termination date" |
+| **Narrative** | N | A story frame each party uses | "I was victimised", "they breached the agreement" |
+
+---
+
+## Theoretical Foundation
+
+| Framework | Author(s) | Year | Applied To |
+|-----------|-----------|------|------------|
+| Principled Negotiation | Fisher, Ury, Patton | 1981 | Interest excavation, BATNA |
+| Conflict Escalation Model | Glasl | 1982 | Stage detection |
+| Peacebuilding | Lederach | 1997 | Relationship repair |
+| Transformative Mediation | Bush & Folger | 1994 | Empowerment framing |
+| Narrative Mediation | Winslade & Monk | 2000 | Story reframing |
+| NVC | Rosenberg | 2003 | Emotion/need language |
+| Identity-Based Conflict | Shapiro | 2016 | Identity threat detection |
+| Solution-Focused | de Shazer / Berg | 1988 | Exception questions |
+| Thomas-Kilmann | Thomas & Kilmann | 1974 | Conflict style profiling |
+| Gottman Four Horsemen | Gottman | 1994 | Escalation detection |
+| … and 21 more | — | — | Full list in `/app/(app)/library` |
 
 ---
 
@@ -131,333 +126,252 @@ A single Node.js process (`server.ts` → compiled `server.js`) runs both the Ne
 
 | Layer | Technology |
 |-------|-----------|
-| **Frontend** | Next.js 15, React 19, TypeScript, Tailwind CSS 4, Framer Motion |
-| **Backend** | Express-style HTTP server + `ws` WebSocket library (`server.ts`) |
-| **AI** | `@google/genai` — Gemini Live Audio, Gemini Flash (text), Gemini TTS |
-| **Visualization** | D3.js (conflict graph), Recharts (party profile charts) |
-| **Infrastructure** | Docker (multi-stage, standalone), Google Cloud Run |
+| Framework | Next.js 15 (App Router, Turbopack) |
+| Language | TypeScript 5.8 |
+| UI | React 19, Tailwind CSS 4 |
+| Animation | Framer Motion (via `motion`) |
+| Charts | Recharts, D3 (force graph) |
+| AI | Google Gemini 2.0 Flash Live API (`@google/genai`) |
+| Server | Node.js custom server with `ws` WebSocket library |
+| Testing | Vitest 4 |
+| Icons | Lucide React |
+| Fonts | Instrument Serif, DM Sans, JetBrains Mono (Google Fonts) |
 
 ---
 
-## Routes
+## Getting Started
 
-| Route | Description |
-|-------|-------------|
-| `/` | Landing page |
-| `/demo` | Interactive demo — no API keys needed |
-| `/workspace` | Live mediation workspace (requires credentials) |
-| `/chat` | Advisor chat |
-| `/transcribe` | Audio transcription |
-| `/tts` | Text-to-speech engine |
-| `/library` | Resolution framework library (30+ frameworks) |
-| `/how-it-works` | Platform guide |
+### Prerequisites
 
----
+- Node.js 20+
+- A Google Gemini API key (Gemini 2.0 Flash Live access required)
 
-## Local Development
-
-**Prerequisites:** Node.js 20+
+### Installation
 
 ```bash
+git clone https://github.com/sargonxg/H2_CONCORDIA_GHACK_SUBMISSION.git
+cd H2_CONCORDIA_GHACK_SUBMISSION
 npm install
-
-# Create .env.local with your credentials (see .env.example)
-cp .env.example .env.local
-# Edit .env.local — add GOOGLE_SERVICE_ACCOUNT_JSON + GOOGLE_CLOUD_PROJECT
-# OR set USE_VERTEX_AI=false and GEMINI_API_KEY for simpler setup
-
-npm run dev
-# → http://localhost:8080
 ```
 
-The `npm run dev` command runs `tsx server.ts`, which starts both the Next.js dev server and the WebSocket server on port 8080 in a single process.
+### Environment Variables
 
-> The demo at `/demo` works without any API keys — good for exploring the UI.
+Create a `.env` file in the project root:
+
+```env
+GEMINI_API_KEY=your_api_key_here
+```
+
+> **Note:** The application uses `dotenv` and reads `GEMINI_API_KEY` directly. No other environment variables are required.
+
+### Running Locally
+
+```bash
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000). The custom Node.js server (`server.ts`) handles both Next.js HTTP requests and WebSocket connections on the same port.
+
+### Production Build
+
+```bash
+npm run build
+node server.js
+```
 
 ---
 
 ## Testing
 
 ```bash
-# Run all tests
+# Run all tests (single pass)
 npm test
 
-# Watch mode for development
+# Run with verbose output (CI mode)
+npm run test:ci
+
+# Watch mode during development
 npm run test:watch
 
 # Coverage report
 npm run test:coverage
 ```
 
-Tests cover:
-- **De-escalation engine** — trigger pattern detection, protocol selection, Glasl stage assessment
-- **Mediation library** — framework integrity, primitive mappings, relevance scoring
-- **Export utilities** — markdown and JSON output correctness
-- **API routes** — health check, response shapes
-- **Type contracts** — structural validation of all TACITUS primitives
+### Test Suites
+
+| File | Coverage |
+|------|----------|
+| `tests/lib/de-escalation.test.ts` | `detectEscalationLevel`, `getProtocolForEscalation`, `ESCALATION_TRIGGERS`, `COGNITIVE_DISTORTIONS`, `detectGlaslStage` |
+| `tests/lib/mediation-library.test.ts` | `FRAMEWORKS` (≥31 entries, all IDs, glaslStages), `getRelevantFrameworks`, `buildFrameworkSnippet` |
+| `tests/lib/blind-bidding.test.ts` | `calculateSettlement` RCB algorithm — overlap, gap, weighting, edge cases |
+| `tests/lib/room-manager.test.ts` | `createRoom`, `getRoom`, `joinRoom`, `leaveRoom`, `broadcastToRoom`, utilities |
+| `tests/lib/export-agreement.test.ts` | `generateAgreementHTML` — valid HTML, party names, terms, disclaimer |
+| `tests/api/routes.test.ts` | `/api/health`, `/api/extract`, `/api/chat`, `/api/generate-agreement` |
 
 ---
 
-## Docker Build & Run
+## API Reference
 
-```bash
-docker build -t concordia .
+All REST endpoints accept and return JSON unless noted.
 
-docker run -p 8080:8080 -e GEMINI_API_KEY=your-key-here concordia
-```
-
-For Vertex AI mode:
-
-```bash
-docker run -p 8080:8080 \
-  -e GOOGLE_SERVICE_ACCOUNT_JSON='{"type":"service_account",...}' \
-  -e GOOGLE_CLOUD_PROJECT=your-project-id \
-  concordia
-```
-
-The Dockerfile uses a three-stage build: deps → builder (Next.js standalone + esbuild bundle of `server.ts`) → minimal Alpine runner.
-
----
-
-## Cloud Run Deploy
-
-```bash
-gcloud run deploy concordia \
-  --source . \
-  --region us-central1 \
-  --allow-unauthenticated \
-  --timeout=3600 \
-  --session-affinity \
-  --max-instances=10 \
-  --concurrency=100 \
-  --memory=1Gi \
-  --cpu=1 \
-  --set-env-vars "NODE_ENV=production" \
-  --set-secrets "GOOGLE_SERVICE_ACCOUNT_JSON=concordia-sa-key:latest"
-```
-
----
-
-## Why Cloud Run?
-
-| Reason | Detail |
-|--------|--------|
-| **WebSocket support** | Cloud Run supports long-lived HTTP/2 and WebSocket connections out of the box |
-| **Same Google network** | Vertex AI calls stay within Google's internal network — low latency, no egress cost |
-| **Scale to zero** | Zero cost when idle; instances spin up in ~2 seconds |
-| **Session affinity** | Reconnecting clients hit the same container instance, preserving in-memory WebSocket state |
-| **Managed TLS + routing** | No nginx, no load balancer config needed |
-
----
-
-## Environment Variables
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `GOOGLE_SERVICE_ACCOUNT_JSON` | Yes* | Full JSON content of a GCP service account key (single line). Required IAM role: `roles/aiplatform.user` |
-| `GOOGLE_CLOUD_PROJECT` | Yes* | Google Cloud project ID (must have Vertex AI API enabled) |
-| `GOOGLE_CLOUD_LOCATION` | No | Vertex AI region (default: `us-central1`) |
-| `USE_VERTEX_AI` | No | Set to `false` to use Gemini Developer API instead of Vertex AI |
-| `GEMINI_API_KEY` | If no SA | Gemini Developer API key — required when `USE_VERTEX_AI=false` |
-| `MODEL_LIVE` | No | Override live audio model (default: `gemini-live-2.5-flash-native-audio`) |
-| `MODEL_TEXT` | No | Override text/chat model (default: `gemini-2.0-flash`) |
-| `MODEL_TTS` | No | Override TTS model (default: `gemini-2.5-flash-preview-tts`) |
-| `MODEL_TRANSCRIBE` | No | Override transcription model (default: `gemini-2.0-flash`) |
-| `PORT` | No | Server port (default: `8080`) |
-| `NODE_ENV` | No | Set to `production` in deployed environments |
-
-\* Not required when `USE_VERTEX_AI=false` and `GEMINI_API_KEY` is set.
-
----
-
-## API Routes
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/health` | GET | Health check → `{ status: "ok", timestamp }` |
-| `/api/chat` | POST | Advisor agent chat |
-| `/api/extract` | POST | Extract TACITUS conflict primitives from transcript |
-| `/api/analyze` | POST | Analyze resolution pathways and ZOPA |
-| `/api/transcribe` | POST | Transcribe audio (multipart/form-data) |
-| `/api/tts` | POST | Generate speech from text |
-| `/api/research` | POST | Research grounding for conflict context |
-| `/api/live` | WS | WebSocket endpoint for live audio mediation sessions |
-
-<details>
-<summary><code>POST /api/extract</code> — Extract TACITUS primitives</summary>
-
-**Request:**
+### `GET /api/health`
+Returns service status.
 ```json
+{ "status": "ok", "timestamp": "2025-01-01T00:00:00.000Z", "service": "CONCORDIA" }
+```
+
+### `POST /api/extract`
+Extracts TACITUS primitives from text.
+```json
+// Request
+{ "text": "Alice claims Bob owes her $10,000 for the completed project." }
+
+// Response
+{ "result": "{\"actors\": [...], \"primitives\": [...]}" }
+```
+
+### `POST /api/chat`
+Advisor chat with conversation history.
+```json
+// Request
+{ "message": "What is BATNA?", "history": [], "caseContext": "..." }
+
+// Response
+{ "text": "BATNA stands for Best Alternative to a Negotiated Agreement..." }
+```
+
+### `POST /api/analyze`
+Generates resolution pathways.
+```json
+// Request
+{ "transcript": "...", "caseStructure": "...", "framework": "fisher-ury" }
+
+// Response
+{ "result": "{\"executiveSummary\": \"...\", \"pathways\": [...], \"zopaAnalysis\": {...}}" }
+```
+
+### `POST /api/summarize`
+Summarises a completed session.
+```json
+// Request
+{ "transcript": "...", "actors": [], "primitives": [], "commonGround": [], "tensionPoints": [] }
+```
+
+### `POST /api/transcribe`
+Transcribes base64-encoded audio.
+```json
+// Request
+{ "base64Audio": "...", "mimeType": "audio/webm" }
+// Response
+{ "text": "Transcribed speech here." }
+```
+
+### `POST /api/tts`
+Generates speech audio from text.
+```json
+// Request
+{ "text": "Let's take a moment to breathe.", "voiceName": "Kore" }
+// Response
+{ "audio": "<base64 PCM>" }
+```
+
+### `POST /api/generate-agreement`
+Generates a structured settlement agreement.
+```json
+// Request
 {
-  "text": "Alice says she needs the project completed by Friday because her client has a hard deadline. Bob argues that's impossible given the current team capacity."
+  "caseTitle": "Employment Dispute",
+  "caseType": "Workplace",
+  "partyAName": "Alice",
+  "partyBName": "Bob",
+  "agreements": [{ "topic": "Compensation", "terms": "Payment of $5,000 within 30 days" }],
+  "transcript": "..."
 }
 ```
 
-**Response:**
+### `POST /api/process-document`
+Ingests a document file (multipart/form-data, field: `file`).
 ```json
-{
-  "result": {
-    "actors": [
-      { "name": "Alice", "role": "Project Manager", "type": "individual", "stance": "Firm on deadline", "powerLevel": 3 },
-      { "name": "Bob", "role": "Team Lead", "type": "individual", "stance": "Pushing back on timeline", "powerLevel": 3 }
-    ],
-    "primitives": [
-      { "primitiveType": "Claim", "actorName": "Alice", "description": "Project must be completed by Friday", "subType": "demand", "status": "active", "confidence": 0.9 },
-      { "primitiveType": "Constraint", "actorName": "Alice", "description": "Client has a hard deadline", "subType": "temporal", "rigidity": "hard" },
-      { "primitiveType": "Constraint", "actorName": "Bob", "description": "Current team capacity insufficient", "subType": "organizational", "rigidity": "soft" },
-      { "primitiveType": "Interest", "actorName": "Alice", "description": "Maintaining client relationship and trust", "subType": "relational", "priority": "critical", "visibility": "implicit" }
-    ]
-  }
-}
-```
-</details>
-
-<details>
-<summary><code>POST /api/analyze</code> — Analyze resolution pathways</summary>
-
-**Request:**
-```json
-{
-  "transcript": "Full session transcript...",
-  "caseStructure": "{ \"actors\": [...], \"primitives\": [...] }",
-  "framework": "Fisher & Ury"
-}
+// Response
+{ "summary": "Document summary with key facts..." }
 ```
 
-**Response:**
-```json
-{
-  "result": {
-    "executiveSummary": "Both parties share an interest in project success...",
-    "zopaExists": true,
-    "zopaDescription": "Agreement likely achievable if scope is reduced...",
-    "pathways": [
-      {
-        "title": "Phased Delivery with Milestone Reviews",
-        "description": "Deliver a core subset by Friday, remainder by following Wednesday.",
-        "framework": "Fisher & Ury",
-        "feasibility": 78,
-        "tradeOffsPartyA": ["Partial delivery may disappoint client"],
-        "tradeOffsPartyB": ["Requires overtime for two days"],
-        "implementationSteps": ["Define MVP scope today", "Client call Thursday", "Review Friday"]
-      }
-    ]
-  }
-}
+### `WebSocket /api/live`
+Bidirectional audio stream. See `lib/ws-handler.ts` for full message protocol.
+
+**Client → Server messages:**
+| Type | Payload | Description |
+|------|---------|-------------|
+| `start` | `{ context, mediatorProfile, partyNames, createRoom?, caseId? }` | Start a new session |
+| `join` | `{ roomCode, name }` | Join an existing room as Party B |
+| `audio` | `{ audio: base64 }` | Stream PCM audio chunk |
+| `toolResponse` | `{ functionResponses }` | Respond to Gemini tool call |
+| `context` | `{ text }` | Inject context into live session |
+| `ping` | — | Keep-alive |
+| `close` | — | End session gracefully |
+
+**Server → Client messages:**
+| Type | Payload | Description |
+|------|---------|-------------|
+| `open` | — | Session ready |
+| `roomCreated` | `{ roomCode }` | Room created (Party A) |
+| `joined` | `{ partyId }` | Successfully joined room (Party B) |
+| `message` | `{ data }` | Gemini response data |
+| `reconnecting` | — | Session reconnecting |
+| `reconnected` | — | Reconnection successful |
+| `error` | `{ error }` | Error message |
+| `close` | — | Session ended |
+
+---
+
+## Multi-Party Room Flow
+
 ```
-</details>
-
----
-
-## TACITUS Conflict Grammar
-
-The TACITUS ontology represents conflict as a directed graph of 8 primitive types:
-
-| Primitive | Subtypes | Description |
-|-----------|----------|-------------|
-| **Actor** | individual, group, organization, state | The parties to the conflict |
-| **Claim** | position, demand, assertion, accusation | What parties say they want or assert |
-| **Interest** | substantive, procedural, psychological, relational | Underlying needs behind positions |
-| **Constraint** | legal, financial, temporal, organizational, cultural, emotional | Hard and soft limits on resolution space |
-| **Leverage** | coercive, reward, legitimate, expert, referent, informational | Sources of power each party holds |
-| **Commitment** | promise, agreement, concession, threat, ultimatum | Binding or conditional acts |
-| **Event** | trigger, escalation, de-escalation, turning-point, deadline, milestone | Key moments in the conflict timeline |
-| **Narrative** | origin-story, grievance, justification, aspiration, identity-claim, counter-narrative | Frames and stories that shape perception |
-
-**Edge types** connecting primitives: `OPPOSES`, `ALIGNS_WITH`, `CONFLICTS_WITH`, `BLOCKS`, `SUPPORTS`, `ADDRESSES`, `TRIGGERS`, `FRAMES`, `CONTRADICTS`
-
-**Actor-to-primitive edges**: `MAKES` (claim), `HAS` (interest), `FACES` (constraint), `WIELDS` (leverage), `GIVES` (commitment), `NARRATES` (narrative)
-
----
-
-## Theoretical Foundation
-
-CONCORDIA's mediation intelligence draws on 35+ peer-reviewed frameworks spanning six decades of conflict resolution research:
-
-| Tradition | Key Theorists | CONCORDIA Application |
-|-----------|---------------|----------------------|
-| **Interest-Based** | Fisher, Ury, Patton (1981) | Position→Interest reframing, BATNA analysis, ZOPA detection |
-| **Transformative** | Bush & Folger (1994) | Empowerment + recognition moves, identity threat detection |
-| **Narrative** | Winslade & Monk (2000) | Dominant narrative identification, story externalization |
-| **Escalation** | Glasl (1982) | 9-stage assessment, stage-appropriate intervention selection |
-| **Ripeness** | Zartman (2000) | Mutually hurting stalemate detection, readiness scoring |
-| **Social Psychology** | Deutsch (1973), Pruitt (1983) | Cooperative process induction, dual concern mapping |
-| **Structural** | Galtung (1969), Curle (1971) | ABC triangle analysis, power-awareness assessment |
-| **Cognitive** | Argyris (1970s), Kahneman (2011) | Ladder of inference, cognitive bias detection |
-| **Complexity** | Coleman (2011) | Intractability detection, attractor perturbation |
-| **Communication** | Gottman (1994) | Four Horsemen detection, repair attempt recognition |
-
----
-
-## Multi-Agent Architecture
-
-| Agent | Role | AI Model |
-|-------|------|----------|
-| **Listener** | Real-time voice I/O. Drives the mediation conversation, calls `updateMediationState` tool to push structured updates to the workspace UI | Gemini Live Audio |
-| **Profiler** | Assesses psychological indicators per party: emotional state (Plutchik), conflict style (Thomas-Kilmann), trust dimensions (Mayer/Davis/Schoorman), risk scores | Gemini Flash (via tool call in live session) |
-| **Extractor** | Parses transcript text into TACITUS JSON primitives via `/api/extract` | Gemini Flash |
-| **Advisor** | Generates resolution pathways, critical questions, ZOPA analysis, and strategic recommendations via `/api/analyze` and `/api/chat` | Gemini Flash |
-
----
-
-## Mediation Phases
-
-The AI mediator guides sessions through six structured phases:
-
-1. **Opening** — Welcome, ground rules, introductions, setting the tone
-2. **Discovery** — Individual statements from each party (one at a time, uninterrupted)
-3. **Exploration** — Cross-referencing perspectives, identifying patterns, surfacing triggers
-4. **Negotiation** — Brainstorming options, exploring trade-offs, testing flexibility
-5. **Resolution** — Narrowing viable pathways, testing draft agreements
-6. **Agreement** — Summarising outcomes, confirming next steps, closing
-
----
-
-## Mediation Frameworks
-
-CONCORDIA draws on 30+ established frameworks, including:
-
-Fisher & Ury Principled Negotiation, Lederach Peacebuilding, Glasl Escalation Model, Zartman Ripeness Theory, Thomas-Kilmann Conflict Modes, Bush & Folger Transformative Mediation, Winslade & Monk Narrative Mediation, Gottman Four Horsemen, Mayer/Davis/Schoorman Trust Model, Lewicki Trust Repair, Ury's Getting Past No, and more.
-
----
-
-## Demo
-
-The `/demo` route provides a fully interactive version of the workspace UI populated with synthetic data. No API keys or Google Cloud credentials are required. Use it to explore the conflict graph, party profiles, escalation meter, and resolution pathway display before configuring live credentials.
-
----
-
-## Health Check
-
-```bash
-curl https://your-cloud-run-url/api/health
-# → {"status":"ok","timestamp":"2026-03-10T..."}
+Party A (Mediator device)          Party B (Second device)
+         │                                  │
+         │  Start Session                   │
+         │  { createRoom: true }            │
+         ▼                                  │
+   [Room Created: H7KR2N]                   │
+         │                                  │
+         │  Share URL:                      │
+         │  https://…/workspace?join=H7KR2N │
+         │──────────────────────────────────►
+         │                                  │
+         │                         [Join Screen]
+         │                                  │
+         │                     { join: "H7KR2N", name: "Bob" }
+         │◄─────────────────────────────────│
+         │                                  │
+   [partyJoined]                    [joined: partyId=B]
+         │                                  │
+         │◄═══════ Shared Gemini Live Session ════════►
+         │                                  │
+         │    Audio from either party ─────►│ Gemini processes
+         │◄──────────────────── AI audio ──►│ broadcasts to both
 ```
+
+Room codes use an unambiguous charset (`ABCDEFGHJKLMNPQRSTUVWXYZ23456789`) to avoid 0/O and 1/I confusion when shared verbally. Rooms auto-expire 15 minutes after creation if Party B never joins.
 
 ---
 
 ## Contributing
 
 1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/my-improvement`
-3. Run tests: `npm test`
-4. Ensure linting passes: `npm run lint`
-5. Submit a PR with a clear description of what you changed and why
-
-### Development Conventions
-
-- TypeScript strict mode
-- All new features require tests
-- New mediation frameworks must include: `id`, `corePrinciples`, `keyTechniques`, `diagnosticQuestions`, `glaslStages`, `tacitusPrimitives`
-- UI components go in `components/workspace/`
-- All AI service functions go in `lib/ai-service.ts`
+2. Create a feature branch: `git checkout -b feature/my-feature`
+3. Make changes with tests: `npm run test:ci`
+4. Type-check: `npx tsc --noEmit`
+5. Commit with a descriptive message
+6. Open a pull request
 
 ---
 
 ## License
 
-Apache-2.0
+MIT License — see [LICENSE](LICENSE) for details.
+
+CONCORDIA is a **communication facilitation tool**. It does not provide legal, psychological, or therapeutic advice. Outputs should be reviewed by qualified professionals before use in formal proceedings.
 
 ---
 
-CONCORDIA by **TACITUS** — [tacitus.me](https://tacitus.me) — [hello@tacitus.me](mailto:hello@tacitus.me)
+*CONCORDIA is powered by the [Google Gemini API](https://ai.google.dev/) and built with [Next.js](https://nextjs.org/).*
