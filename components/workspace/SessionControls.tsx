@@ -37,6 +37,9 @@ interface Props {
   onExitCaucus?: () => void;
   partyAName?: string;
   partyBName?: string;
+  // Settlement agreement
+  onGenerateAgreement?: () => void;
+  hasAgreements?: boolean;
 }
 
 export default function SessionControls({
@@ -67,6 +70,8 @@ export default function SessionControls({
   onExitCaucus,
   partyAName = 'Party A',
   partyBName = 'Party B',
+  onGenerateAgreement,
+  hasAgreements = false,
 }: Props) {
   return (
     <div className="flex items-center gap-3">
@@ -175,20 +180,34 @@ export default function SessionControls({
         {showExport && (
           <div className="absolute top-full right-0 mt-1 w-52 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl shadow-xl z-50 overflow-hidden">
             {[
-              { label: "Export Markdown", action: onExportMarkdown },
-              { label: "Export JSON", action: onExportJSON },
-              { label: "Export Transcript", action: onExportTranscript },
-              { label: "Copy Transcript", action: onCopyTranscript },
-              { label: "Copy Summary", action: onCopySummary },
-            ].map(({ label, action }) => (
+              { label: "Export Markdown", action: onExportMarkdown, disabled: false },
+              { label: "Export JSON", action: onExportJSON, disabled: false },
+              { label: "Export Transcript", action: onExportTranscript, disabled: false },
+              { label: "Copy Transcript", action: onCopyTranscript, disabled: false },
+              { label: "Copy Summary", action: onCopySummary, disabled: false },
+            ].map(({ label, action, disabled }) => (
               <button
                 key={label}
                 onClick={() => { action(); setShowExport(false); }}
-                className="w-full text-left px-4 py-2.5 text-sm text-[var(--color-text-muted)] hover:text-white hover:bg-[var(--color-surface-hover)] transition-colors"
+                disabled={disabled}
+                className="w-full text-left px-4 py-2.5 text-sm text-[var(--color-text-muted)] hover:text-white hover:bg-[var(--color-surface-hover)] transition-colors disabled:opacity-40"
               >
                 {label}
               </button>
             ))}
+            {onGenerateAgreement && (
+              <>
+                <div className="border-t border-[var(--color-border)] my-1" />
+                <button
+                  onClick={() => { onGenerateAgreement(); setShowExport(false); }}
+                  disabled={!hasAgreements}
+                  className="w-full text-left px-4 py-2.5 text-sm text-emerald-400 hover:text-emerald-300 hover:bg-[var(--color-surface-hover)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  title={!hasAgreements ? "Requires at least one tracked agreement" : "Generate PDF settlement agreement"}
+                >
+                  Generate Settlement Agreement
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>

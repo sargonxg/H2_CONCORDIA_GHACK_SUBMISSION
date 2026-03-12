@@ -239,3 +239,19 @@ export const researchGrounding = async (
 ): Promise<{ text: string; chunks: any }> => {
   return apiPost("/api/research", { query });
 };
+
+// ── Document Processing ──
+
+export const processDocument = async (file: File): Promise<string> => {
+  const formData = new FormData();
+  formData.append('file', file);
+  const res = await fetch('/api/process-document', { method: 'POST', body: formData });
+  if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error((err as any).error || `Upload failed: ${res.status}`); }
+  return (await res.json()).summary;
+};
+
+// ── Settlement Agreement ──
+
+export const generateAgreementDoc = async (data: any): Promise<any> => {
+  return (await apiPost('/api/generate-agreement', data)).agreement;
+};

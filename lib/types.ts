@@ -359,3 +359,23 @@ export type GlaslAssessment = {
   indicators: string[];
   timestamp: string;
 };
+
+// ── Intake Wizard Data ──
+
+export type IntakeData = {
+  caseTitle: string;
+  caseType: string;
+  mediatorStyle: 'professional' | 'empathic';
+  language: string;
+  partyA: { name: string; role?: string; relationship: string };
+  partyB: { name: string; role?: string; relationship: string };
+  powerBalance: 'yes' | 'no' | 'unsure';
+  powerDetail?: string;
+  description?: string;
+  partyAGoal?: string;
+  partyBGoal?: string;
+  documentSummaries: string[];
+  partyAStatement?: string;
+  partyBStatement?: string;
+  context: string;
+};
