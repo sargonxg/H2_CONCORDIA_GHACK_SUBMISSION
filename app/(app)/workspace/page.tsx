@@ -45,7 +45,7 @@ import {
   analyzePathways,
   summarizeCase,
 } from "@/services/gemini-client";
-import type { Actor, Primitive, PrimitiveType, Case, LiveMediationState, OntologyStats, PartyProfile, GapNotification, CaseSummary, TimelineEntry, PrimitiveCluster, Agreement, EscalationFlag, SolutionProposal } from "@/lib/types";
+import type { Actor, Primitive, PrimitiveType, Case, LiveMediationState, OntologyStats, PartyProfile, GapNotification, CaseSummary, TimelineEntry, PrimitiveCluster, Agreement, EscalationFlag, SolutionProposal, PowerDynamics, ImpasseEvent } from "@/lib/types";
 import { safeJsonParse } from "@/lib/utils";
 import { exportAsMarkdown, exportAsJSON, downloadFile } from "@/lib/export";
 import { useConflictGraph } from "@/hooks/useConflictGraph";
@@ -60,6 +60,7 @@ import TranscriptPanel from "@/components/workspace/TranscriptPanel";
 import AgreementTracker from "@/components/workspace/AgreementTracker";
 import MediatorPlaybook from "@/components/workspace/MediatorPlaybook";
 import KeyboardShortcutsHelp from "@/components/workspace/KeyboardShortcutsHelp";
+import PowerMap from "@/components/workspace/PowerMap";
 
 const PRIMITIVE_TYPES: PrimitiveType[] = [
   "Actor",
@@ -378,6 +379,10 @@ export default function Workspace() {
   const [escalationScore, setEscalationScore] = useState(0);
   const [activeProposal, setActiveProposal] = useState<SolutionProposal | null>(null);
   const [escalationBanner, setEscalationBanner] = useState<EscalationFlag | null>(null);
+  const [caucusMode, setCaucusMode] = useState<'joint' | 'partyA' | 'partyB'>('joint');
+  const [powerDynamics, setPowerDynamics] = useState<PowerDynamics | null>(null);
+  const [impasseEvents, setImpasseEvents] = useState<ImpasseEvent[]>([]);
+  const [impaseBanner, setImpaseBanner] = useState<ImpasseEvent | null>(null);
 
   const [demoMode, setDemoMode] = useState(false);
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
@@ -414,6 +419,8 @@ export default function Workspace() {
   const autoSaveIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const extractionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastExtractedPosRef = useRef(0);
+  // Impasse detection — tracks when the last new primitive was extracted
+  const lastNewPrimitiveTimeRef = useRef<number>(Date.now());
 
   // Styled transcript panel
   const transcriptEndRef = useRef<HTMLDivElement>(null);
@@ -526,6 +533,18 @@ export default function Workspace() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isRecording, activeCase?.transcript]);
 
+  // Automatic impasse detection — alert when no new primitives in >5 minutes
+  useEffect(() => {
+    if (status !== 'LIVE') return;
+    const checker = setInterval(() => {
+      const minutesSinceNew = (Date.now() - lastNewPrimitiveTimeRef.current) / 60000;
+      if (minutesSinceNew > 5) {
+        setSessionToast('⚠️ No new information in 5 minutes — consider an impasse-breaking technique');
+      }
+    }, 120000); // check every 2 minutes
+    return () => clearInterval(checker);
+  }, [status]);
+
   // AudioContext recovery on tab visibility change
   useEffect(() => {
     const handler = () => {
@@ -573,6 +592,41 @@ export default function Workspace() {
   const isSessionOpen = () => {
     return sessionRef.current && !sessionClosingRef.current;
   };
+
+  // ── Caucus Mode ──────────────────────────────────────────────────────────────
+  // A caucus is a private session with one party. The mediator can surface
+  // information parties won't share in joint session and reality-test positions.
+  const enterCaucus = useCallback((party: 'partyA' | 'partyB') => {
+    if (!activeCase) return;
+    setCaucusMode(party);
+    const partyName = party === 'partyA'
+      ? (activeCase.actors[0]?.name ?? 'Party A')
+      : (activeCase.actors[1]?.name ?? 'Party B');
+    sessionRef.current?.sendContext(
+      `[CAUCUS MODE ACTIVATED — Private session with ${partyName}]\n` +
+      `You are now in a PRIVATE CAUCUS with ${partyName} only. The other party cannot hear this.\n` +
+      `In caucus:\n` +
+      `- Be more direct about your assessment of their position's strengths and weaknesses\n` +
+      `- Reality-test: "If we can't reach agreement, what's your Plan B?"\n` +
+      `- Explore flexibility: "Hypothetically, if the other party offered X, would that be interesting?"\n` +
+      `- Surface hidden interests: "Is there anything you haven't been comfortable sharing in joint session?"\n` +
+      `- Remind them: "Anything you tell me here stays private unless you give me permission to share it"\n` +
+      `- DO NOT share the other party's private caucus information\n` +
+      `[END CAUCUS INSTRUCTION]`
+    );
+    console.log(`[Caucus] Entered caucus with ${partyName}`);
+  }, [activeCase]);
+
+  const exitCaucus = useCallback(() => {
+    setCaucusMode('joint');
+    sessionRef.current?.sendContext(
+      `[CAUCUS ENDED — Returning to joint session]\n` +
+      `Both parties are now present again. Summarize (WITHOUT revealing private caucus content) ` +
+      `any progress or new understanding. Propose a next step.\n` +
+      `[END CAUCUS INSTRUCTION]`
+    );
+    console.log('[Caucus] Returned to joint session');
+  }, []);
 
   // ── Bidirectional context injection ─────────────────────────────────────────
   // Sends the current extracted conflict structure back into the live session so
@@ -848,6 +902,43 @@ export default function Workspace() {
                       id: call.id,
                       name: call.name,
                       response: { result: "Solution proposal displayed" },
+                    };
+                  }
+                  if (call.name === "assessPowerDynamics") {
+                    const args = call.args;
+                    const dynamics: PowerDynamics = {
+                      dimensions: args.dimensions || [],
+                      overallBalance: args.overallBalance || "balanced",
+                      rebalancingStrategy: args.rebalancingStrategy,
+                      timestamp: new Date().toISOString(),
+                    };
+                    setPowerDynamics(dynamics);
+                    return {
+                      id: call.id,
+                      name: call.name,
+                      response: { result: "Power dynamics map updated" },
+                    };
+                  }
+                  if (call.name === "detectImpasse") {
+                    const args = call.args;
+                    const event: ImpasseEvent = {
+                      id: Date.now().toString() + Math.random(),
+                      signals: args.signals || [],
+                      duration: args.duration,
+                      lastNewInformation: args.lastNewInformation,
+                      suggestedBreaker: args.suggestedBreaker || "",
+                      timestamp: new Date().toISOString(),
+                    };
+                    setImpasseEvents((prev) => [event, ...prev.slice(0, 9)]);
+                    setImpaseBanner(event);
+                    setTimeout(() => setImpaseBanner(null), 12000);
+                    setSessionToast(
+                      `⚠️ Impasse detected — suggested technique: ${event.suggestedBreaker}`
+                    );
+                    return {
+                      id: call.id,
+                      name: call.name,
+                      response: { result: "Impasse protocol activated" },
                     };
                   }
                   return {
@@ -1736,6 +1827,10 @@ export default function Workspace() {
           }
         });
 
+        // Track time of last new primitive for impasse detection
+        if (primitives.length > c.primitives.length) {
+          lastNewPrimitiveTimeRef.current = Date.now();
+        }
         return { ...c, actors, primitives };
       }),
     );
@@ -2170,6 +2265,11 @@ export default function Workspace() {
           hasSummaryData={!!summaryData}
           onCopySummary={() => summaryData && navigator.clipboard.writeText(summaryData.sessionOverview)}
           onCopyTranscript={() => navigator.clipboard.writeText(activeCase?.transcript || "")}
+          caucusMode={caucusMode}
+          onEnterCaucus={enterCaucus}
+          onExitCaucus={exitCaucus}
+          partyAName={activeCase?.actors[0]?.name ?? 'Party A'}
+          partyBName={activeCase?.actors[1]?.name ?? 'Party B'}
         />
       </header>
 
@@ -2190,6 +2290,51 @@ export default function Workspace() {
             onOpenGraph={() => setActiveTab("graph")}
             extractionNotice={extractionNotice}
           />
+        </div>
+      )}
+
+      {/* ─── CAUCUS BANNER ─── */}
+      {isRecording && caucusMode !== 'joint' && (
+        <div className={`mx-6 mt-2 shrink-0 flex items-center gap-3 px-4 py-2.5 rounded-lg border ${
+          caucusMode === 'partyA'
+            ? 'bg-blue-500/10 border-blue-500/30 text-blue-300'
+            : 'bg-violet-500/10 border-violet-500/30 text-violet-300'
+        }`}>
+          <Users className="w-4 h-4 shrink-0" />
+          <p className="text-sm font-medium flex-1">
+            Private caucus with <span className="font-bold">
+              {caucusMode === 'partyA'
+                ? (activeCase?.actors[0]?.name ?? 'Party A')
+                : (activeCase?.actors[1]?.name ?? 'Party B')}
+            </span> — other party cannot hear this conversation
+          </p>
+          <button
+            onClick={exitCaucus}
+            className="text-xs underline hover:no-underline opacity-70 hover:opacity-100"
+          >
+            Return to joint session
+          </button>
+        </div>
+      )}
+
+      {/* ─── IMPASSE BANNER ─── */}
+      {impaseBanner && (
+        <div className="mx-6 mt-2 shrink-0 flex items-start gap-3 px-4 py-3 bg-orange-500/10 border border-orange-500/30 rounded-lg">
+          <AlertTriangle className="w-4 h-4 text-orange-400 shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-orange-300">Impasse detected</p>
+            <p className="text-xs text-orange-200/80 mt-0.5">
+              Suggested technique: <span className="font-medium">{impaseBanner.suggestedBreaker}</span>
+            </p>
+            {impaseBanner.signals.length > 0 && (
+              <p className="text-xs text-[var(--color-text-muted)] mt-1">
+                Signals: {impaseBanner.signals.join(' · ')}
+              </p>
+            )}
+          </div>
+          <button onClick={() => setImpaseBanner(null)} className="text-orange-400/60 hover:text-orange-400">
+            <X className="w-3.5 h-3.5" />
+          </button>
         </div>
       )}
 
@@ -2688,6 +2833,20 @@ export default function Workspace() {
               <div className="flex-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-4 overflow-y-auto">
                 {pathways ? (
                   <div className="space-y-8">
+                    {/* Power Map */}
+                    {powerDynamics && activeCase && (
+                      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                        className="p-4 bg-[var(--color-surface-hover)] border border-[var(--color-border)] rounded-xl">
+                        <PowerMap
+                          dimensions={powerDynamics.dimensions}
+                          overallBalance={powerDynamics.overallBalance}
+                          rebalancingStrategy={powerDynamics.rebalancingStrategy}
+                          partyAName={activeCase.actors[0]?.name ?? 'Party A'}
+                          partyBName={activeCase.actors[1]?.name ?? 'Party B'}
+                        />
+                      </motion.div>
+                    )}
+
                     {/* Executive Summary */}
                     {pathways.executiveSummary && (
                       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
@@ -3016,8 +3175,8 @@ export default function Workspace() {
                   <ConflictGraph nodes={graphNodes} edges={graphEdges} highlightActorId={highlightActorId} />
                 </ErrorPanel>
               </div>
-              {/* Health check sidebar */}
-              <div className="w-72 shrink-0 overflow-y-auto">
+              {/* Health check + Power Map sidebar */}
+              <div className="w-72 shrink-0 overflow-y-auto space-y-4">
                 <OntologyHealthCheck
                   stats={ontologyStats}
                   partyAName={activeCase?.partyAName || "Party A"}
@@ -3025,6 +3184,17 @@ export default function Workspace() {
                   partyAClaims={partyAClaims}
                   partyBClaims={partyBClaims}
                 />
+                {powerDynamics && activeCase && (
+                  <div className="p-4 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl">
+                    <PowerMap
+                      dimensions={powerDynamics.dimensions}
+                      overallBalance={powerDynamics.overallBalance}
+                      rebalancingStrategy={powerDynamics.rebalancingStrategy}
+                      partyAName={activeCase.actors[0]?.name ?? 'Party A'}
+                      partyBName={activeCase.actors[1]?.name ?? 'Party B'}
+                    />
+                  </div>
+                )}
               </div>
             </div>
           )}

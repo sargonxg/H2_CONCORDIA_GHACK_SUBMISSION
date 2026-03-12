@@ -162,6 +162,22 @@ export type SolutionProposal = {
   timestamp: string;
 };
 
+export type PowerDynamics = {
+  dimensions: { dimension: string; score: number; evidence: string }[];
+  overallBalance: 'balanced' | 'A-favored' | 'B-favored' | 'severely-imbalanced';
+  rebalancingStrategy?: string;
+  timestamp: string;
+};
+
+export type ImpasseEvent = {
+  id: string;
+  signals: string[];
+  duration?: string;
+  lastNewInformation?: string;
+  suggestedBreaker: string;
+  timestamp: string;
+};
+
 export type LiveMediationState = {
   phase: string;
   targetActor: string;

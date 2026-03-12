@@ -391,12 +391,89 @@ function buildToolDeclarations(): any[] {
     },
   };
 
+  const assessPowerDynamics: any = {
+    name: "assessPowerDynamics",
+    description:
+      "Assess and update the power dynamics between parties. Call when you " +
+      "detect power moves (threats, appeals to authority, information asymmetry) or " +
+      "when transitioning between phases. Powers are rated on a -5 to +5 scale where " +
+      "negative means Party A dominance and positive means Party B dominance.",
+    ...nonBlocking,
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        dimensions: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              dimension: { type: Type.STRING, description: "Power dimension name" },
+              score: { type: Type.NUMBER, description: "-5 (A dominant) to +5 (B dominant), 0 = balanced" },
+              evidence: { type: Type.STRING, description: "What you observed" },
+            },
+          },
+          description:
+            "Dimensions: informational, economic, positional, relational, " +
+            "emotional, procedural, coercive, expert, legitimate, referent",
+        },
+        overallBalance: {
+          type: Type.STRING,
+          description: "balanced|A-favored|B-favored|severely-imbalanced",
+        },
+        rebalancingStrategy: {
+          type: Type.STRING,
+          description: "Specific strategy to rebalance if needed",
+        },
+      },
+      required: ["dimensions", "overallBalance"],
+    },
+  };
+
+  const detectImpasse: any = {
+    name: "detectImpasse",
+    description:
+      "Call when you detect the conversation is stuck — repeated positions, " +
+      "circular arguments, emotional withdrawal, or no new information surfacing. " +
+      "Triggers the impasse-breaking protocol.",
+    ...nonBlocking,
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        signals: {
+          type: Type.ARRAY,
+          items: { type: Type.STRING },
+          description: "Observed impasse signals",
+        },
+        duration: { type: Type.STRING, description: "How long the impasse has lasted" },
+        lastNewInformation: {
+          type: Type.STRING,
+          description: "What was the last new piece of information",
+        },
+        suggestedBreaker: {
+          type: Type.STRING,
+          description:
+            "Impasse-breaking technique to try: " +
+            "'future-casting' (imagine resolution achieved) | " +
+            "'role-reversal' (ask each to argue the other's position) | " +
+            "'single-text' (mediator proposes a draft both can critique) | " +
+            "'process-change' (switch to caucus, bring in expert, change setting) | " +
+            "'parking' (set aside and address easier issues first) | " +
+            "'new-actor' (bring in a decision-maker or stakeholder) | " +
+            "'BATNA-reality-test' (explore alternatives to agreement)",
+        },
+      },
+      required: ["signals", "suggestedBreaker"],
+    },
+  };
+
   return [
     updateMediationState,
     requestMissingInformation,
     captureAgreement,
     flagEscalation,
     proposeSolution,
+    assessPowerDynamics,
+    detectImpasse,
   ];
 }
 
