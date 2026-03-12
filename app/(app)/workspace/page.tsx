@@ -266,6 +266,83 @@ function safeLocalStorageSet(key: string, value: any) {
   }
 }
 
+// ── Bidirectional Context Summary ────────────────────────────────────────────
+// Builds a structured text summary of the current conflict state to inject back
+// into the live session so the model can reference its own structural analysis.
+function buildContextSummary(
+  activeCase: Case,
+  mediationState: LiveMediationState | null,
+  agreements: Agreement[],
+): string {
+  const sections: string[] = [];
+
+  // 1. Extracted primitives by type
+  const primsByType = PRIMITIVE_TYPES.reduce((acc, type) => {
+    const prims = activeCase.primitives.filter((p) => p.type === type);
+    if (prims.length > 0) {
+      const actorMap: Record<string, string> = {};
+      activeCase.actors.forEach((a) => { actorMap[a.id] = a.name; });
+      acc.push(
+        `${type}s (${prims.length}):\n${prims
+          .map((p) => `  - [${actorMap[p.actorId] ?? p.actorId}] ${p.description}${p.resolved ? " (RESOLVED)" : ""}${p.pinned ? " ★" : ""}`)
+          .join("\n")}`,
+      );
+    }
+    return acc;
+  }, [] as string[]);
+
+  if (primsByType.length > 0) {
+    sections.push(`EXTRACTED CONFLICT STRUCTURE:\n${primsByType.join("\n\n")}`);
+  }
+
+  // 2. Common ground and tensions
+  if (mediationState?.commonGround?.length) {
+    sections.push(`COMMON GROUND IDENTIFIED:\n${mediationState.commonGround.map((g) => `  ✓ ${g}`).join("\n")}`);
+  }
+  if (mediationState?.tensionPoints?.length) {
+    sections.push(`ACTIVE TENSION POINTS:\n${mediationState.tensionPoints.map((t) => `  ⚡ ${t}`).join("\n")}`);
+  }
+
+  // 3. Agreements reached
+  if (agreements.length > 0) {
+    sections.push(
+      `AGREEMENTS REACHED:\n${agreements
+        .map((a) => `  ✓ ${a.topic}: ${a.terms} [A:${a.partyAAccepts ? "Yes" : "Pending"} B:${a.partyBAccepts ? "Yes" : "Pending"}]`)
+        .join("\n")}`,
+    );
+  }
+
+  // 4. Ontology gaps
+  const ontStats: Record<string, number> = {};
+  PRIMITIVE_TYPES.forEach((t) => {
+    ontStats[t] = activeCase.primitives.filter((p) => p.type === t).length;
+  });
+  const gaps = PRIMITIVE_TYPES.filter((t) => ontStats[t] === 0);
+  if (gaps.length > 0) {
+    sections.push(
+      `ONTOLOGY GAPS (missing primitives):\n  ${gaps.join(", ")}\n  → Please ask targeted questions to fill these gaps.`,
+    );
+  }
+
+  // 5. Party imbalance check
+  const actors = activeCase.actors;
+  if (actors.length >= 2) {
+    const a1Count = activeCase.primitives.filter((p) => p.actorId === actors[0].id).length;
+    const a2Count = activeCase.primitives.filter((p) => p.actorId === actors[1].id).length;
+    if (a1Count > 0 && a2Count > 0) {
+      const ratio = Math.max(a1Count, a2Count) / Math.min(a1Count, a2Count);
+      if (ratio > 2) {
+        const underRepresented = a1Count < a2Count ? actors[0].name : actors[1].name;
+        sections.push(
+          `⚠️ EXTRACTION IMBALANCE: ${underRepresented} is under-represented (${Math.min(a1Count, a2Count)} vs ${Math.max(a1Count, a2Count)} primitives). Give them more airtime.`,
+        );
+      }
+    }
+  }
+
+  return sections.join("\n\n");
+}
+
 export default function Workspace() {
   const [cases, setCases] = useState<Case[]>([]);
   const [activeCaseId, setActiveCaseId] = useState<string | null>(null);
@@ -346,6 +423,14 @@ export default function Workspace() {
   // Keep a ref-mirror of cases to avoid stale closures in interval callbacks
   const casesRef = useRef(cases);
   casesRef.current = cases;
+
+  // Ref-mirrors for context injection (avoids stale closures in async callbacks)
+  const agreementsRef = useRef(agreements);
+  agreementsRef.current = agreements;
+  const liveMediationStateRef = useRef(liveMediationState);
+  liveMediationStateRef.current = liveMediationState;
+  const lastContextInjectionRef = useRef<number>(0);
+  const MIN_INJECTION_INTERVAL = 60000; // inject at most once per minute
 
   useEffect(() => {
     const saved = localStorage.getItem("concordia_cases");
@@ -489,6 +574,39 @@ export default function Workspace() {
     return sessionRef.current && !sessionClosingRef.current;
   };
 
+  // ── Bidirectional context injection ─────────────────────────────────────────
+  // Sends the current extracted conflict structure back into the live session so
+  // the model can reference its own structural analysis during conversation.
+  const injectContextToLive = useCallback(() => {
+    if (!sessionRef.current || !activeCaseIdRef.current) return;
+    const currentCase = casesRef.current.find((c) => c.id === activeCaseIdRef.current);
+    if (!currentCase) return;
+    const elapsed = Math.floor((Date.now() - sessionStartTimeRef.current) / 1000);
+    const mm = String(Math.floor(elapsed / 60)).padStart(2, "0");
+    const ss = String(elapsed % 60).padStart(2, "0");
+    const contextUpdate = buildContextSummary(
+      currentCase,
+      liveMediationStateRef.current,
+      agreementsRef.current,
+    );
+    if (!contextUpdate) return;
+    try {
+      sessionRef.current.sendContext(
+        `[SYSTEM CONTEXT UPDATE at ${mm}:${ss}]\n${contextUpdate}\n[END CONTEXT UPDATE]`,
+      );
+      console.log(`[Context] Injected ${contextUpdate.length} chars at ${mm}:${ss}`);
+    } catch (e) {
+      console.warn("[Context] Failed to inject context:", e);
+    }
+  }, []); // reads from refs only — no stale closure risk
+
+  const maybeInjectContext = useCallback(() => {
+    const now = Date.now();
+    if (now - lastContextInjectionRef.current < MIN_INJECTION_INTERVAL) return;
+    lastContextInjectionRef.current = now;
+    injectContextToLive();
+  }, [injectContextToLive]);
+
   const checkMicPermission = async (): Promise<boolean> => {
     try {
       const result = await navigator.permissions.query({ name: "microphone" as PermissionName });
@@ -629,6 +747,8 @@ export default function Workspace() {
                 const responses = functionCalls.map((call: any) => {
                   if (call.name === "updateMediationState") {
                     const args = call.args;
+                    const phaseChanged =
+                      liveMediationStateRef.current?.phase !== (args.phase || "Opening");
                     setLiveMediationState({
                       phase: args.phase || "Opening",
                       targetActor: args.targetActor || "Both",
@@ -643,6 +763,11 @@ export default function Workspace() {
                       commonGround: args.commonGround || [],
                       tensionPoints: args.tensionPoints || [],
                     });
+                    // On phase transition, immediately inject full context so the
+                    // model enters the new phase with an up-to-date structural view
+                    if (phaseChanged) {
+                      setTimeout(() => injectContextToLive(), 300);
+                    }
                     return {
                       id: call.id,
                       name: call.name,
@@ -679,6 +804,8 @@ export default function Workspace() {
                       timestamp: new Date().toISOString(),
                     };
                     setAgreements((prev) => [...prev, agreement]);
+                    // Immediately inject so model can reference the new agreement
+                    setTimeout(() => injectContextToLive(), 300);
                     return {
                       id: call.id,
                       name: call.name,
@@ -1519,6 +1646,24 @@ export default function Workspace() {
       const parsedPathways = safeJsonParse(pathwaysResStr, null);
       if (parsedPathways) {
         setPathways(parsedPathways);
+        // Inject analysis results back into the live session so the model knows
+        // the ZOPA, momentum score, and recommended next move
+        if (sessionRef.current && isRecording) {
+          const analysisContext =
+            `[ANALYSIS RESULTS]\n` +
+            `Executive Summary: ${parsedPathways.executiveSummary ?? "N/A"}\n` +
+            `ZOPA: ${parsedPathways.zopaAnalysis?.exists ? parsedPathways.zopaAnalysis.overlapArea : "Not yet identified"}\n` +
+            `Momentum: ${parsedPathways.momentumAssessment?.readinessToResolve ?? "?"}/100\n` +
+            `Recommended Next Move: ${parsedPathways.momentumAssessment?.recommendedNextMove ?? "N/A"}\n` +
+            `[END ANALYSIS]`;
+          try {
+            sessionRef.current.sendContext(analysisContext);
+          } catch (e) {
+            console.warn("[Context] Failed to inject analysis context:", e);
+          }
+        }
+        // Also inject the full structured context (force — analysis is a major event)
+        injectContextToLive();
       } else {
         console.error("[Pathways] Failed to parse pathways result:", pathwaysResStr);
       }
@@ -1613,6 +1758,8 @@ export default function Workspace() {
       const result = safeJsonParse(resultStr, { actors: [], primitives: [] });
       mergeExtractedData(result);
       setTimeout(() => setExtractionNotice(false), 3000);
+      // Feed extracted structure back into the live session
+      setTimeout(() => maybeInjectContext(), 500);
     } catch (err) {
       console.error("Incremental extraction error:", err);
       setExtractionNotice(false);
@@ -1666,28 +1813,8 @@ export default function Workspace() {
       );
       setExtractionNotice(true);
       setTimeout(() => setExtractionNotice(false), 3000);
-      // Inject ontology gap summary into the live session for context-aware follow-up
-      if (sessionRef.current?.sendContext) {
-        const updatedCase = casesRef.current.find((c) => c.id === activeCaseIdRef.current);
-        if (updatedCase) {
-          const typeCounts: Record<string, number> = {};
-          updatedCase.primitives.forEach((p) => {
-            typeCounts[p.type] = (typeCounts[p.type] || 0) + 1;
-          });
-          const missingTypes = (["Claim", "Interest", "Constraint", "Leverage", "Commitment", "Event", "Narrative"] as const)
-            .filter((t) => !typeCounts[t]);
-          const summary =
-            `[System Context] Ontology update: ${updatedCase.primitives.length} primitives across ${updatedCase.actors.length} actors. ` +
-            (missingTypes.length > 0
-              ? `Missing types: ${missingTypes.join(", ")}. Consider probing for these.`
-              : "All primitive types represented.");
-          try {
-            sessionRef.current.sendContext(summary);
-          } catch (e) {
-            console.warn("[AutoExtract] Failed to send context:", e);
-          }
-        }
-      }
+      // Inject full structured context back into the live session (debounced)
+      setTimeout(() => maybeInjectContext(), 500);
     } catch (err) {
       console.warn("[AutoExtract] Background extraction failed:", err);
     }
