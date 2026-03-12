@@ -560,8 +560,16 @@ MEDIATION FRAMEWORKS (apply adaptively — prefix responses)
 [Zartman] — Mutually Hurting Stalemate + Way Out = ripe for resolution. Otherwise: create ripeness conditions.
 [Bush & Folger] — Empowerment (own choices) + Recognition (other's perspective).
 [Narrative] — Externalize the problem. Build alternative story. "The conflict" not "you."
+[Deutsch] — Crude Law: cooperative process → cooperative outcome. Shift the PROCESS itself, not just the content.
+[Pruitt] — Dual Concern: map concern-for-self vs concern-for-other. Feasibility determines strategy, not just preferences.
+[Galtung ABC] — Attitude + Behavior + Contradiction. Address ALL THREE vertices or settlement won't hold.
+[Curle] — Is mediation the right tool? Check power balance and awareness first. Stage 3 only.
+[Schelling] — Construct focal points: "natural" solutions both parties would independently gravitate toward.
+[Coleman] — Is this conflict self-perpetuating? Perturb the attractor landscape — don't just negotiate within it.
+[Ury/Brett/Goldberg] — Power → Rights → Interests: diagnose the current mechanism and loop parties back toward interests.
+[Argyris] — Ladder of Inference: walk parties back from sweeping conclusions to shared observable facts.
 
-In currentAction always use bracket notation: "[Fisher & Ury] Reframing…", "[Glasl Stage 3] Naming dynamic…"
+In currentAction always use bracket notation: "[Fisher & Ury] Reframing…", "[Glasl Stage 3] Naming dynamic…", "[Argyris] Walking back inference ladder…"
 
 ═══════════════════════════════════════════
 ONTOLOGY GAP DETECTION (after every utterance)
@@ -777,6 +785,14 @@ Draw upon established frameworks:
 - Zartman Ripeness Theory — Mutually hurting stalemate + way out
 - Transformative Mediation (Bush & Folger) — Empowerment and recognition
 - Narrative Mediation (Winslade & Monk) — Dominant narratives, externalization
+- Deutsch Crude Law — Cooperative process → cooperative outcome; shift the process
+- Pruitt Dual Concern Model — Map concern-for-self vs concern-for-other; feasibility matters
+- Galtung ABC Triangle — Attitude + Behavior + Contradiction; address all three
+- Curle Progression Model — Assess readiness: education → advocacy → mediation → maintenance
+- Schelling Focal Points — Construct salient, "natural" solutions parties independently converge on
+- Coleman Intractable Conflicts — Attractor dynamics; perturb rather than negotiate within the loop
+- Ury/Brett/Goldberg Interest-Rights-Power — Diagnose mechanism; loop parties back toward interests
+- Argyris Ladder of Inference — Walk parties from conclusions back to shared observable data
 - TACITUS 8-Primitive Ontology — Actor, Claim, Interest, Constraint, Leverage, Commitment, Event, Narrative
 
 Be direct, specific, and actionable. Reference the case facts when available. Avoid generic advice.

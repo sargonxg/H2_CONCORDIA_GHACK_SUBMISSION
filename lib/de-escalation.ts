@@ -142,3 +142,62 @@ export function detectEscalationLevel(text: string): number {
   }
   return Math.min(100, totalSeverity * 10);
 }
+
+// ── Cognitive Distortions (Argyris-inspired) ──
+export const COGNITIVE_DISTORTIONS = [
+  {
+    name: "Fundamental Attribution Error",
+    description: "Attributing other's behavior to character rather than situation",
+    indicator: "They did X because they're [character judgment]",
+    intervention: "What circumstances might have led to that behavior?",
+  },
+  {
+    name: "Confirmation Bias",
+    description: "Seeking only evidence that confirms existing beliefs about the other party",
+    indicator: "See? This proves they always...",
+    intervention: "What evidence might point in a different direction?",
+  },
+  {
+    name: "Zero-Sum Thinking",
+    description: "Assuming any gain for the other party is a loss for self",
+    indicator: "If they get X, I lose",
+    intervention: "What if both of you could get what matters most?",
+  },
+  {
+    name: "Reactive Devaluation",
+    description: "Dismissing proposals simply because the other party made them",
+    indicator: "They only suggested that because...",
+    intervention: "If a neutral third party had suggested this, how would you evaluate it?",
+  },
+  {
+    name: "Loss Aversion",
+    description: "Losses feel ~2x more painful than equivalent gains feel good",
+    indicator: "I can't give up X (even when gaining Y > X)",
+    intervention: "Reframe: what are you GAINING, not just what you're giving up?",
+  },
+  {
+    name: "Anchoring",
+    description: "First offer/number disproportionately shapes the negotiation range",
+    indicator: "But they said X first, so...",
+    intervention: "Let's step back from that number and look at what the objective criteria suggest",
+  },
+];
+
+// ── Glasl Stage Detection ──
+export function detectGlaslStage(indicators: {
+  personalAttacks: boolean;
+  coalitionBuilding: boolean;
+  threats: boolean;
+  lossOfFace: boolean;
+  destructiveBehavior: boolean;
+  empathyPresent: boolean;
+  dialogueWillingness: boolean;
+}): { stage: number; intervention: string } {
+  if (indicators.destructiveBehavior) return { stage: 7, intervention: "Arbitration required" };
+  if (indicators.threats) return { stage: 6, intervention: "Conciliation, de-power" };
+  if (indicators.lossOfFace) return { stage: 5, intervention: "Formal mediation required" };
+  if (indicators.coalitionBuilding) return { stage: 4, intervention: "Rehumanization, separate dialogue" };
+  if (indicators.personalAttacks && !indicators.empathyPresent) return { stage: 3, intervention: "Reality testing, reframing" };
+  if (!indicators.empathyPresent && indicators.dialogueWillingness) return { stage: 2, intervention: "Structured dialogue" };
+  return { stage: 1, intervention: "Preventive dialogue, joint problem-solving" };
+}
