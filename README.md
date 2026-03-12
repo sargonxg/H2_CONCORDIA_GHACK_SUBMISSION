@@ -40,10 +40,40 @@ All improvements were implemented across three development prompts:
 ## Architecture
 
 ```
-Browser ↔ Cloud Run (single container, port 8080)
-              ├─ Next.js App Router (HTTP/SSR/API routes)
-              ├─ WebSocket server /api/live (ws)
-              └─ @google/genai → Gemini Live Audio API
+┌─────────────────────────────────────────────────────────────────┐
+│                        BROWSER (React 19)                       │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌───────────────┐  │
+│  │ AudioCtx │  │  D3.js   │  │ Recharts │  │  Transcript   │  │
+│  │ PCM 16K  │  │  Force   │  │ Profiles │  │  Panel + TTS  │  │
+│  │ Capture  │  │  Graph   │  │ & Gauges │  │  Playback     │  │
+│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └───────┬───────┘  │
+│       │             │              │                 │          │
+│       └─────────────┴──────────────┴─────────────────┘         │
+│                             │ WebSocket + REST                  │
+└─────────────────────────────┼───────────────────────────────────┘
+                              │
+┌─────────────────────────────┼───────────────────────────────────┐
+│            CLOUD RUN (single container, port 8080)              │
+│  ┌──────────────────────────┼───────────────────────────────┐   │
+│  │          server.ts (HTTP + WebSocket)                    │   │
+│  │                          │                               │   │
+│  │  ┌───────────────────┐   │  ┌──────────────────────────┐ │   │
+│  │  │  Next.js App      │   │  │     ws-handler.ts        │ │   │
+│  │  │  Router           │   │  │  ┌─────────────────────┐ │ │   │
+│  │  │  /api/extract     │   │  │  │  Gemini Live Audio  │ │ │   │
+│  │  │  /api/analyze     │   │  │  │  ┌─────────────────┐│ │ │   │
+│  │  │  /api/chat        │   │  │  │  │ Affective Dialog││ │ │   │
+│  │  │  /api/summarize   │   │  │  │  │ Proactive Audio ││ │ │   │
+│  │  │  /api/transcribe  │   │  │  │  │ Tool Calling ×7 ││ │ │   │
+│  │  │  /api/tts         │   │  │  │  │ Session Resume  ││ │ │   │
+│  │  │  /api/research    │   │  │  │  │ Context Compress││ │ │   │
+│  │  └───────────────────┘   │  │  │  └─────────────────┘│ │ │   │
+│  │                          │  │  └─────────────────────┘ │ │   │
+│  │                          ↓  │     ↕ bidirectional      │ │   │
+│  │                  Gemini 2.5 Flash   Audio + Tool Calls  │ │   │
+│  │                  (text/extraction)  + State Updates     │ │   │
+│  └──────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 A single Node.js process (`server.ts` → compiled `server.js`) runs both the Next.js App Router for HTTP requests and a WebSocket server on `/api/live` for live audio sessions. All AI calls happen server-side — credentials never reach the browser.
@@ -146,6 +176,28 @@ The `npm run dev` command runs `tsx server.ts`, which starts both the Next.js de
 
 ---
 
+## Testing
+
+```bash
+# Run all tests
+npm test
+
+# Watch mode for development
+npm run test:watch
+
+# Coverage report
+npm run test:coverage
+```
+
+Tests cover:
+- **De-escalation engine** — trigger pattern detection, protocol selection, Glasl stage assessment
+- **Mediation library** — framework integrity, primitive mappings, relevance scoring
+- **Export utilities** — markdown and JSON output correctness
+- **API routes** — health check, response shapes
+- **Type contracts** — structural validation of all TACITUS primitives
+
+---
+
 ## Docker Build & Run
 
 ```bash
@@ -231,6 +283,70 @@ gcloud run deploy concordia \
 | `/api/research` | POST | Research grounding for conflict context |
 | `/api/live` | WS | WebSocket endpoint for live audio mediation sessions |
 
+<details>
+<summary><code>POST /api/extract</code> — Extract TACITUS primitives</summary>
+
+**Request:**
+```json
+{
+  "text": "Alice says she needs the project completed by Friday because her client has a hard deadline. Bob argues that's impossible given the current team capacity."
+}
+```
+
+**Response:**
+```json
+{
+  "result": {
+    "actors": [
+      { "name": "Alice", "role": "Project Manager", "type": "individual", "stance": "Firm on deadline", "powerLevel": 3 },
+      { "name": "Bob", "role": "Team Lead", "type": "individual", "stance": "Pushing back on timeline", "powerLevel": 3 }
+    ],
+    "primitives": [
+      { "primitiveType": "Claim", "actorName": "Alice", "description": "Project must be completed by Friday", "subType": "demand", "status": "active", "confidence": 0.9 },
+      { "primitiveType": "Constraint", "actorName": "Alice", "description": "Client has a hard deadline", "subType": "temporal", "rigidity": "hard" },
+      { "primitiveType": "Constraint", "actorName": "Bob", "description": "Current team capacity insufficient", "subType": "organizational", "rigidity": "soft" },
+      { "primitiveType": "Interest", "actorName": "Alice", "description": "Maintaining client relationship and trust", "subType": "relational", "priority": "critical", "visibility": "implicit" }
+    ]
+  }
+}
+```
+</details>
+
+<details>
+<summary><code>POST /api/analyze</code> — Analyze resolution pathways</summary>
+
+**Request:**
+```json
+{
+  "transcript": "Full session transcript...",
+  "caseStructure": "{ \"actors\": [...], \"primitives\": [...] }",
+  "framework": "Fisher & Ury"
+}
+```
+
+**Response:**
+```json
+{
+  "result": {
+    "executiveSummary": "Both parties share an interest in project success...",
+    "zopaExists": true,
+    "zopaDescription": "Agreement likely achievable if scope is reduced...",
+    "pathways": [
+      {
+        "title": "Phased Delivery with Milestone Reviews",
+        "description": "Deliver a core subset by Friday, remainder by following Wednesday.",
+        "framework": "Fisher & Ury",
+        "feasibility": 78,
+        "tradeOffsPartyA": ["Partial delivery may disappoint client"],
+        "tradeOffsPartyB": ["Requires overtime for two days"],
+        "implementationSteps": ["Define MVP scope today", "Client call Thursday", "Review Friday"]
+      }
+    ]
+  }
+}
+```
+</details>
+
 ---
 
 ## TACITUS Conflict Grammar
@@ -251,6 +367,25 @@ The TACITUS ontology represents conflict as a directed graph of 8 primitive type
 **Edge types** connecting primitives: `OPPOSES`, `ALIGNS_WITH`, `CONFLICTS_WITH`, `BLOCKS`, `SUPPORTS`, `ADDRESSES`, `TRIGGERS`, `FRAMES`, `CONTRADICTS`
 
 **Actor-to-primitive edges**: `MAKES` (claim), `HAS` (interest), `FACES` (constraint), `WIELDS` (leverage), `GIVES` (commitment), `NARRATES` (narrative)
+
+---
+
+## Theoretical Foundation
+
+CONCORDIA's mediation intelligence draws on 35+ peer-reviewed frameworks spanning six decades of conflict resolution research:
+
+| Tradition | Key Theorists | CONCORDIA Application |
+|-----------|---------------|----------------------|
+| **Interest-Based** | Fisher, Ury, Patton (1981) | Position→Interest reframing, BATNA analysis, ZOPA detection |
+| **Transformative** | Bush & Folger (1994) | Empowerment + recognition moves, identity threat detection |
+| **Narrative** | Winslade & Monk (2000) | Dominant narrative identification, story externalization |
+| **Escalation** | Glasl (1982) | 9-stage assessment, stage-appropriate intervention selection |
+| **Ripeness** | Zartman (2000) | Mutually hurting stalemate detection, readiness scoring |
+| **Social Psychology** | Deutsch (1973), Pruitt (1983) | Cooperative process induction, dual concern mapping |
+| **Structural** | Galtung (1969), Curle (1971) | ABC triangle analysis, power-awareness assessment |
+| **Cognitive** | Argyris (1970s), Kahneman (2011) | Ladder of inference, cognitive bias detection |
+| **Complexity** | Coleman (2011) | Intractability detection, attractor perturbation |
+| **Communication** | Gottman (1994) | Four Horsemen detection, repair attempt recognition |
 
 ---
 
@@ -298,6 +433,24 @@ The `/demo` route provides a fully interactive version of the workspace UI popul
 curl https://your-cloud-run-url/api/health
 # → {"status":"ok","timestamp":"2026-03-10T..."}
 ```
+
+---
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/my-improvement`
+3. Run tests: `npm test`
+4. Ensure linting passes: `npm run lint`
+5. Submit a PR with a clear description of what you changed and why
+
+### Development Conventions
+
+- TypeScript strict mode
+- All new features require tests
+- New mediation frameworks must include: `id`, `corePrinciples`, `keyTechniques`, `diagnosticQuestions`, `glaslStages`, `tacitusPrimitives`
+- UI components go in `components/workspace/`
+- All AI service functions go in `lib/ai-service.ts`
 
 ---
 

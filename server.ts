@@ -1,6 +1,6 @@
 import { createServer } from "http";
 import next from "next";
-import { WebSocketServer } from "ws";
+import { WebSocket, WebSocketServer } from "ws";
 import { parse } from "url";
 import { handleWebSocketConnection } from "./lib/ws-handler";
 
@@ -8,10 +8,47 @@ const dev = process.env.NODE_ENV !== "production";
 const hostname = "0.0.0.0";
 const PORT = parseInt(process.env.PORT || "8080", 10);
 
+function validateEnvironment() {
+  const useVertexAI = process.env.USE_VERTEX_AI !== "false";
+  const warnings: string[] = [];
+  const errors: string[] = [];
+
+  if (useVertexAI) {
+    if (
+      !process.env.GOOGLE_SERVICE_ACCOUNT_JSON &&
+      !process.env.GOOGLE_APPLICATION_CREDENTIALS
+    ) {
+      errors.push(
+        "Vertex AI mode requires GOOGLE_SERVICE_ACCOUNT_JSON or GOOGLE_APPLICATION_CREDENTIALS",
+      );
+    }
+    if (!process.env.GOOGLE_CLOUD_PROJECT) {
+      warnings.push("GOOGLE_CLOUD_PROJECT not set — using default");
+    }
+  } else {
+    if (!process.env.GEMINI_API_KEY) {
+      errors.push("API key mode requires GEMINI_API_KEY");
+    }
+  }
+
+  if (errors.length > 0) {
+    console.error("❌ Configuration errors:");
+    errors.forEach((e) => console.error(`   ${e}`));
+    console.error("\nSee .env.example for required variables.\n");
+    process.exit(1);
+  }
+
+  if (warnings.length > 0) {
+    warnings.forEach((w) => console.warn(`⚠️  ${w}`));
+  }
+}
+
 const app = next({ dev, hostname, port: PORT });
 const handle = app.getRequestHandler();
 
 app.prepare().then(() => {
+  validateEnvironment();
+
   const server = createServer(async (req, res) => {
     try {
       const parsedUrl = parse(req.url!, true);
@@ -41,8 +78,33 @@ app.prepare().then(() => {
     // upgrade listener inside app.prepare() and will pick them up.
   });
 
+  const shutdown = async () => {
+    console.log("\n🕊  CONCORDIA shutting down gracefully...");
+
+    // Notify and close all active WebSocket connections
+    wss.clients.forEach((client) => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(JSON.stringify({ type: "close" }));
+        client.close(1001, "Server shutting down");
+      }
+    });
+
+    // Close HTTP server (stops accepting new connections)
+    server.close(() => {
+      console.log("   HTTP server closed");
+      process.exit(0);
+    });
+
+    // Force exit after 10 s if graceful shutdown stalls
+    setTimeout(() => process.exit(1), 10000);
+  };
+
+  process.on("SIGTERM", shutdown);
+  process.on("SIGINT", shutdown);
+
   server.listen(PORT, hostname, () => {
-    const authMode = process.env.USE_VERTEX_AI !== "false" ? "Vertex AI" : "Gemini API Key";
+    const authMode =
+      process.env.USE_VERTEX_AI !== "false" ? "Vertex AI" : "Gemini API Key";
     console.log(`\n🕊  CONCORDIA running on http://${hostname}:${PORT}`);
     console.log(`   Auth mode : ${authMode}`);
     console.log(`   Env       : ${process.env.NODE_ENV ?? "development"}\n`);
