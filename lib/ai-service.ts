@@ -736,12 +736,15 @@ export const createLiveSession = (
 
   const config: any = {
     responseModalities: [Modality.AUDIO],
-    // enableAffectiveDialog: native audio emotional intelligence (voice tone/tremor detection)
-    enableAffectiveDialog: true,
-    // proactivity: co-listener mode — model stays silent while parties talk to each other
-    proactivity: {
-      proactiveAudio: true,
-    },
+    // ⚠️  enableAffectiveDialog and proactivity are Vertex AI-only features.
+    // The Gemini API key mode rejects them with code=1007 "Unknown name" error,
+    // closing the session immediately. Only include them in Vertex AI mode.
+    ...(_useVertexAI
+      ? {
+          enableAffectiveDialog: true,
+          proactivity: { proactiveAudio: true },
+        }
+      : {}),
     // ⚠️  thinkingConfig is NOT a valid LiveConnectConfig field — it belongs in
     // generateContent only. Including it here causes the Gemini API to reject the
     // session and close the WebSocket immediately with no error message.
@@ -765,10 +768,11 @@ export const createLiveSession = (
         targetTokens: 8192,
       },
     },
-    // Enable session resumption — pass handle only when actually resuming a prior session
-    sessionResumption: resumptionHandle
-      ? { handle: resumptionHandle }
-      : {},
+    // Enable session resumption — only include when actually resuming a prior session.
+    // An empty sessionResumption: {} can cause unexpected behavior on some API versions.
+    ...(resumptionHandle
+      ? { sessionResumption: { handle: resumptionHandle } }
+      : { sessionResumption: {} }),
   };
 
   console.log(`[Live] Connecting — model: ${_MODEL_LIVE}, voice: ${mediatorProfile.voice}, resume: ${!!resumptionHandle}`);
@@ -1091,8 +1095,29 @@ Generate a comprehensive structured summary with: session overview, top 3 claims
 
 // ── Primitive Extraction ──
 
+// Guard against prompt injection in transcribed speech.
+// A party could say "Ignore all previous instructions" during mediation and have it
+// transcribed and forwarded to the extraction LLM — this strips known injection patterns.
+function sanitizeTranscriptForExtraction(text: string): string {
+  const injectionPatterns = [
+    /ignore\s+(all\s+)?previous\s+instructions/gi,
+    /you\s+are\s+now\s+a/gi,
+    /system\s*:\s*/gi,
+    /\[SYSTEM\]/gi,
+    /\[INST\]/gi,
+    /<<SYS>>/gi,
+    /```\s*(system|assistant|user)/gi,
+  ];
+  let sanitized = text;
+  for (const pattern of injectionPatterns) {
+    sanitized = sanitized.replace(pattern, "[REDACTED]");
+  }
+  return sanitized;
+}
+
 export const extractPrimitives = async (text: string) => {
   const ai = initAI();
+  const sanitized = sanitizeTranscriptForExtraction(text);
   const response = await ai.models.generateContent({
     model: _MODEL_TEXT,
     contents: `You are the Extraction Agent for the CONCORDIA mediation platform, using the full TACITUS conflict ontology (8 primitives).
@@ -1137,7 +1162,7 @@ NARRATIVES — How parties frame and make meaning of the conflict:
   - emotionalTone: describe the emotional quality (e.g., "bitter resentment", "cautious hope")
 
 Text:
-${text}`,
+${sanitized}`,
     config: {
       responseMimeType: "application/json",
       responseSchema: {

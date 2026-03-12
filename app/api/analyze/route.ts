@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { analyzePathways } from "@/lib/ai-service";
 import { classifyApiError } from "@/lib/api-error";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 const schema = z.object({
   transcript: z.string().min(1).max(100000),
@@ -10,6 +11,15 @@ const schema = z.object({
 });
 
 export async function POST(request: Request) {
+  const ip = request.headers.get("x-forwarded-for") || "unknown";
+  const limit = checkRateLimit(`analyze:${ip}`, 10, 60000);
+  if (!limit.allowed) {
+    return Response.json(
+      { error: "Rate limited", retryAfter: limit.retryAfter },
+      { status: 429, headers: { "Retry-After": String(limit.retryAfter) } },
+    );
+  }
+
   try {
     const body = await request.json();
     const parsed = schema.safeParse(body);
