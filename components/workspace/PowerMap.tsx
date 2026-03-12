@@ -26,10 +26,10 @@ type PowerMapProps = {
 };
 
 const BALANCE_CONFIG: Record<string, { label: string; color: string; bg: string; border: string }> = {
-  balanced:            { label: "Balanced",            color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/30" },
-  "A-favored":         { label: "Favors " ,            color: "text-blue-400",    bg: "bg-blue-500/10",    border: "border-blue-500/30"    },
-  "B-favored":         { label: "Favors " ,            color: "text-violet-400",  bg: "bg-violet-500/10",  border: "border-violet-500/30"  },
-  "severely-imbalanced": { label: "Severely Imbalanced", color: "text-red-400",   bg: "bg-red-500/10",     border: "border-red-500/30"     },
+  balanced:              { label: "Balanced",            color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/30" },
+  "A-favored":           { label: "Favors ",             color: "text-blue-400",    bg: "bg-blue-500/10",    border: "border-blue-500/30"    },
+  "B-favored":           { label: "Favors ",             color: "text-violet-400",  bg: "bg-violet-500/10",  border: "border-violet-500/30"  },
+  "severely-imbalanced": { label: "Severely Imbalanced", color: "text-red-400",     bg: "bg-red-500/10",     border: "border-red-500/30"     },
 };
 
 export default function PowerMap({
@@ -39,14 +39,6 @@ export default function PowerMap({
   partyAName,
   partyBName,
 }: PowerMapProps) {
-  // Map each dimension's signed score into two 0-5 values for the radar
-  const data = dimensions.map((d) => ({
-    subject: d.dimension.charAt(0).toUpperCase() + d.dimension.slice(1),
-    [partyAName]: parseFloat(Math.max(0, -d.score).toFixed(1)),
-    [partyBName]: parseFloat(Math.max(0, d.score).toFixed(1)),
-    fullMark: 5,
-  }));
-
   const cfg = BALANCE_CONFIG[overallBalance] ?? BALANCE_CONFIG["balanced"];
   const balanceLabel =
     overallBalance === "A-favored"
@@ -54,6 +46,17 @@ export default function PowerMap({
       : overallBalance === "B-favored"
       ? cfg.label + partyBName
       : cfg.label;
+
+  // Use stable keys "partyA"/"partyB" — dynamic keys cause Recharts SVG errors
+  // when values are undefined. Radar needs ≥3 data points to compute polygon coords.
+  const chartData = dimensions.map((d) => ({
+    subject: d.dimension.charAt(0).toUpperCase() + d.dimension.slice(1),
+    partyA: parseFloat(Math.max(0, -d.score).toFixed(1)),
+    partyB: parseFloat(Math.max(0, d.score).toFixed(1)),
+    fullMark: 5,
+  }));
+
+  const canRenderChart = chartData.length >= 3;
 
   return (
     <div className="space-y-4">
@@ -69,10 +72,10 @@ export default function PowerMap({
         </span>
       </div>
 
-      {/* Radar chart */}
-      {data.length > 0 ? (
+      {/* Radar chart — requires ≥3 axes to avoid SVG coordinate errors */}
+      {canRenderChart ? (
         <ResponsiveContainer width="100%" height={260}>
-          <RadarChart data={data} margin={{ top: 10, right: 20, bottom: 10, left: 20 }}>
+          <RadarChart data={chartData} margin={{ top: 10, right: 20, bottom: 10, left: 20 }}>
             <PolarGrid stroke="rgba(255,255,255,0.08)" />
             <PolarAngleAxis
               dataKey="subject"
@@ -86,7 +89,7 @@ export default function PowerMap({
             />
             <Radar
               name={partyAName}
-              dataKey={partyAName}
+              dataKey="partyA"
               stroke="#60a5fa"
               fill="#60a5fa"
               fillOpacity={0.2}
@@ -94,7 +97,7 @@ export default function PowerMap({
             />
             <Radar
               name={partyBName}
-              dataKey={partyBName}
+              dataKey="partyB"
               stroke="#a78bfa"
               fill="#a78bfa"
               fillOpacity={0.2}
@@ -118,7 +121,9 @@ export default function PowerMap({
         </ResponsiveContainer>
       ) : (
         <div className="flex items-center justify-center h-32 text-sm text-[var(--color-text-muted)]">
-          Awaiting power assessment…
+          {dimensions.length === 0
+            ? "Awaiting power assessment…"
+            : "Gathering more dimensions…"}
         </div>
       )}
 
