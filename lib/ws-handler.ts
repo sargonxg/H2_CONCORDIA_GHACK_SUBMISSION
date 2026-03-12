@@ -80,6 +80,15 @@ export function handleWebSocketConnection(ws: WebSocket) {
               toolCallPending = true;
             }
 
+            // Handle thinking content — log for debugging, don't forward to client
+            if (message.serverContent?.modelTurn?.parts) {
+              for (const part of message.serverContent.modelTurn.parts) {
+                if (part.thought) {
+                  console.log('[Live] Model thought:', part.text?.substring(0, 200));
+                }
+              }
+            }
+
             // Log message types for debugging
             const types = [];
             if (message.serverContent) types.push("serverContent");

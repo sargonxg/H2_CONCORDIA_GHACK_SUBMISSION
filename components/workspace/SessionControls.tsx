@@ -117,15 +117,19 @@ export default function SessionControls({
                   }
                   className="w-full bg-[var(--color-bg)] border border-[var(--color-border)] rounded text-sm p-1.5 focus:outline-none focus:border-[var(--color-accent)]"
                 >
-                  <option value="Zephyr">Zephyr (Calm, Neutral)</option>
-                  <option value="Kore">Kore (Empathetic, Warm)</option>
-                  <option value="Puck">Puck (Direct, Clear)</option>
-                  <option value="Charon">Charon (Deep, Authoritative)</option>
-                  <option value="Fenrir">Fenrir (Steady, Measured)</option>
-                  <option value="Aoede">Aoede (Melodic, Reassuring)</option>
-                  <option value="Leda">Leda (Gentle, Patient)</option>
-                  <option value="Orus">Orus (Precise, Analytical)</option>
-                  <option value="Perseus">Perseus (Confident, Clear)</option>
+                  <optgroup label="Mediation Contexts">
+                    <option value="Zephyr">Zephyr — Calm, authoritative, measured</option>
+                    <option value="Kore">Kore — Warm, gentle, emotionally present</option>
+                    <option value="Orus">Orus — Direct, grounded, clear boundaries</option>
+                    <option value="Aoede">Aoede — Encouraging, collaborative, light</option>
+                  </optgroup>
+                  <optgroup label="Additional Voices">
+                    <option value="Puck">Puck — Direct, Clear</option>
+                    <option value="Charon">Charon — Deep, Authoritative</option>
+                    <option value="Fenrir">Fenrir — Steady, Measured</option>
+                    <option value="Leda">Leda — Gentle, Patient</option>
+                    <option value="Perseus">Perseus — Confident, Clear</option>
+                  </optgroup>
                 </select>
               </div>
               <div>
