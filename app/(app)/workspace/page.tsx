@@ -63,6 +63,7 @@ import AgreementTracker from "@/components/workspace/AgreementTracker";
 import MediatorPlaybook from "@/components/workspace/MediatorPlaybook";
 import KeyboardShortcutsHelp from "@/components/workspace/KeyboardShortcutsHelp";
 import PowerMap from "@/components/workspace/PowerMap";
+import BlindBidding from "@/components/workspace/BlindBidding";
 
 const PRIMITIVE_TYPES: PrimitiveType[] = [
   "Actor",
@@ -346,6 +347,43 @@ function buildContextSummary(
   return sections.join("\n\n");
 }
 
+// ─── Empty State helper ───────────────────────────────────────────────────────
+function EmptyState({ icon: Icon, title, description }: { icon: any; title: string; description: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
+      <div className="w-12 h-12 rounded-xl bg-slate-800/50 flex items-center justify-center mb-4">
+        <Icon className="w-6 h-6 text-slate-600" />
+      </div>
+      <h3 className="text-sm font-medium text-slate-400 mb-1">{title}</h3>
+      <p className="text-xs text-slate-600 max-w-[280px]">{description}</p>
+    </div>
+  );
+}
+
+// ─── Skeleton Loading helper ──────────────────────────────────────────────────
+function AnalysisSkeleton() {
+  return (
+    <div className="animate-pulse space-y-4 p-4">
+      <div className="h-4 bg-slate-700/50 rounded w-2/3" />
+      <div className="grid grid-cols-2 gap-3">
+        <div className="h-16 bg-slate-700/30 rounded-lg" />
+        <div className="h-16 bg-slate-700/30 rounded-lg" />
+      </div>
+      <div className="space-y-2">
+        <div className="h-3 bg-slate-700/40 rounded w-full" />
+        <div className="h-3 bg-slate-700/40 rounded w-5/6" />
+        <div className="h-3 bg-slate-700/40 rounded w-4/6" />
+      </div>
+      <div className="h-4 bg-slate-700/50 rounded w-1/2" />
+      <div className="grid grid-cols-3 gap-2">
+        <div className="h-10 bg-slate-700/30 rounded-lg" />
+        <div className="h-10 bg-slate-700/30 rounded-lg" />
+        <div className="h-10 bg-slate-700/30 rounded-lg" />
+      </div>
+    </div>
+  );
+}
+
 export default function Workspace() {
   const [cases, setCases] = useState<Case[]>([]);
   const [activeCaseId, setActiveCaseId] = useState<string | null>(null);
@@ -385,6 +423,9 @@ export default function Workspace() {
   const [powerDynamics, setPowerDynamics] = useState<PowerDynamics | null>(null);
   const [impasseEvents, setImpasseEvents] = useState<ImpasseEvent[]>([]);
   const [impaseBanner, setImpaseBanner] = useState<ImpasseEvent | null>(null);
+  const [showBlindBidding, setShowBlindBidding] = useState(false);
+  const [mobilePanel, setMobilePanel] = useState<"left" | "center" | "right">("center");
+  const [pathwaysLoading, setPathwaysLoading] = useState(false);
 
   const [demoMode, setDemoMode] = useState(false);
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
@@ -2298,6 +2339,7 @@ export default function Workspace() {
         <div className="flex items-center gap-4">
           <button
             onClick={() => setActiveCaseId(null)}
+            aria-label="Back to case list"
             className="p-2 hover:bg-[var(--color-surface-hover)] rounded-md text-[var(--color-text-muted)] hover:text-white transition-colors"
           >
             <ChevronLeft className="w-5 h-5" />
@@ -2467,10 +2509,38 @@ export default function Workspace() {
         </div>
       )}
 
+      {/* ─── MOBILE PANEL TABS ─── */}
+      <div className="flex lg:hidden shrink-0 overflow-x-auto border-b border-[var(--color-border)] bg-[var(--color-surface)] px-3 gap-1 py-2">
+        {([
+          { id: "left",   label: "Profiles" },
+          { id: "center", label: "Workspace" },
+          { id: "right",  label: "Tools" },
+        ] as const).map((p) => (
+          <button
+            key={p.id}
+            onClick={() => setMobilePanel(p.id)}
+            className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              mobilePanel === p.id
+                ? "bg-[var(--color-accent)] text-white"
+                : "text-[var(--color-text-muted)] hover:text-white bg-[var(--color-bg)] border border-[var(--color-border)]"
+            }`}
+          >
+            {p.label}
+          </button>
+        ))}
+        {/* Mini duration + phase */}
+        <div className="ml-auto flex items-center gap-2 text-[10px] font-mono text-[var(--color-text-muted)] whitespace-nowrap">
+          <span className="hidden sm:block">{liveMediationState?.phase || "Opening"}</span>
+          {(isRecording || status === "LIVE") && sessionDuration > 0 && (
+            <span>{String(Math.floor(sessionDuration / 60)).padStart(2, "0")}:{String(sessionDuration % 60).padStart(2, "0")}</span>
+          )}
+        </div>
+      </div>
+
       {/* ─── MAIN CONTENT AREA ─── */}
       <div className="flex-1 flex overflow-hidden p-4 gap-4">
         {/* ─── LEFT: Party Profiles ─── */}
-        <div className="w-72 shrink-0 flex flex-col gap-4 overflow-y-auto pr-1">
+        <div className={`w-full lg:w-72 shrink-0 flex flex-col gap-4 overflow-y-auto pr-1 ${mobilePanel === "left" ? "flex" : "hidden"} lg:flex`}>
           {activeCase?.profilingEnabled !== false ? (
             <>
               <ErrorPanel fallbackMessage="Profile unavailable">
@@ -2660,6 +2730,26 @@ export default function Workspace() {
             )}
           </AnimatePresence>
 
+          {/* ── Blind Bidding ── */}
+          {(currentPhaseIdx >= PHASES.indexOf("Negotiation")) && (
+            <div className="bg-[var(--color-surface)] border border-emerald-500/20 rounded-xl p-4">
+              <div className="text-[10px] font-mono uppercase tracking-wider text-emerald-400 mb-2 flex items-center gap-1.5">
+                <Target className="w-3.5 h-3.5" /> Blind Bidding
+              </div>
+              <p className="text-[11px] text-[var(--color-text-muted)] mb-3 leading-relaxed">
+                Resolve numerical issues (amounts, timelines, %) with secret concurrent bids. Overlap = settlement via RCB algorithm.
+              </p>
+              <button
+                onClick={() => setShowBlindBidding(true)}
+                aria-label="Open blind bidding negotiation widget"
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/20 hover:text-emerald-200 text-xs font-medium transition-colors"
+              >
+                <Target className="w-3.5 h-3.5" />
+                Launch Blind Bidding
+              </button>
+            </div>
+          )}
+
           {/* ── Agreements Panel ── */}
           <AgreementTracker agreements={agreements} />
 
@@ -2674,7 +2764,7 @@ export default function Workspace() {
         </div>
 
         {/* ─── CENTER: Tabbed Content ─── */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className={`flex-1 flex flex-col overflow-hidden ${mobilePanel === "center" ? "flex" : "hidden"} lg:flex`}>
           <div className="flex gap-1 mb-3 shrink-0 flex-wrap">
             {(
               [
@@ -2921,7 +3011,9 @@ export default function Workspace() {
 
               {/* Content */}
               <div className="flex-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-4 overflow-y-auto">
-                {pathways ? (
+                {status === "ANALYZING" ? (
+                  <AnalysisSkeleton />
+                ) : pathways ? (
                   <div className="space-y-8">
                     {/* Power Map */}
                     {powerDynamics && activeCase && (
@@ -3229,11 +3321,11 @@ export default function Workspace() {
                     )}
                   </div>
                 ) : (
-                  <div className="h-full flex flex-col items-center justify-center text-[var(--color-text-muted)]">
-                    <Lightbulb className="w-12 h-12 mb-4 opacity-20" />
-                    <p className="text-sm font-medium">No analysis yet</p>
-                    <p className="text-xs mt-1 opacity-60">Run a live session or enter context and click &quot;Analyze&quot; to generate resolution pathways</p>
-                  </div>
+                  <EmptyState
+                    icon={Lightbulb}
+                    title="No analysis yet"
+                    description="Run a live session or enter transcript context and click Analyze to generate resolution pathways, ZOPA, and framework recommendations."
+                  />
                 )}
               </div>
             </div>
@@ -3261,9 +3353,17 @@ export default function Workspace() {
                     ))}
                   </div>
                 </div>
-                <ErrorPanel fallbackMessage="Graph rendering failed">
-                  <ConflictGraph nodes={graphNodes} edges={graphEdges} highlightActorId={highlightActorId} />
-                </ErrorPanel>
+                {graphNodes.length === 0 ? (
+                  <EmptyState
+                    icon={Network}
+                    title="Knowledge graph empty"
+                    description="Start a live session or run Analyze to populate the conflict graph with actors, claims, interests, and events."
+                  />
+                ) : (
+                  <ErrorPanel fallbackMessage="Graph rendering failed">
+                    <ConflictGraph nodes={graphNodes} edges={graphEdges} highlightActorId={highlightActorId} />
+                  </ErrorPanel>
+                )}
               </div>
               {/* Health check + Power Map sidebar */}
               <div className="w-72 shrink-0 overflow-y-auto space-y-4">
@@ -3305,11 +3405,11 @@ export default function Workspace() {
               </div>
               <div className="flex-1 overflow-y-auto pr-2">
                 {(activeCase?.timeline?.filter((e) => timelineFilter === "all" || e.type === timelineFilter) || []).length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-full text-[var(--color-text-muted)]">
-                    <History className="w-10 h-10 mb-3 opacity-20" />
-                    <p className="text-sm">No timeline events yet</p>
-                    <p className="text-xs mt-1 opacity-60">Timeline is populated automatically during live sessions</p>
-                  </div>
+                  <EmptyState
+                    icon={History}
+                    title="No timeline events yet"
+                    description="Timeline entries are populated automatically during live sessions as phases change and extractions occur."
+                  />
                 ) : (
                   <div className="relative">
                     <div className="absolute left-4 top-0 bottom-0 w-px bg-[var(--color-border)]" />
@@ -3542,6 +3642,64 @@ export default function Workspace() {
 
       {/* ─── KEYBOARD SHORTCUTS HELP ─── */}
       <KeyboardShortcutsHelp open={showShortcutsHelp} onClose={() => setShowShortcutsHelp(false)} />
+
+      {/* ─── MOBILE: Floating Mic FAB ─── */}
+      <div className="lg:hidden fixed bottom-16 left-1/2 -translate-x-1/2 z-50">
+        <button
+          onClick={isRecording ? stopSession : startSession}
+          aria-label={isRecording ? "Stop session" : "Start session"}
+          className={`w-16 h-16 rounded-full shadow-2xl flex items-center justify-center transition-all ${
+            isRecording
+              ? "bg-red-500 hover:bg-red-600 shadow-red-500/40"
+              : "bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] shadow-[var(--color-accent)]/40"
+          }`}
+        >
+          {isRecording ? <Square className="w-6 h-6 text-white" /> : <Mic className="w-6 h-6 text-white" />}
+        </button>
+      </div>
+
+      {/* ─── MOBILE: Fixed bottom bar ─── */}
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 h-12 bg-[var(--color-surface)] border-t border-[var(--color-border)] flex items-center justify-between px-4 z-40 text-xs font-mono">
+        <span className="text-[var(--color-text-muted)]">{liveMediationState?.phase || "Opening"}</span>
+        <span className={`w-2 h-2 rounded-full ${isRecording ? "bg-red-500 animate-pulse" : "bg-slate-600"}`} />
+        {(isRecording || status === "LIVE") && sessionDuration > 0 ? (
+          <span className="text-[var(--color-text-muted)]">
+            {String(Math.floor(sessionDuration / 60)).padStart(2, "0")}:{String(sessionDuration % 60).padStart(2, "0")}
+          </span>
+        ) : (
+          <span className="text-[var(--color-text-muted)]">{status}</span>
+        )}
+      </div>
+
+      {/* ─── BLIND BIDDING MODAL ─── */}
+      <AnimatePresence>
+        {showBlindBidding && (
+          <BlindBidding
+            open={showBlindBidding}
+            onClose={() => setShowBlindBidding(false)}
+            partyAName={activeCase?.partyAName || "Party A"}
+            partyBName={activeCase?.partyBName || "Party B"}
+            onSettlement={(issue, amount, unit) => {
+              // Capture as tracked agreement
+              const agreement: Agreement = {
+                id: Date.now().toString() + Math.random(),
+                topic: `Blind Bidding: ${issue}`,
+                terms: `Settlement reached at ${amount}${unit} via blind bidding (RCB algorithm). Both parties' ranges overlapped.`,
+                conditions: [],
+                partyAAccepts: true,
+                partyBAccepts: true,
+                timestamp: new Date().toISOString(),
+              };
+              setAgreements((prev) => [...prev, agreement]);
+              // Inject context into live session if active
+              sessionRef.current?.sendContext(
+                `[BLIND BIDDING SETTLED] "${issue}" at ${amount}${unit}. Both parties' ranges overlapped. Acknowledge this agreement.`,
+              );
+              setShowBlindBidding(false);
+            }}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
