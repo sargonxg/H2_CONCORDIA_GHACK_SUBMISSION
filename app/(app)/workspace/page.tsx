@@ -44,10 +44,12 @@ import {
   researchGrounding,
   analyzePathways,
   summarizeCase,
+  generateAgreementDoc,
 } from "@/services/gemini-client";
-import type { Actor, Primitive, PrimitiveType, Case, LiveMediationState, OntologyStats, PartyProfile, GapNotification, CaseSummary, TimelineEntry, PrimitiveCluster, Agreement, EscalationFlag, SolutionProposal, PowerDynamics, ImpasseEvent } from "@/lib/types";
+import type { Actor, Primitive, PrimitiveType, Case, LiveMediationState, OntologyStats, PartyProfile, GapNotification, CaseSummary, TimelineEntry, PrimitiveCluster, Agreement, EscalationFlag, SolutionProposal, PowerDynamics, ImpasseEvent, IntakeData } from "@/lib/types";
 import { safeJsonParse } from "@/lib/utils";
-import { exportAsMarkdown, exportAsJSON, downloadFile } from "@/lib/export";
+import { exportAsMarkdown, exportAsJSON, downloadFile, generateAgreementHTML } from "@/lib/export";
+import IntakeWizard from "@/components/workspace/IntakeWizard";
 import { useConflictGraph } from "@/hooks/useConflictGraph";
 import ConflictGraph from "@/components/workspace/ConflictGraph";
 import OntologyHealthCheck from "@/components/workspace/OntologyHealthCheck";
@@ -386,6 +388,8 @@ export default function Workspace() {
 
   const [demoMode, setDemoMode] = useState(false);
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
+  const [showIntake, setShowIntake] = useState(false);
+  const [intakeData, setIntakeData] = useState<IntakeData | null>(null);
   const [connectionLostBanner, setConnectionLostBanner] = useState(false);
   const [micDenied, setMicDenied] = useState(false);
   const demoTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -467,6 +471,8 @@ export default function Workspace() {
     };
     setCases([newCase, ...cases]);
     setActiveCaseId(newCase.id);
+    setShowIntake(true);
+    setIntakeData(null);
   };
 
   const activeCase = cases.find((c) => c.id === activeCaseId);
@@ -690,6 +696,10 @@ export default function Workspace() {
         null,
         2,
       );
+
+      const sessionContext = intakeData?.context
+        ? `${intakeData.context}\n\n---\n${currentGraphContext}`
+        : currentGraphContext;
 
       const session = await getLiveSession(
         {
@@ -1014,7 +1024,7 @@ export default function Workspace() {
             }
           },
         },
-        currentGraphContext,
+        sessionContext,
         mediatorProfile,
         {
           partyA: activeCase?.partyAName || "Party A",
@@ -1985,6 +1995,40 @@ export default function Workspace() {
     );
   };
 
+  const handleGenerateAgreement = async () => {
+    if (!activeCase || agreements.length === 0) return;
+    try {
+      const data = await generateAgreementDoc({
+        caseTitle: activeCase.title,
+        caseType: intakeData?.caseType || "Mediation",
+        partyAName: activeCase.partyAName,
+        partyBName: activeCase.partyBName,
+        agreements: agreements.map((a) => ({
+          topic: a.topic,
+          terms: a.terms,
+          conditions: a.conditions,
+        })),
+        commonGround: liveMediationState?.commonGround || [],
+        context: intakeData?.context || activeCase.transcript.slice(0, 4000),
+      });
+      const html = generateAgreementHTML(data, {
+        caseTitle: activeCase.title,
+        caseType: intakeData?.caseType || "Mediation",
+        partyAName: activeCase.partyAName,
+        partyBName: activeCase.partyBName,
+        date: new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
+      });
+      const w = window.open("", "_blank");
+      if (w) {
+        w.document.write(html);
+        w.document.close();
+        setTimeout(() => w.print(), 500);
+      }
+    } catch (err) {
+      console.error("Agreement generation error:", err);
+    }
+  };
+
   const exportMarkdownReport = () => {
     if (!activeCase) return;
     downloadFile(
@@ -2131,6 +2175,39 @@ export default function Workspace() {
     activeCase?.primitives ?? [],
     liveMediationState,
   );
+
+  // ─── INTAKE WIZARD ───
+  const handleIntakeComplete = (data: IntakeData) => {
+    setIntakeData(data);
+    setShowIntake(false);
+    // Apply intake data to the active case
+    updateActiveCase({
+      title: data.caseTitle,
+      partyAName: data.partyA.name,
+      partyBName: data.partyB.name,
+      actors: [
+        { id: "a1", name: data.partyA.name, role: data.partyA.role || "Disputant" },
+        { id: "a2", name: data.partyB.name, role: data.partyB.role || "Disputant" },
+      ],
+    });
+    // Set mediator profile from intake
+    setMediatorProfile({
+      voice: data.mediatorStyle === "empathic" ? "Kore" : "Zephyr",
+      approach: "Facilitative",
+      style: data.mediatorStyle,
+    });
+  };
+
+  if (showIntake && activeCaseId) {
+    return (
+      <IntakeWizard
+        onComplete={handleIntakeComplete}
+        onSkip={() => setShowIntake(false)}
+        defaultPartyAName={activeCase?.partyAName}
+        defaultPartyBName={activeCase?.partyBName}
+      />
+    );
+  }
 
   // ─── CASE LIST VIEW ───
   if (!activeCaseId) {
@@ -2281,6 +2358,8 @@ export default function Workspace() {
           onExitCaucus={exitCaucus}
           partyAName={activeCase?.actors[0]?.name ?? 'Party A'}
           partyBName={activeCase?.actors[1]?.name ?? 'Party B'}
+          onGenerateAgreement={handleGenerateAgreement}
+          hasAgreements={agreements.length > 0}
         />
       </header>
 

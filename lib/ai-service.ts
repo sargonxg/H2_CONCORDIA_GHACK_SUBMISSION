@@ -1392,3 +1392,71 @@ export const researchGrounding = async (query: string) => {
     chunks: response.candidates?.[0]?.groundingMetadata?.groundingChunks,
   };
 };
+
+// ── Document Processing ──
+
+export const processDocument = async (file: File): Promise<string> => {
+  const ai = initAI();
+  const prompt = 'Extract a structured summary for a mediation pre-session briefing. Include: key facts, dates, demands/positions, emotional language/grievances, and relevant context. Max 300 words. No legal advice.';
+  let contents: any[];
+  if (file.type === 'application/pdf') {
+    const buffer = Buffer.from(await file.arrayBuffer());
+    contents = [
+      { inlineData: { mimeType: 'application/pdf', data: buffer.toString('base64') } },
+      { text: prompt },
+    ];
+  } else {
+    const text = await file.text();
+    contents = [{ text: `${prompt}\n\n---\n${text.slice(0, 50000)}\n---` }];
+  }
+  const response = await ai.models.generateContent({ model: _MODEL_TEXT, contents });
+  return response.text || 'Unable to extract summary.';
+};
+
+// ── Settlement Agreement Generation ──
+
+export const generateAgreement = async (data: {
+  caseTitle: string; caseType: string; partyAName: string; partyBName: string;
+  agreements: { topic: string; terms: string; conditions?: string[] }[];
+  commonGround: string[]; context: string;
+}): Promise<any> => {
+  const ai = initAI();
+  const date = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  const response = await ai.models.generateContent({
+    model: _MODEL_TEXT,
+    contents: `You are a document drafting assistant for the CONCORDIA mediation platform by TACITUS.
+
+Generate a formal mediation settlement agreement:
+
+Case: ${data.caseTitle} (${data.caseType})
+Date: ${date}
+Party A: ${data.partyAName}
+Party B: ${data.partyBName}
+
+Agreements reached:
+${data.agreements.map((a, i) => `${i+1}. ${a.topic}: ${a.terms}${a.conditions?.length ? ` (Conditions: ${a.conditions.join('; ')})` : ''}`).join('\n')}
+
+Common Ground: ${data.commonGround.join('; ') || 'None documented'}
+
+Context: ${data.context}
+
+Generate fields: preamble, background, agreedTerms (array of {number, title, text, responsible, deadline}), implementationPlan, reviewMechanism, contingencies, confidentiality, acknowledgment, disclaimer (include: "This document was generated with AI assistance during a mediation facilitated by CONCORDIA, a product of the TACITUS Institute for Conflict Resolution. It is not legal advice. Parties are encouraged to have it reviewed by legal counsel.").`,
+    config: {
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          preamble: { type: Type.STRING }, background: { type: Type.STRING },
+          agreedTerms: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: {
+            number: { type: Type.NUMBER }, title: { type: Type.STRING }, text: { type: Type.STRING },
+            responsible: { type: Type.STRING }, deadline: { type: Type.STRING },
+          }}},
+          implementationPlan: { type: Type.STRING }, reviewMechanism: { type: Type.STRING },
+          contingencies: { type: Type.STRING }, confidentiality: { type: Type.STRING },
+          acknowledgment: { type: Type.STRING }, disclaimer: { type: Type.STRING },
+        },
+      },
+    },
+  });
+  return JSON.parse(response.text || '{}');
+};
