@@ -2046,7 +2046,21 @@ export default function Workspace() {
         commonGround: liveMediationState?.commonGround || [],
         tensionPoints: liveMediationState?.tensionPoints || [],
       });
-      setSummaryData(safeJsonParse(resultStr, null));
+      const parsed = safeJsonParse(resultStr, null);
+      if (parsed) {
+        // Normalize: the API may omit empty arrays — ensure every field has a safe default
+        // so the render never hits ".length of undefined"
+        setSummaryData({
+          sessionOverview: parsed.sessionOverview ?? "",
+          keyClaimsPartyA: parsed.keyClaimsPartyA ?? [],
+          keyClaimsPartyB: parsed.keyClaimsPartyB ?? [],
+          coreInterestsPartyA: parsed.coreInterestsPartyA ?? [],
+          coreInterestsPartyB: parsed.coreInterestsPartyB ?? [],
+          areasOfAgreement: parsed.areasOfAgreement ?? [],
+          unresolvedTensions: parsed.unresolvedTensions ?? [],
+          recommendedNextSteps: parsed.recommendedNextSteps ?? [],
+        });
+      }
     } catch (err) {
       console.error("Summary generation error:", err);
     } finally {
@@ -3392,7 +3406,7 @@ export default function Workspace() {
                     </div>
 
                     {/* Areas of Agreement */}
-                    {summaryData.areasOfAgreement.length > 0 && (
+                    {(summaryData.areasOfAgreement?.length ?? 0) > 0 && (
                       <div>
                         <h3 className="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-3">Areas of Agreement</h3>
                         <div className="space-y-1.5">
@@ -3406,7 +3420,7 @@ export default function Workspace() {
                     )}
 
                     {/* Unresolved Tensions */}
-                    {summaryData.unresolvedTensions.length > 0 && (
+                    {(summaryData.unresolvedTensions?.length ?? 0) > 0 && (
                       <div>
                         <h3 className="text-xs font-bold text-red-400 uppercase tracking-wider mb-3">Unresolved Tensions</h3>
                         <div className="space-y-1.5">
@@ -3420,7 +3434,7 @@ export default function Workspace() {
                     )}
 
                     {/* Next Steps */}
-                    {summaryData.recommendedNextSteps.length > 0 && (
+                    {(summaryData.recommendedNextSteps?.length ?? 0) > 0 && (
                       <div>
                         <h3 className="text-xs font-bold text-[var(--color-accent)] uppercase tracking-wider mb-3">Recommended Next Steps</h3>
                         <ol className="space-y-2">
