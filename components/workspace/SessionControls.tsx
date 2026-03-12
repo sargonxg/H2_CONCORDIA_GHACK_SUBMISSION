@@ -1,6 +1,6 @@
 "use client";
 
-import { Mic, Square, Activity, Settings2, Download, BookOpen, Timer } from "lucide-react";
+import { Mic, Square, Activity, Settings2, Download, BookOpen, Timer, Users, User } from "lucide-react";
 
 interface MediatorProfile {
   voice: string;
@@ -31,6 +31,12 @@ interface Props {
   hasSummaryData: boolean;
   onCopySummary: () => void;
   onCopyTranscript: () => void;
+  // Caucus mode
+  caucusMode?: 'joint' | 'partyA' | 'partyB';
+  onEnterCaucus?: (party: 'partyA' | 'partyB') => void;
+  onExitCaucus?: () => void;
+  partyAName?: string;
+  partyBName?: string;
 }
 
 export default function SessionControls({
@@ -56,6 +62,11 @@ export default function SessionControls({
   hasSummaryData,
   onCopySummary,
   onCopyTranscript,
+  caucusMode = 'joint',
+  onEnterCaucus,
+  onExitCaucus,
+  partyAName = 'Party A',
+  partyBName = 'Party B',
 }: Props) {
   return (
     <div className="flex items-center gap-3">
@@ -206,6 +217,48 @@ export default function SessionControls({
           </span>
         )}
       </div>
+
+      {/* Caucus Mode — only shown during live sessions */}
+      {isRecording && onEnterCaucus && onExitCaucus && (
+        <div className="flex items-center rounded-lg border border-[var(--color-border)] overflow-hidden text-xs font-medium">
+          <button
+            onClick={onExitCaucus}
+            title="Switch to joint session (both parties present)"
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 transition-colors ${
+              caucusMode === 'joint'
+                ? 'bg-emerald-500/20 text-emerald-400 border-r border-emerald-500/30'
+                : 'text-[var(--color-text-muted)] hover:text-white hover:bg-[var(--color-surface-hover)] border-r border-[var(--color-border)]'
+            }`}
+          >
+            <Users className="w-3.5 h-3.5" />
+            Joint
+          </button>
+          <button
+            onClick={() => onEnterCaucus('partyA')}
+            title={`Private caucus with ${partyAName}`}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 transition-colors ${
+              caucusMode === 'partyA'
+                ? 'bg-blue-500/20 text-blue-400 border-r border-blue-500/30'
+                : 'text-[var(--color-text-muted)] hover:text-white hover:bg-[var(--color-surface-hover)] border-r border-[var(--color-border)]'
+            }`}
+          >
+            <User className="w-3.5 h-3.5" />
+            {partyAName}
+          </button>
+          <button
+            onClick={() => onEnterCaucus('partyB')}
+            title={`Private caucus with ${partyBName}`}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 transition-colors ${
+              caucusMode === 'partyB'
+                ? 'bg-violet-500/20 text-violet-400'
+                : 'text-[var(--color-text-muted)] hover:text-white hover:bg-[var(--color-surface-hover)]'
+            }`}
+          >
+            <User className="w-3.5 h-3.5" />
+            {partyBName}
+          </button>
+        </div>
+      )}
 
       {/* Start / Stop */}
       {isRecording ? (
