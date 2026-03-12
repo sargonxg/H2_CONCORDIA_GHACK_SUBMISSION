@@ -400,6 +400,15 @@ function buildToolDeclarations(): any[] {
   ];
 }
 
+// ── Voice Palette for Mediation Contexts ──
+
+export const MEDIATOR_VOICES = {
+  professional: { voice: 'Zephyr', description: 'Calm, authoritative, measured' },
+  empathic: { voice: 'Kore', description: 'Warm, gentle, emotionally present' },
+  firm: { voice: 'Orus', description: 'Direct, grounded, clear boundaries' },
+  facilitative: { voice: 'Aoede', description: 'Encouraging, collaborative, light' },
+} as const;
+
 // ── Live Audio Session ──
 
 function buildSystemInstruction(
@@ -522,6 +531,25 @@ RISK ASSESSMENT — each 0-100:
 
 BATNA: track each party's best alternative to a negotiated agreement.
 
+AFFECTIVE AUDIO INTELLIGENCE:
+You have native access to the emotional qualities of each speaker's voice — tone, pace, pitch, tremor, hesitation. USE this information to:
+
+Detect emotional flooding BEFORE it escalates to words (voice tremor, pace increase)
+Match your vocal delivery to the emotional needs of the moment (softer when distressed, firmer when structure is needed)
+Report vocal emotional cues in partyProfiles.emotionalState — e.g. "Voice indicates rising frustration despite calm words"
+When you detect a mismatch between words and tone (saying "I'm fine" with a trembling voice), name it gently: "I notice your voice suggests this might be harder than your words indicate. Would you like to say more about how you're feeling?"
+
+═══════════════════════════════════════════
+PROACTIVE LISTENING MODE
+═══════════════════════════════════════════
+
+You have Proactive Audio enabled. This means you can co-listen to the parties speaking to each other WITHOUT interrupting. Use this capability:
+
+When parties are in direct dialogue, LISTEN SILENTLY and accumulate observations
+Only speak when: (a) directly addressed, (b) you detect escalation requiring intervention, (c) a natural pause occurs where your input would advance the process, or (d) a party looks to you for guidance
+After extended listening, summarize what you observed: "I've been listening to your exchange, and I noticed..."
+This is especially valuable in the Exploration and Negotiation phases where parties should be engaging with each other, not just through you
+
 ═══════════════════════════════════════════
 MEDIATION FRAMEWORKS (apply adaptively — prefix responses)
 ═══════════════════════════════════════════
@@ -609,6 +637,13 @@ export const createLiveSession = (
 
   const config: any = {
     responseModalities: [Modality.AUDIO],
+    enableAffectiveDialog: true,   // Emotional intelligence from raw audio
+    proactivity: {                  // Smart response gating — silent co-listener
+      proactiveAudio: true,
+    },
+    thinkingConfig: {               // Reason before speaking — improves framework selection
+      includeThoughts: false,       // Use thoughts internally, don't vocalize them
+    },
     speechConfig: {
       voiceConfig: {
         prebuiltVoiceConfig: { voiceName: mediatorProfile.voice },
@@ -622,16 +657,17 @@ export const createLiveSession = (
     ),
     inputAudioTranscription: {},
     outputAudioTranscription: {},
-    // Enable context window compression for sessions longer than 15 min
+    // Keep at least 8K tokens of context during long sessions
     contextWindowCompression: {
-      slidingWindow: {},
+      slidingWindow: {
+        targetTokens: 8192,
+      },
     },
+    // Always enable session resumption for reconnection support
+    sessionResumption: resumptionHandle
+      ? { handle: resumptionHandle }
+      : {},
   };
-
-  // Only include session resumption when we have a handle to resume
-  if (resumptionHandle) {
-    config.sessionResumption = { handle: resumptionHandle };
-  }
 
   return ai.live.connect({
     model: _MODEL_LIVE,
