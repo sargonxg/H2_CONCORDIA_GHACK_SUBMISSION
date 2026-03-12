@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Mic,
@@ -40,6 +41,7 @@ import {
 } from "lucide-react";
 import {
   getLiveSession,
+  joinRoomSession,
   extractPrimitives,
   researchGrounding,
   analyzePathways,
@@ -384,7 +386,7 @@ function AnalysisSkeleton() {
   );
 }
 
-export default function Workspace() {
+function WorkspaceInner() {
   const [cases, setCases] = useState<Case[]>([]);
   const [activeCaseId, setActiveCaseId] = useState<string | null>(null);
 
@@ -426,6 +428,12 @@ export default function Workspace() {
   const [showBlindBidding, setShowBlindBidding] = useState(false);
   const [mobilePanel, setMobilePanel] = useState<"left" | "center" | "right">("center");
   const [pathwaysLoading, setPathwaysLoading] = useState(false);
+  // ── Room mode ──────────────────────────────────────────────────────────────
+  const [roomCode, setRoomCode] = useState<string | null>(null);
+  const [roomPartyJoined, setRoomPartyJoined] = useState(false);
+  const [joinName, setJoinName] = useState("");
+  const [joinLoading, setJoinLoading] = useState(false);
+  const [joinError, setJoinError] = useState("");
 
   const [demoMode, setDemoMode] = useState(false);
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
@@ -744,6 +752,12 @@ export default function Workspace() {
 
       const session = await getLiveSession(
         {
+          // Room mode flag — if the case has room mode enabled, create a shared room
+          createRoom: (activeCase as any)?.roomMode ?? false,
+          caseId: activeCaseIdRef.current,
+          onRoomCreated: (code: string) => {
+            setRoomCode(code);
+          },
           onopen: () => {
             sessionStartTimeRef.current = Date.now();
             lastAutoExtractLengthRef.current = 0;
@@ -2449,6 +2463,17 @@ export default function Workspace() {
         </div>
       )}
 
+      {/* ─── ROOM CODE PANEL ─── */}
+      {roomCode && (
+        <RoomCodePanel
+          code={roomCode}
+          onCopy={() => {
+            const url = `${window.location.origin}/workspace?join=${roomCode}`;
+            navigator.clipboard.writeText(url);
+          }}
+        />
+      )}
+
       {/* ─── IMPASSE BANNER ─── */}
       {impaseBanner && (
         <div className="mx-6 mt-2 shrink-0 flex items-start gap-3 px-4 py-3 bg-orange-500/10 border border-orange-500/30 rounded-lg">
@@ -3702,4 +3727,163 @@ export default function Workspace() {
       </AnimatePresence>
     </div>
   );
+}
+
+// ── Join screen — shown when ?join=ROOMCODE is in the URL ────────────────────
+function JoinScreen({
+  joinCode,
+  joinName,
+  setJoinName,
+  joinLoading,
+  joinError,
+  onJoin,
+}: {
+  joinCode: string;
+  joinName: string;
+  setJoinName: (v: string) => void;
+  joinLoading: boolean;
+  joinError: string;
+  onJoin: () => void;
+}) {
+  return (
+    <div className="min-h-screen bg-[var(--color-bg)] flex items-center justify-center px-4">
+      <div className="w-full max-w-sm bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-8 space-y-6">
+        <div className="text-center space-y-2">
+          <Shield className="w-10 h-10 text-[var(--color-accent)] mx-auto" />
+          <h1 className="text-2xl font-bold">Join Mediation</h1>
+          <p className="text-sm text-[var(--color-text-muted)]">
+            Room <span className="font-mono font-bold text-white">{joinCode}</span>
+          </p>
+        </div>
+        <div className="space-y-3">
+          <label className="text-xs text-[var(--color-text-muted)] block">Your name</label>
+          <input
+            value={joinName}
+            onChange={(e) => setJoinName(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && joinName.trim() && onJoin()}
+            placeholder="Enter your name…"
+            autoFocus
+            className="w-full bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:border-[var(--color-accent)] transition-colors"
+          />
+          {joinError && (
+            <p className="text-xs text-red-400">{joinError}</p>
+          )}
+          <button
+            onClick={onJoin}
+            disabled={!joinName.trim() || joinLoading}
+            className="w-full py-3 rounded-lg bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-white font-semibold text-sm transition-colors disabled:opacity-40"
+          >
+            {joinLoading ? "Joining…" : "Join Session"}
+          </button>
+        </div>
+        <p className="text-[10px] text-center text-[var(--color-text-muted)]">
+          You will connect as a participant in the live mediation session.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ── Room code panel (shown to creator after session starts) ──────────────────
+function RoomCodePanel({ code, onCopy }: { code: string; onCopy: () => void }) {
+  const url = typeof window !== "undefined"
+    ? `${window.location.origin}/workspace?join=${code}`
+    : `/workspace?join=${code}`;
+  return (
+    <div className="mx-6 mt-2 shrink-0 flex items-center gap-3 px-4 py-2.5 rounded-lg border bg-blue-500/10 border-blue-500/30">
+      <Users className="w-4 h-4 text-blue-400 shrink-0" />
+      <div className="flex-1 min-w-0">
+        <p className="text-xs text-blue-200">
+          Room active — share this code with the other party:
+          {" "}<span className="font-mono font-bold text-white tracking-widest">{code}</span>
+        </p>
+        <p className="text-[10px] text-blue-400/70 truncate">{url}</p>
+      </div>
+      <button
+        onClick={onCopy}
+        aria-label="Copy room link"
+        className="shrink-0 text-xs px-3 py-1.5 rounded-lg border border-blue-500/30 text-blue-300 hover:bg-blue-500/20 transition-colors"
+      >
+        Copy Link
+      </button>
+    </div>
+  );
+}
+
+// ── Outer wrapper with Suspense for useSearchParams ──────────────────────────
+export default function Workspace() {
+  return (
+    <Suspense fallback={<div className="flex-1 flex items-center justify-center text-slate-400 text-sm">Loading…</div>}>
+      <WorkspaceWithSearchParams />
+    </Suspense>
+  );
+}
+
+function WorkspaceWithSearchParams() {
+  const searchParams = useSearchParams();
+  const joinCode = searchParams?.get("join")?.toUpperCase() ?? null;
+
+  const [joinName, setJoinName] = useState("");
+  const [joinLoading, setJoinLoading] = useState(false);
+  const [joinError, setJoinError] = useState("");
+  const [joinedSession, setJoinedSession] = useState(false);
+  const joinSessionRef = useRef<any>(null);
+
+  // If URL has ?join=CODE and not yet joined → show join screen
+  if (joinCode && !joinedSession) {
+    const handleJoin = async () => {
+      if (!joinName.trim()) return;
+      setJoinLoading(true);
+      setJoinError("");
+      try {
+        const handle = await joinRoomSession(joinCode, joinName.trim(), {
+          onJoined: (partyId) => {
+            console.log(`[Room] Joined as ${partyId}`);
+          },
+          onPartyJoined: (partyId, name) => {
+            console.log(`[Room] ${name} (${partyId}) also joined`);
+          },
+          onclose: () => setJoinedSession(false),
+        });
+        joinSessionRef.current = handle;
+        setJoinedSession(true);
+      } catch (err: any) {
+        setJoinError(err.message || "Failed to join room");
+      } finally {
+        setJoinLoading(false);
+      }
+    };
+
+    return (
+      <JoinScreen
+        joinCode={joinCode}
+        joinName={joinName}
+        setJoinName={setJoinName}
+        joinLoading={joinLoading}
+        joinError={joinError}
+        onJoin={handleJoin}
+      />
+    );
+  }
+
+  if (joinCode && joinedSession) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center gap-4 bg-[var(--color-bg)] text-white p-8">
+        <Shield className="w-10 h-10 text-emerald-500" />
+        <div className="text-center space-y-2">
+          <h2 className="text-xl font-bold">Connected to Room {joinCode}</h2>
+          <p className="text-sm text-[var(--color-text-muted)]">
+            You are participating in the live mediation session. Audio and AI analysis are shared.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 text-xs font-mono text-emerald-400">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+          LIVE
+        </div>
+      </div>
+    );
+  }
+
+  // Normal workspace (no room join)
+  return <WorkspaceInner />;
 }

@@ -1,5 +1,13 @@
 import { WebSocket } from "ws";
 import { createLiveSession } from "./ai-service";
+import {
+  createRoom,
+  getRoom,
+  joinRoom,
+  leaveRoom,
+  broadcastToRoom,
+} from "./room-manager";
+import { randomUUID } from "crypto";
 
 export function handleWebSocketConnection(ws: WebSocket) {
   let liveSession: any = null;
@@ -14,6 +22,10 @@ export function handleWebSocketConnection(ws: WebSocket) {
     mediatorProfile: any;
     partyNames: any;
   } | null = null;
+
+  // ── Room mode state ──────────────────────────────────────────────────────
+  let roomId: string | null = null;
+  const clientId = randomUUID();
 
   const tryReconnect = (reason: string) => {
     if (sessionClosing || !latestResumptionHandle) return false;
@@ -105,7 +117,13 @@ export function handleWebSocketConnection(ws: WebSocket) {
             if (message.goAway) types.push("goAway");
             if (types.length > 0) console.log(`[Live] Gemini msg: ${types.join(", ")}`);
 
-            if (ws.readyState === WebSocket.OPEN) {
+            // In room mode: broadcast to ALL room clients; otherwise 1:1
+            if (roomId) {
+              const room = getRoom(roomId);
+              if (room) {
+                broadcastToRoom(room, { type: "message", data: message });
+              }
+            } else if (ws.readyState === WebSocket.OPEN) {
               ws.send(JSON.stringify({ type: "message", data: message }));
             }
           },
@@ -164,7 +182,34 @@ export function handleWebSocketConnection(ws: WebSocket) {
     try {
       const msg = JSON.parse(raw.toString());
 
-      if (msg.type === "start") {
+      if (msg.type === "join") {
+        // ── Room join: Party B (or observer) connects to existing room ──
+        const code: string = (msg.roomCode || "").toUpperCase();
+        const room = getRoom(code);
+        if (!room) {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: "error", error: `Room ${code} not found` }));
+          }
+          return;
+        }
+        // Determine party: first joiner after creator is B, rest are observers
+        const existingParties = Array.from(room.clients.values()).map((c) => c.partyId);
+        const partyId: "A" | "B" | "observer" = existingParties.includes("B") ? "observer" : "B";
+        roomId = code;
+        joinRoom(code, clientId, ws, partyId, msg.name || "Party B");
+        // Attach to room's shared Gemini session
+        liveSession = room.geminiSession;
+        sessionClosing = false;
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: "joined", roomCode: code, partyId, name: msg.name }));
+        }
+        broadcastToRoom(room, {
+          type: "partyJoined",
+          partyId,
+          name: msg.name || "Party B",
+        }, clientId);
+
+      } else if (msg.type === "start") {
         sessionClosing = false;
         latestResumptionHandle = null;
         sessionParams = {
@@ -178,7 +223,23 @@ export function handleWebSocketConnection(ws: WebSocket) {
             partyB: "Party B",
           },
         };
-        await connectLiveSession(msg.resumptionHandle);
+
+        // ── Room creation mode ──────────────────────────────────────────────
+        if (msg.createRoom) {
+          const room = createRoom(msg.caseId || "unknown");
+          roomId = room.id;
+          joinRoom(room.id, clientId, ws, "A", msg.partyNames?.partyA || "Party A");
+          room.sessionParams = sessionParams;
+          await connectLiveSession(msg.resumptionHandle);
+          // geminiSession will be stored on room after connect
+          room.geminiSession = liveSession;
+          // Override open callback to include roomCode
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: "roomCreated", roomCode: room.id }));
+          }
+        } else {
+          await connectLiveSession(msg.resumptionHandle);
+        }
       } else if (msg.type === "audio" && !sessionClosing) {
         // Drop audio frames while a tool call is pending to prevent 1008 errors
         if (!liveSession || toolCallPending) return;
@@ -237,7 +298,12 @@ export function handleWebSocketConnection(ws: WebSocket) {
 
   ws.on("close", () => {
     sessionClosing = true;
-    if (liveSession) {
+    // Room mode: leave room (room manager handles cleanup)
+    if (roomId) {
+      leaveRoom(roomId, clientId);
+      roomId = null;
+    } else if (liveSession) {
+      // 1:1 mode: close session directly
       try {
         liveSession.close();
       } catch (e) {
