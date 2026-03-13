@@ -178,8 +178,8 @@ export default function EmotionTimeline({ timeline, partyAName, partyBName }: Pr
   }
 
   // Summary stats
-  const latestA = timeline[timeline.length - 1].partyA;
-  const latestB = timeline[timeline.length - 1].partyB;
+  const latestA = timeline[timeline.length - 1]!.partyA;
+  const latestB = timeline[timeline.length - 1]!.partyB;
   const peakEscalation = Math.max(...timeline.map((s) => s.escalationScore));
 
   return (

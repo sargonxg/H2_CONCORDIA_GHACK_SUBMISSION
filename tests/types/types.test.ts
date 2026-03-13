@@ -8,6 +8,7 @@ import type {
   EscalationFlag,
   PowerDynamics,
   ImpasseEvent,
+  EmotionSnapshot,
 } from '@/lib/types';
 
 describe('Type contracts', () => {
@@ -102,5 +103,50 @@ describe('Type contracts', () => {
     };
     expect(flag.severity).toBe(7);
     expect(flag.category).toBe('contempt');
+  });
+
+  it('EmotionSnapshot structure is valid', () => {
+    const snapshot: EmotionSnapshot = {
+      timestamp: new Date().toISOString(),
+      elapsedSeconds: 120,
+      partyA: {
+        emotionalState: 'frustrated',
+        emotionalIntensity: 7,
+        emotionalTrajectory: 'escalating',
+        conflictStyle: 'competing',
+        cooperativeness: 3,
+        defensiveness: 8,
+      },
+      partyB: {
+        emotionalState: 'anxious',
+        emotionalIntensity: 5,
+        emotionalTrajectory: 'stable',
+        conflictStyle: 'avoiding',
+        cooperativeness: 5,
+        defensiveness: 6,
+      },
+      phase: 'Discovery',
+      escalationScore: 6,
+    };
+    expect(snapshot.elapsedSeconds).toBe(120);
+    expect(snapshot.partyA.emotionalIntensity).toBe(7);
+    expect(snapshot.partyB.emotionalTrajectory).toBe('stable');
+    expect(snapshot.phase).toBe('Discovery');
+    expect(snapshot.escalationScore).toBe(6);
+  });
+
+  it('EmotionSnapshot partyA trajectories are valid string values', () => {
+    const trajectories = ['escalating', 'stable', 'de-escalating'];
+    trajectories.forEach((t) => {
+      const snapshot: EmotionSnapshot = {
+        timestamp: new Date().toISOString(),
+        elapsedSeconds: 0,
+        partyA: { emotionalState: 'neutral', emotionalIntensity: 1, emotionalTrajectory: t, conflictStyle: 'collaborating', cooperativeness: 5, defensiveness: 2 },
+        partyB: { emotionalState: 'neutral', emotionalIntensity: 1, emotionalTrajectory: 'stable', conflictStyle: 'collaborating', cooperativeness: 5, defensiveness: 2 },
+        phase: 'Opening',
+        escalationScore: 1,
+      };
+      expect(snapshot.partyA.emotionalTrajectory).toBe(t);
+    });
   });
 });

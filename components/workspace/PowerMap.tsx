@@ -39,7 +39,7 @@ export default function PowerMap({
   partyAName,
   partyBName,
 }: PowerMapProps) {
-  const cfg = BALANCE_CONFIG[overallBalance] ?? BALANCE_CONFIG["balanced"];
+  const cfg = (BALANCE_CONFIG[overallBalance] ?? BALANCE_CONFIG["balanced"] ?? { label: "", color: "#6b7280", bg: "bg-slate-700", border: "border-slate-600" }) as { label: string; color: string; bg: string; border: string };
   const balanceLabel =
     overallBalance === "A-favored"
       ? cfg.label + partyAName

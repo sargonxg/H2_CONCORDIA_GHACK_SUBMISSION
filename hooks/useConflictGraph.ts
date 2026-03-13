@@ -79,10 +79,12 @@ export function useConflictGraph(
     const claims = safePrimitives.filter((p) => p.type === "Claim");
     for (let i = 0; i < claims.length; i++) {
       for (let j = i + 1; j < claims.length; j++) {
-        if (claims[i].actorId !== claims[j].actorId) {
+        const ci = claims[i];
+        const cj = claims[j];
+        if (ci && cj && ci.actorId !== cj.actorId) {
           edges.push({
-            source: claims[i].id,
-            target: claims[j].id,
+            source: ci.id,
+            target: cj.id,
             type: "OPPOSES",
           });
         }
@@ -93,10 +95,12 @@ export function useConflictGraph(
     const interests = safePrimitives.filter((p) => p.type === "Interest");
     for (let i = 0; i < interests.length; i++) {
       for (let j = i + 1; j < interests.length; j++) {
-        if (interests[i].actorId !== interests[j].actorId) {
+        const ii = interests[i];
+        const ij = interests[j];
+        if (ii && ij && ii.actorId !== ij.actorId) {
           // Use common-ground data from live session to decide alignment vs. conflict
-          const iDesc = (interests[i].description ?? "").toLowerCase();
-          const jDesc = (interests[j].description ?? "").toLowerCase();
+          const iDesc = (ii.description ?? "").toLowerCase();
+          const jDesc = (ij.description ?? "").toLowerCase();
           const commonGroundWords = (liveMediationState?.commonGround ?? [])
             .join(" ")
             .toLowerCase();
@@ -106,8 +110,8 @@ export function useConflictGraph(
             .filter((w) => w.length > 4 && jDesc.includes(w));
           const isAligned = sharedTokens.length > 0 || commonGroundWords.length > 0;
           edges.push({
-            source: interests[i].id,
-            target: interests[j].id,
+            source: ii.id,
+            target: ij.id,
             type: isAligned ? "ALIGNS_WITH" : "CONFLICTS_WITH",
           });
         }
@@ -120,11 +124,12 @@ export function useConflictGraph(
       const actorInterests = interests.filter(
         (i) => i.actorId !== constraint.actorId,
       );
-      if (actorInterests.length > 0) {
+      const firstInterest = actorInterests[0];
+      if (firstInterest) {
         // Connect to first interest of the opposite actor
         edges.push({
           source: constraint.id,
-          target: actorInterests[0].id,
+          target: firstInterest.id,
           type: "BLOCKS",
         });
       }
@@ -136,10 +141,11 @@ export function useConflictGraph(
       const actorClaims = claims.filter(
         (c) => c.actorId === leverage.actorId,
       );
-      if (actorClaims.length > 0) {
+      const firstClaim = actorClaims[0];
+      if (firstClaim) {
         edges.push({
           source: leverage.id,
-          target: actorClaims[0].id,
+          target: firstClaim.id,
           type: "SUPPORTS",
         });
       }
@@ -151,10 +157,11 @@ export function useConflictGraph(
       const oppositeInterests = interests.filter(
         (i) => i.actorId !== commitment.actorId,
       );
-      if (oppositeInterests.length > 0) {
+      const firstOppositeInterest = oppositeInterests[0];
+      if (firstOppositeInterest) {
         edges.push({
           source: commitment.id,
-          target: oppositeInterests[0].id,
+          target: firstOppositeInterest.id,
           type: "ADDRESSES",
         });
       }
@@ -166,10 +173,11 @@ export function useConflictGraph(
       const actorClaims = claims.filter(
         (c) => c.actorId === narrative.actorId,
       );
-      if (actorClaims.length > 0) {
+      const firstActorClaim = actorClaims[0];
+      if (firstActorClaim) {
         edges.push({
           source: narrative.id,
-          target: actorClaims[0].id,
+          target: firstActorClaim.id,
           type: "FRAMES",
         });
       }
@@ -178,10 +186,12 @@ export function useConflictGraph(
     // Narrative vs. Narrative from different actors → CONTRADICTS
     for (let i = 0; i < narratives.length; i++) {
       for (let j = i + 1; j < narratives.length; j++) {
-        if (narratives[i].actorId !== narratives[j].actorId) {
+        const ni = narratives[i];
+        const nj = narratives[j];
+        if (ni && nj && ni.actorId !== nj.actorId) {
           edges.push({
-            source: narratives[i].id,
-            target: narratives[j].id,
+            source: ni.id,
+            target: nj.id,
             type: "CONTRADICTS",
           });
         }
@@ -191,10 +201,11 @@ export function useConflictGraph(
     // Events → trigger claims (first claim of opposite/any actor)
     const events = safePrimitives.filter((p) => p.type === "Event");
     for (const event of events) {
-      if (claims.length > 0) {
+      const firstClaim = claims[0];
+      if (firstClaim) {
         edges.push({
           source: event.id,
-          target: claims[0].id,
+          target: firstClaim.id,
           type: "TRIGGERS",
         });
       }

@@ -76,7 +76,7 @@ function FrameworkCard({ fw }: { fw: FrameworkEntry }) {
           </div>
           <h2 className="text-base font-semibold text-white leading-tight">{fw.name}</h2>
           <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
-            {fw.authors.join(", ")} · <em>{fw.seminalWork.split("(")[0].trim()}</em>
+            {fw.authors.join(", ")} · <em>{((fw.seminalWork ?? "").split("(")[0] ?? "").trim()}</em>
           </p>
         </div>
         <div className="shrink-0 mt-1">
@@ -371,7 +371,7 @@ export default function ResolutionLibrary() {
             {FRAMEWORKS.map((fw) => (
               <div key={fw.id} className="flex items-start gap-2 py-1 border-b border-[var(--color-border)]/50">
                 <div className="shrink-0 mt-1">
-                  <div className={`w-1.5 h-1.5 rounded-full ${CATEGORY_COLORS[fw.category].split(" ")[2].replace("border-", "bg-")}`} />
+                  <div className={`w-1.5 h-1.5 rounded-full ${(CATEGORY_COLORS[fw.category].split(" ")[2] ?? "").replace("border-", "bg-")}`} />
                 </div>
                 <div>
                   <p className="text-xs text-white leading-snug">{fw.seminalWork}</p>

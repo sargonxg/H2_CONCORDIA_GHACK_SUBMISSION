@@ -56,7 +56,7 @@ export default function MediatorPlaybook({
   gapNotifications,
   missingPrimitives,
 }: Props) {
-  const tips = PHASE_TIPS[phase] || PHASE_TIPS["Opening"];
+  const tips = PHASE_TIPS[phase] || PHASE_TIPS["Opening"] || [];
   const relevantFrameworks = getRelevantFrameworks({
     phase,
     missingPrimitives,

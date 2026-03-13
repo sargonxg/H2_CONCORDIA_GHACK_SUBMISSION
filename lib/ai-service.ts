@@ -1063,9 +1063,9 @@ export const chatWithAdvisor = async (
 
   if (caseContext) {
     const escalationMatch = caseContext.match(/escalation[:\s]+(\d+)/i);
-    if (escalationMatch) escalationLevel = parseInt(escalationMatch[1], 10);
+    if (escalationMatch) escalationLevel = parseInt(escalationMatch[1] ?? "0", 10);
     const phaseMatch = caseContext.match(/phase[:\s]+"?(\w+)"?/i);
-    if (phaseMatch) phase = phaseMatch[1];
+    if (phaseMatch) phase = phaseMatch[1] ?? phase;
     const allPrimitiveTypes = ["Actor", "Claim", "Interest", "Constraint", "Leverage", "Commitment", "Event", "Narrative"];
     missingPrimitives = allPrimitiveTypes.filter(
       (t) => !caseContext.includes(t),

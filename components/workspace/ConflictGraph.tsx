@@ -123,7 +123,7 @@ export default function ConflictGraph({ nodes, edges, highlightActorId }: Props)
     // Multiple arrow markers by color
     [["arrow-red", "#ef4444"], ["arrow-green", "#10b981"], ["arrow-gray", "#374151"]].forEach(([id, color]) => {
       defs.append("marker")
-        .attr("id", id)
+        .attr("id", id ?? "")
         .attr("viewBox", "0 -5 10 10")
         .attr("refX", 22)
         .attr("refY", 0)
@@ -132,7 +132,7 @@ export default function ConflictGraph({ nodes, edges, highlightActorId }: Props)
         .attr("orient", "auto")
         .append("path")
         .attr("d", "M0,-5L10,0L0,5")
-        .attr("fill", color);
+        .attr("fill", color ?? "#374151");
     });
 
     simulationRef.current?.stop();
@@ -288,7 +288,7 @@ export default function ConflictGraph({ nodes, edges, highlightActorId }: Props)
         .attr("fill", "white")
         .attr("pointer-events", "none")
         .attr("opacity", fillOpacity)
-        .text(d.type[0]);
+        .text(d.type[0] ?? "");
 
       // Label below
       g.append("text")
