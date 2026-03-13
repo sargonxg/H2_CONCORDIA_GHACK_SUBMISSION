@@ -2251,6 +2251,25 @@ function WorkspaceInner() {
       approach: "Facilitative",
       style: data.mediatorStyle,
     });
+    // Build a comprehensive context string from all intake fields for the AI
+    const contextParts: string[] = [];
+    contextParts.push(`CASE: ${data.caseTitle}`);
+    contextParts.push(`TYPE: ${data.caseType}`);
+    contextParts.push(`RELATIONSHIP: ${data.partyA.name} (${data.partyA.role || data.partyA.relationship}) ↔ ${data.partyB.name} (${data.partyB.role || data.partyB.relationship})`);
+    if (data.description) contextParts.push(`BACKGROUND: ${data.description}`);
+    if (data.partyAGoal) contextParts.push(`${data.partyA.name}'s STATED GOAL: ${data.partyAGoal}`);
+    if (data.partyBGoal) contextParts.push(`${data.partyB.name}'s STATED GOAL: ${data.partyBGoal}`);
+    if (data.partyAStatement) contextParts.push(`${data.partyA.name}'s OPENING STATEMENT: ${data.partyAStatement}`);
+    if (data.partyBStatement) contextParts.push(`${data.partyB.name}'s OPENING STATEMENT: ${data.partyBStatement}`);
+    if (data.powerBalance !== "no") {
+      contextParts.push(`POWER IMBALANCE FLAGGED: ${data.powerDetail || "possible imbalance — monitor carefully"}`);
+    }
+    if (data.documentSummaries.length > 0) {
+      contextParts.push(`DOCUMENTS SUBMITTED:\n${data.documentSummaries.map((s, i) => `  [Doc ${i + 1}] ${s}`).join("\n")}`);
+    }
+    if (data.context) contextParts.push(`ADDITIONAL CONTEXT: ${data.context}`);
+    // Store the rich context on the data object for session use
+    data.context = contextParts.join("\n");
   };
 
   if (showIntake && activeCaseId) {
@@ -2268,15 +2287,39 @@ function WorkspaceInner() {
   if (!activeCaseId) {
     return (
       <div className="flex-1 p-8 overflow-y-auto bg-[var(--color-bg)]">
-        <header className="mb-12">
-          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
-            <Shield className="w-8 h-8 text-[var(--color-accent)]" />
-            Mediation Cases
-          </h1>
-          <p className="text-[var(--color-text-muted)] mt-2 max-w-xl">
-            Each case represents a mediation session between two parties.
-            Create a new case to begin a guided conflict resolution process.
+        <header className="mb-10">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-900/30">
+              <Shield className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <div className="text-xs text-[var(--color-text-muted)] uppercase tracking-widest font-medium mb-0.5">CONCORDIA</div>
+              <h1 className="text-2xl font-bold tracking-tight text-white">AI Mediation Platform</h1>
+            </div>
+          </div>
+          <p className="text-[var(--color-text-muted)] max-w-2xl leading-relaxed">
+            Welcome. CONCORDIA guides parties through structured conflict resolution using live AI mediation —
+            extracting interests, mapping common ground, and building durable agreements.
           </p>
+          {cases.length === 0 && (
+            <div className="mt-6 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-5 max-w-xl">
+              <div className="text-sm font-semibold text-white mb-3">Getting started</div>
+              <div className="space-y-2 text-sm text-[var(--color-text-muted)]">
+                <div className="flex items-start gap-2">
+                  <span className="text-[var(--color-accent)] font-bold shrink-0">1.</span>
+                  <span>Create a new mediation case and complete the intake wizard to identify both parties and their context.</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="text-[var(--color-accent)] font-bold shrink-0">2.</span>
+                  <span>Start the live AI session — CONCORDIA will open with a structured welcome and begin discovery.</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="text-[var(--color-accent)] font-bold shrink-0">3.</span>
+                  <span>Both parties speak naturally. CONCORDIA listens, identifies patterns, and guides toward resolution.</span>
+                </div>
+              </div>
+            </div>
+          )}
         </header>
 
         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">

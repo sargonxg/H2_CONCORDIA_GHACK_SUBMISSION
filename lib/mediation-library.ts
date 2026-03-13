@@ -26,7 +26,7 @@ export interface FrameworkEntry {
   diagnosticQuestions: string[];
   bestFor: string[];
   limitations: string[];
-  glaslStages: string; // "1-3" | "4-6" | "7-9" | "all"
+  glaslStages: string | number[]; // "1-3" | "4-6" | "7-9" | "all" | [1,2,3,...]
   tacitusPrimitives: string[];
 }
 
@@ -1998,6 +1998,230 @@ export const FRAMEWORKS: FrameworkEntry[] = [
     glaslStages: "1-4",
     tacitusPrimitives: ["Interest", "Claim", "Constraint", "Commitment"],
   },
+  {
+    id: "circle-process",
+    name: "Circle Process (Pranis)",
+    shortName: "Circle Process",
+    authors: ["Kay Pranis"],
+    year: 2005,
+    seminalWork: "The Little Book of Circle Processes (2005)",
+    category: "mediation",
+    corePrinciples: [
+      "A talking piece ensures equal voice — whoever holds it speaks, everyone else listens",
+      "Shared values are named before the dispute is addressed",
+      "Collective wisdom exceeds any individual's knowledge",
+      "Storytelling is both a healing and a truth-telling mechanism",
+      "Community accountability supplements individual agreement",
+    ],
+    keyTechniques: [
+      { name: "Talking piece rounds", description: "Pass a physical or metaphorical object; only the holder speaks", whenToUse: "Opening, Discovery — ensures each party is fully heard" },
+      { name: "Values consensus", description: "Begin by naming shared values before addressing the dispute", whenToUse: "Opening — builds shared ethical ground" },
+      { name: "Check-in / check-out questions", description: "Structured open questions to enter and close the circle", whenToUse: "Opening and closing of each session" },
+      { name: "Story sharing", description: "Each party narrates their experience without interruption", whenToUse: "Discovery — surfaces narrative and emotion together" },
+    ],
+    diagnosticQuestions: [
+      "What brought you into this circle today?",
+      "What value is most important to you in how we treat each other?",
+      "What has this conflict cost you — beyond the surface issue?",
+      "What would healing look like for you?",
+    ],
+    bestFor: ["Community disputes", "Workplace team conflicts", "Restorative justice", "Multi-party disputes"],
+    limitations: ["Requires time and space for rounds", "Not suited to urgent decisions", "Difficult with extreme power imbalances"],
+    glaslStages: "1-4",
+    tacitusPrimitives: ["Actor", "Narrative", "Interest", "Commitment"],
+  },
+  {
+    id: "appreciative-inquiry",
+    name: "Appreciative Inquiry (4-D Model)",
+    shortName: "Appreciative Inquiry",
+    authors: ["David Cooperrider", "Suresh Srivastva"],
+    year: 1987,
+    seminalWork: "Appreciative Inquiry in Organizational Life (1987)",
+    category: "transformation",
+    corePrinciples: [
+      "Focus on what is working — asset framing amplifies possibilities",
+      "Positive questions generate positive data and positive change",
+      "Images of an ideal future guide present action",
+      "The act of inquiry itself is an intervention — questions are never neutral",
+      "Words and stories literally create the worlds parties inhabit",
+    ],
+    keyTechniques: [
+      { name: "Discover", description: "Identify peak experiences and what has worked well between parties", whenToUse: "Discovery — before surfacing grievances" },
+      { name: "Dream", description: "Envision the best possible future state of the relationship", whenToUse: "Exploration — after surface issues are understood" },
+      { name: "Design", description: "Co-create concrete pathways toward the envisioned future", whenToUse: "Negotiation — builds toward agreement" },
+      { name: "Destiny", description: "Commit to actions that sustain the positive future", whenToUse: "Resolution — closing and implementation" },
+    ],
+    diagnosticQuestions: [
+      "Tell me about a time when you and the other party were at your best together.",
+      "What conditions made that possible?",
+      "What would your ideal outcome look like — not just the absence of the problem?",
+      "What strengths in this relationship are worth preserving?",
+    ],
+    bestFor: ["Organizational conflicts", "Team dynamics", "Long-term relationship repair", "Change management disputes"],
+    limitations: ["Can feel forced when emotions are raw", "Doesn't directly address harm or accountability", "Not suited to pure rights-based disputes"],
+    glaslStages: "1-5",
+    tacitusPrimitives: ["Interest", "Commitment", "Narrative"],
+  },
+  {
+    id: "collaborative-law",
+    name: "Collaborative Law / Practice",
+    shortName: "Collaborative Practice",
+    authors: ["Stuart Webb"],
+    year: 1990,
+    seminalWork: "Collaborative Law: Achieving Effective Resolution in Divorce (1990)",
+    category: "negotiation",
+    corePrinciples: [
+      "Parties commit in writing to resolve without litigation — the commitment changes the dynamic",
+      "Voluntary, full disclosure of all relevant information is required",
+      "Neutral experts are shared, not adversarial",
+      "Interest-based solutions are sought jointly",
+      "If the process fails, all professionals withdraw — creating powerful incentive to succeed",
+    ],
+    keyTechniques: [
+      { name: "Four-way meetings", description: "Both parties and both advisors present simultaneously", whenToUse: "All phases — the core forum" },
+      { name: "Participation agreement", description: "Written commitment to process and non-litigation", whenToUse: "Opening — creates accountability" },
+      { name: "Neutral expert panels", description: "Shared specialists replace dueling experts", whenToUse: "Discovery and Exploration — when technical facts are disputed" },
+      { name: "Interest mapping", description: "Systematic elicitation of underlying needs from both parties", whenToUse: "Discovery" },
+    ],
+    diagnosticQuestions: [
+      "What information would each of you need to feel confident in any agreement?",
+      "What would make this process feel fair to you — not just the outcome?",
+      "Are there issues where you'd benefit from a neutral expert's view?",
+      "What would it mean to your relationship to resolve this without courts?",
+    ],
+    bestFor: ["Divorce and family disputes", "Business partnership dissolution", "Estate disputes", "Employment separations"],
+    limitations: ["Requires all parties to opt in", "Expensive if breakdown occurs", "Not suitable for abuse or coercion situations"],
+    glaslStages: "2-6",
+    tacitusPrimitives: ["Claim", "Interest", "Constraint", "Commitment"],
+  },
+  {
+    id: "dialogic-od",
+    name: "Dialogic Organization Development",
+    shortName: "Dialogic OD",
+    authors: ["Gervase Bushe", "Robert Marshak"],
+    year: 2015,
+    seminalWork: "Dialogic Organization Development (2015)",
+    category: "transformation",
+    corePrinciples: [
+      "Reality is socially constructed — changing the conversation changes the reality",
+      "Change occurs through narrative disruption, not structural fixes",
+      "Multiple perspectives are all simultaneously valid",
+      "Generative conversations create new possibilities that didn't exist before",
+      "Emergence is more powerful than planning — create conditions, don't script outcomes",
+    ],
+    keyTechniques: [
+      { name: "Narrative inquiry", description: "Explore the dominant story each party holds about the conflict", whenToUse: "Discovery — before any problem-solving" },
+      { name: "Polyphonic dialogue", description: "Create space for multiple voices without resolving them prematurely", whenToUse: "Exploration — when deadlock reflects narrative entrenchment" },
+      { name: "Alternative story generation", description: "Introduce plausible counter-narratives to disrupt fixed interpretations", whenToUse: "Exploration and Negotiation" },
+      { name: "Generative questioning", description: "Questions designed to expand possibility, not diagnose problems", whenToUse: "All phases" },
+    ],
+    diagnosticQuestions: [
+      "What story are you telling yourself about why this is happening?",
+      "What might be another way to understand this situation?",
+      "What would have to be true for the other party's perspective to make sense?",
+      "How would you want the next chapter of this situation to begin?",
+    ],
+    bestFor: ["Organizational culture conflicts", "Leadership disputes", "Change resistance", "Departmental silos"],
+    limitations: ["Abstract for parties seeking concrete solutions", "Slow — not suited to urgent disputes", "Requires skilled facilitation"],
+    glaslStages: "1-4",
+    tacitusPrimitives: ["Narrative", "Actor", "Interest"],
+  },
+  {
+    id: "riskin-grid",
+    name: "Riskin Grid (Mediator Orientations)",
+    shortName: "Riskin Grid",
+    authors: ["Leonard Riskin"],
+    year: 1996,
+    seminalWork: "Understanding Mediators' Orientations, Strategies, and Techniques (1996)",
+    category: "mediation",
+    corePrinciples: [
+      "Mediator orientation varies on two axes: facilitative–evaluative and narrow–broad",
+      "Facilitative mediators empower parties; evaluative mediators use expertise to assess outcomes",
+      "Narrow problem definition focuses on legal rights; broad scope addresses full relationship",
+      "No orientation is universally correct — context determines the appropriate blend",
+      "Transparency about orientation builds trust with parties",
+    ],
+    keyTechniques: [
+      { name: "Scope assessment", description: "Define whether to address just the immediate dispute or the broader relationship", whenToUse: "Opening — before engaging substance" },
+      { name: "Evaluative intervention", description: "Mediator offers assessment of likely outcomes or fairness", whenToUse: "Negotiation — when parties are unrealistic about alternatives" },
+      { name: "Interest expansion", description: "Broaden scope to surface relational and systemic dimensions", whenToUse: "Discovery — when narrow framing blocks progress" },
+      { name: "Reality testing", description: "Challenge unrealistic positions by reference to objective standards", whenToUse: "Negotiation" },
+    ],
+    diagnosticQuestions: [
+      "Are we trying to resolve this specific incident, or the broader relationship pattern?",
+      "What would a neutral third party say is a fair outcome here?",
+      "If this went to adjudication, what do you think the likely result would be?",
+      "Is there a relationship dimension here we haven't fully addressed?",
+    ],
+    bestFor: ["Legal disputes", "Commercial mediations", "Cases with power imbalances", "Multi-issue conflicts"],
+    limitations: ["Evaluative approach risks mediator bias", "Narrow framing may miss root causes", "Requires domain expertise for evaluative moves"],
+    glaslStages: "2-7",
+    tacitusPrimitives: ["Claim", "Constraint", "Leverage", "Interest"],
+  },
+  {
+    id: "interest-based-relational",
+    name: "Interest-Based Relational Approach",
+    shortName: "IBR Approach",
+    authors: ["Roger Fisher", "Scott Brown"],
+    year: 1988,
+    seminalWork: "Getting Together: Building Relationships as We Negotiate (1988)",
+    category: "negotiation",
+    corePrinciples: [
+      "The relationship is itself a primary interest, not just the context for negotiation",
+      "Be unconditionally constructive — behave well regardless of the other party's behavior",
+      "Separate relationship repair from substantive problem-solving — attend to both",
+      "Long-term partnership value often exceeds short-term negotiation gains",
+      "Both rational and emotional dimensions require attention",
+    ],
+    keyTechniques: [
+      { name: "Relationship BATNA", description: "Assess the cost to the relationship if no agreement is reached", whenToUse: "Opening and Negotiation" },
+      { name: "Unconditional constructiveness", description: "Commit to constructive behavior regardless of provocation", whenToUse: "All phases — especially escalation moments" },
+      { name: "Shared vision creation", description: "Build a joint picture of what the relationship could be", whenToUse: "Exploration — after interests are surfaced" },
+      { name: "Relationship maintenance planning", description: "Agree on ongoing mechanisms post-agreement", whenToUse: "Resolution" },
+    ],
+    diagnosticQuestions: [
+      "Regardless of how this dispute resolves, what kind of relationship do you want going forward?",
+      "What would it cost you beyond this issue if this relationship ended badly?",
+      "What's one thing you appreciate about the other party that's easy to forget right now?",
+      "What does a healthy version of this relationship look like?",
+    ],
+    bestFor: ["Ongoing business relationships", "Neighbor disputes", "Long-term partnerships", "Family business conflicts"],
+    limitations: ["Requires both parties to value the relationship", "Not suited to one-off transactional disputes", "Can suppress legitimate grievances"],
+    glaslStages: "1-5",
+    tacitusPrimitives: ["Interest", "Commitment", "Actor", "Narrative"],
+  },
+  {
+    id: "cross-cultural-mediation",
+    name: "Cross-Cultural Conflict Resolution",
+    shortName: "Cross-Cultural Mediation",
+    authors: ["Kevin Avruch"],
+    year: 1998,
+    seminalWork: "Culture and Conflict Resolution (1998)",
+    category: "mediation",
+    corePrinciples: [
+      "Culture profoundly shapes how conflict is perceived, expressed, and resolved",
+      "Face-saving is a near-universal concern that must be built into the process",
+      "High-context cultures communicate indirectly; low-context cultures communicate explicitly",
+      "Individualist and collectivist value systems produce different negotiation priorities",
+      "Cultural humility — curiosity without stereotyping — is more useful than assumed expertise",
+    ],
+    keyTechniques: [
+      { name: "Cultural inquiry", description: "Explore cultural frameworks without stereotyping — ask, don't assume", whenToUse: "Opening — before structuring the process" },
+      { name: "Face-saving protocols", description: "Design process to allow concessions without public loss of status", whenToUse: "Negotiation and Resolution" },
+      { name: "Indirect communication pathway", description: "Use shuttle diplomacy when direct confrontation is culturally uncomfortable", whenToUse: "When direct dialogue creates face-threat" },
+      { name: "Collective framing", description: "Reframe individual demands as serving collective interests", whenToUse: "Exploration and Negotiation with collectivist-oriented parties" },
+    ],
+    diagnosticQuestions: [
+      "How would you ideally like this resolved — in terms of process, not just outcome?",
+      "Is there anything about how we're conducting this conversation that doesn't feel right to you?",
+      "What would it mean within your community if this resolved well?",
+      "Are there any topics or approaches you'd prefer we handle differently?",
+    ],
+    bestFor: ["International commercial disputes", "Immigration and asylum conflicts", "Multi-ethnic workplace disputes", "Diplomatic mediations"],
+    limitations: ["Risk of stereotyping if cultural assumptions aren't checked", "Requires cultural broker, not just linguistic translator", "Process itself may be culturally inappropriate"],
+    glaslStages: "1-6",
+    tacitusPrimitives: ["Actor", "Narrative", "Constraint", "Interest"],
+  },
 ];
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -2013,7 +2237,11 @@ const PHASE_FRAMEWORK_AFFINITY: Record<string, string[]> = {
   Agreement: ["batna-protocol", "deutsch", "lederach", "curle"],
 };
 
-function parseGlaslRange(range: string): { min: number; max: number } {
+function parseGlaslRange(range: string | number[]): { min: number; max: number } {
+  if (Array.isArray(range)) {
+    if (range.length === 0) return { min: 1, max: 9 };
+    return { min: Math.min(...range), max: Math.max(...range) };
+  }
   if (range === "all") return { min: 1, max: 9 };
   const parts = range.split("-").map(Number);
   if (parts.length === 1) return { min: parts[0], max: parts[0] };
