@@ -47,6 +47,7 @@ import {
   analyzePathways,
   summarizeCase,
   generateAgreementDoc,
+  analyzeCommonGround,
 } from "@/services/gemini-client";
 import type { Actor, Primitive, PrimitiveType, Case, LiveMediationState, OntologyStats, PartyProfile, GapNotification, CaseSummary, TimelineEntry, PrimitiveCluster, Agreement, EscalationFlag, SolutionProposal, PowerDynamics, ImpasseEvent, IntakeData, EmotionSnapshot } from "@/lib/types";
 import { safeJsonParse } from "@/lib/utils";
@@ -425,6 +426,7 @@ function WorkspaceInner() {
   const [caucusMode, setCaucusMode] = useState<'joint' | 'partyA' | 'partyB'>('joint');
   const [powerDynamics, setPowerDynamics] = useState<PowerDynamics | null>(null);
   const [impasseEvents, setImpasseEvents] = useState<ImpasseEvent[]>([]);
+  const [zopaHints, setZopaHints] = useState<string[]>([]);
   const [impaseBanner, setImpaseBanner] = useState<ImpasseEvent | null>(null);
   const [showBlindBidding, setShowBlindBidding] = useState(false);
   const [mobilePanel, setMobilePanel] = useState<"left" | "center" | "right">("center");
@@ -492,6 +494,7 @@ function WorkspaceInner() {
   liveMediationStateRef.current = liveMediationState;
   const lastContextInjectionRef = useRef<number>(0);
   const MIN_INJECTION_INTERVAL = 60000; // inject at most once per minute
+  const lastCgRunRef = useRef<number>(0); // debounce common ground background analysis
 
   useEffect(() => {
     const saved = localStorage.getItem("concordia_cases");
@@ -1860,6 +1863,8 @@ function WorkspaceInner() {
 
       setStatus("IDLE");
       setActiveTab("pathways");
+      // Run parallel background common ground analysis (non-blocking)
+      runBackgroundCommonGround();
     } catch (err) {
       console.error("Extraction error:", err);
       setStatus("ERROR");
@@ -1954,6 +1959,8 @@ function WorkspaceInner() {
       setTimeout(() => setExtractionNotice(false), 3000);
       // Feed extracted structure back into the live session
       setTimeout(() => maybeInjectContext(), 500);
+      // Run parallel background common ground analysis (non-blocking)
+      runBackgroundCommonGround();
     } catch (err) {
       console.error("Incremental extraction error:", err);
       setExtractionNotice(false);
@@ -2034,6 +2041,70 @@ function WorkspaceInner() {
     );
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [liveMediationState?.phase]);
+
+  // ── Background Common Ground Analysis ──────────────────────────────────────
+  // Runs in parallel after each extraction cycle, non-blocking.
+  // Debounced to at most once every 30 seconds.
+  const runBackgroundCommonGround = useCallback(async () => {
+    const currentCase = casesRef.current.find((c) => c.id === activeCaseIdRef.current);
+    if (!currentCase || currentCase.transcript.length < 200) return;
+    const now = Date.now();
+    if (now - lastCgRunRef.current < 30000) return; // 30s debounce
+    lastCgRunRef.current = now;
+    try {
+      const result = await analyzeCommonGround({
+        transcript: currentCase.transcript,
+        primitives: currentCase.primitives.map((p) => ({
+          type: p.type,
+          actorId: p.actorId,
+          description: p.description,
+        })),
+        actors: currentCase.actors.map((a) => ({ id: a.id, name: a.name })),
+      });
+      if (result.commonGround.length > 0 || result.tensionPoints.length > 0) {
+        setLiveMediationState((prev) =>
+          prev
+            ? {
+                ...prev,
+                commonGround: [
+                  ...new Set([...(prev.commonGround || []), ...result.commonGround]),
+                ],
+                tensionPoints: [
+                  ...new Set([...(prev.tensionPoints || []), ...result.tensionPoints]),
+                ],
+              }
+            : prev,
+        );
+        // Inject background findings into live session so AI is aware
+        if (sessionRef.current && isRecording) {
+          const cgUpdate =
+            result.commonGround.length > 0
+              ? `[BACKGROUND ANALYSIS] New common ground detected:\n${result.commonGround.map((g) => `  ✓ ${g}`).join("\n")}`
+              : "";
+          const zopaUpdate =
+            result.zopaHints.length > 0
+              ? `\nZOPA hints:\n${result.zopaHints.map((z) => `  → ${z}`).join("\n")}`
+              : "";
+          if (cgUpdate || zopaUpdate) {
+            try {
+              sessionRef.current.sendContext(
+                `${cgUpdate}${zopaUpdate}\n[END BACKGROUND ANALYSIS]`,
+              );
+            } catch (e) {
+              console.warn("[CG] Failed to inject common ground context:", e);
+            }
+          }
+        }
+      }
+      // Always update ZOPA hints if present
+      if (result.zopaHints.length > 0) {
+        setZopaHints((prev) => [...new Set([...prev, ...result.zopaHints])]);
+      }
+    } catch (err) {
+      console.warn("[CommonGround] Background analysis failed:", err);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRecording]);
 
   const autoGroupPrimitives = () => {
     if (!activeCase) return;
@@ -3136,6 +3207,40 @@ function WorkspaceInner() {
                     partyAName={activeCase.partyAName || "Party A"}
                     partyBName={activeCase.partyBName || "Party B"}
                   />
+                </motion.div>
+              )}
+
+              {/* ZOPA Hints from background analysis — always visible when data exists */}
+              {zopaHints.length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="shrink-0 bg-amber-500/5 border border-amber-500/25 rounded-xl p-4"
+                >
+                  <h3 className="text-xs font-bold text-amber-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                    <Zap className="w-3.5 h-3.5" />
+                    Background ZOPA Hints
+                    <span className="ml-auto text-[10px] font-normal text-amber-500/70 normal-case tracking-normal">
+                      Detected automatically · {zopaHints.length} hint{zopaHints.length !== 1 ? "s" : ""}
+                    </span>
+                  </h3>
+                  <div className="space-y-2">
+                    {zopaHints.map((hint, i) => (
+                      <div
+                        key={i}
+                        className="flex items-start gap-2.5 bg-amber-500/5 border border-amber-500/15 rounded-lg p-3"
+                      >
+                        <span className="text-amber-400 font-bold shrink-0 mt-0.5">→</span>
+                        <p className="text-sm text-amber-100/90 leading-relaxed">{hint}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => setZopaHints([])}
+                    className="mt-3 text-[10px] text-amber-600 hover:text-amber-400 transition-colors"
+                  >
+                    Dismiss hints
+                  </button>
                 </motion.div>
               )}
 

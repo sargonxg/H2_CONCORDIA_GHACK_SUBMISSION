@@ -340,3 +340,13 @@ export const processDocument = async (file: File): Promise<string> => {
 export const generateAgreementDoc = async (data: any): Promise<any> => {
   return (await apiPost('/api/generate-agreement', data)).agreement;
 };
+
+// ── Background Common Ground Analysis ──
+
+export const analyzeCommonGround = async (data: {
+  transcript: string;
+  primitives: any[];
+  actors: any[];
+}): Promise<{ commonGround: string[]; tensionPoints: string[]; zopaHints: string[] }> => {
+  return apiPost("/api/common-ground", data);
+};
