@@ -48,7 +48,7 @@ import {
   summarizeCase,
   generateAgreementDoc,
 } from "@/services/gemini-client";
-import type { Actor, Primitive, PrimitiveType, Case, LiveMediationState, OntologyStats, PartyProfile, GapNotification, CaseSummary, TimelineEntry, PrimitiveCluster, Agreement, EscalationFlag, SolutionProposal, PowerDynamics, ImpasseEvent, IntakeData } from "@/lib/types";
+import type { Actor, Primitive, PrimitiveType, Case, LiveMediationState, OntologyStats, PartyProfile, GapNotification, CaseSummary, TimelineEntry, PrimitiveCluster, Agreement, EscalationFlag, SolutionProposal, PowerDynamics, ImpasseEvent, IntakeData, EmotionSnapshot } from "@/lib/types";
 import { safeJsonParse } from "@/lib/utils";
 import { exportAsMarkdown, exportAsJSON, downloadFile, generateAgreementHTML } from "@/lib/export";
 import IntakeWizard from "@/components/workspace/IntakeWizard";
@@ -66,6 +66,7 @@ import MediatorPlaybook from "@/components/workspace/MediatorPlaybook";
 import KeyboardShortcutsHelp from "@/components/workspace/KeyboardShortcutsHelp";
 import PowerMap from "@/components/workspace/PowerMap";
 import BlindBidding from "@/components/workspace/BlindBidding";
+import EmotionTimeline from "@/components/workspace/EmotionTimeline";
 
 const PRIMITIVE_TYPES: PrimitiveType[] = [
   "Actor",
@@ -882,6 +883,42 @@ function WorkspaceInner() {
                       commonGround: args.commonGround || [],
                       tensionPoints: args.tensionPoints || [],
                     });
+                    // Capture emotion timeline snapshot when both party profiles are present
+                    if (args.partyProfiles?.partyA && args.partyProfiles?.partyB) {
+                      const elapsed = Math.floor(
+                        (Date.now() - sessionStartTimeRef.current) / 1000,
+                      );
+                      const snapshot: EmotionSnapshot = {
+                        timestamp: new Date().toISOString(),
+                        elapsedSeconds: elapsed,
+                        partyA: {
+                          emotionalState: args.partyProfiles.partyA.emotionalState || '',
+                          emotionalIntensity: args.partyProfiles.partyA.emotionalIntensity ?? 5,
+                          emotionalTrajectory: args.partyProfiles.partyA.emotionalTrajectory || 'stable',
+                          conflictStyle: args.partyProfiles.partyA.conflictStyle || '',
+                          cooperativeness: args.partyProfiles.partyA.cooperativeness ?? 50,
+                          defensiveness: args.partyProfiles.partyA.defensiveness ?? 50,
+                        },
+                        partyB: {
+                          emotionalState: args.partyProfiles.partyB.emotionalState || '',
+                          emotionalIntensity: args.partyProfiles.partyB.emotionalIntensity ?? 5,
+                          emotionalTrajectory: args.partyProfiles.partyB.emotionalTrajectory || 'stable',
+                          conflictStyle: args.partyProfiles.partyB.conflictStyle || '',
+                          cooperativeness: args.partyProfiles.partyB.cooperativeness ?? 50,
+                          defensiveness: args.partyProfiles.partyB.defensiveness ?? 50,
+                        },
+                        phase: args.phase || '',
+                        escalationScore: escalationScore,
+                      };
+                      updateActiveCase({
+                        emotionTimeline: [
+                          ...(casesRef.current.find(
+                            (c) => c.id === activeCaseIdRef.current,
+                          )?.emotionTimeline || []),
+                          snapshot,
+                        ],
+                      });
+                    }
                     // On phase transition, immediately inject full context so the
                     // model enters the new phase with an up-to-date structural view
                     if (phaseChanged) {
@@ -2632,6 +2669,16 @@ function WorkspaceInner() {
                   liveMediationState?.partyProfiles?.partyB?.riskAssessment?.escalation ?? 0,
                 )}
               />
+              {/* ── Emotion Timeline (compact, live) ── */}
+              {activeCase?.emotionTimeline && activeCase.emotionTimeline.length > 0 && (
+                <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-3">
+                  <EmotionTimeline
+                    timeline={activeCase.emotionTimeline}
+                    partyAName={activeCase.partyAName || "Party A"}
+                    partyBName={activeCase.partyBName || "Party B"}
+                  />
+                </div>
+              )}
             </>
           ) : (
             <>
@@ -3076,6 +3123,21 @@ function WorkspaceInner() {
                   {selectedFramework ? "Re-analyze" : "Analyze"}
                 </button>
               </div>
+
+              {/* Emotion Timeline — always visible when data exists */}
+              {activeCase?.emotionTimeline && activeCase.emotionTimeline.length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="shrink-0 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-4"
+                >
+                  <EmotionTimeline
+                    timeline={activeCase.emotionTimeline}
+                    partyAName={activeCase.partyAName || "Party A"}
+                    partyBName={activeCase.partyBName || "Party B"}
+                  />
+                </motion.div>
+              )}
 
               {/* Content */}
               <div className="flex-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-4 overflow-y-auto">

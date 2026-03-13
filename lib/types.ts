@@ -212,6 +212,29 @@ export type TimelineEntry = {
   phase: string;
 };
 
+export type EmotionSnapshot = {
+  timestamp: string;          // ISO datetime
+  elapsedSeconds: number;     // seconds since session start
+  partyA: {
+    emotionalState: string;
+    emotionalIntensity: number;    // Plutchik 1-10
+    emotionalTrajectory: string;   // escalating|stable|de-escalating
+    conflictStyle: string;
+    cooperativeness: number;
+    defensiveness: number;
+  };
+  partyB: {
+    emotionalState: string;
+    emotionalIntensity: number;
+    emotionalTrajectory: string;
+    conflictStyle: string;
+    cooperativeness: number;
+    defensiveness: number;
+  };
+  phase: string;
+  escalationScore: number;
+};
+
 export type Case = {
   id: string;
   title: string;
@@ -224,6 +247,7 @@ export type Case = {
   profilingEnabled?: boolean; // default true when undefined
   clusters?: PrimitiveCluster[];
   timeline?: TimelineEntry[];
+  emotionTimeline?: EmotionSnapshot[];
 };
 
 // ── Pathway Analysis Result Types ──
