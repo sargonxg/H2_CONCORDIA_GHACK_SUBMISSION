@@ -8,6 +8,7 @@ import {
   RotateCcw,
   ChevronLeft,
   ChevronDown,
+  ChevronRight,
   Zap,
   Shield,
   Heart,
@@ -19,6 +20,7 @@ import {
   Clock,
   TrendingUp,
   TrendingDown,
+  Brain,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -96,14 +98,14 @@ const PHASE_TEXT_COLORS: Record<string, string> = {
 
 const CONFLICT_STYLE_COLORS: Record<string, string> = {
   Competing: "bg-red-900 text-red-300 border border-red-700",
-  Avoiding: "bg-gray-800 text-gray-300 border border-gray-600",
+  Avoiding: "bg-[#111827] text-[#94a3b8] border border-[#1e293b]",
   Collaborating: "bg-green-900 text-green-300 border border-green-700",
   Accommodating: "bg-blue-900 text-blue-300 border border-blue-700",
   Compromising: "bg-yellow-900 text-yellow-300 border border-yellow-700",
 };
 
 const EMOTIONAL_STATE_COLORS: Record<string, string> = {
-  Guarded: "text-gray-400",
+  Guarded: "text-[#64748b]",
   Anxious: "text-yellow-400",
   Frustrated: "text-red-400",
   Defensive: "text-orange-400",
@@ -505,23 +507,33 @@ function getEscalationLabel(score: number): string {
   return "Low";
 }
 
+// Extract framework tag from annotation (text inside [...])
+function extractFrameworkTag(annotation: string): string {
+  const match = annotation.match(/\[([^\]]+)\]/);
+  return match?.[1] ?? "";
+}
+
+function extractTechniqueDescription(annotation: string): string {
+  return (annotation.replace(/^\[([^\]]+)\]\s*/, "").split(".")[0]) ?? annotation;
+}
+
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function AnimatedBar({ value, color, label }: { value: number; color: string; label: string }) {
   return (
     <div className="space-y-1">
-      <div className="flex justify-between text-xs text-gray-400">
+      <div className="flex justify-between text-xs text-[#64748b]">
         <span>{label}</span>
         <motion.span
           key={value}
           initial={{ scale: 1.3, color: "#fff" }}
-          animate={{ scale: 1, color: "#9ca3af" }}
+          animate={{ scale: 1, color: "#64748b" }}
           transition={{ duration: 0.4 }}
         >
           {value}%
         </motion.span>
       </div>
-      <div className="h-1.5 rounded-full bg-gray-700 overflow-hidden">
+      <div className="h-1.5 rounded-full bg-[#1e293b] overflow-hidden">
         <motion.div
           className={`h-full rounded-full ${color}`}
           initial={false}
@@ -533,13 +545,14 @@ function AnimatedBar({ value, color, label }: { value: number; color: string; la
   );
 }
 
-function PartyCard({ name, profile, side }: { name: string; profile: PartyProfile; side: "sarah" | "michael" }) {
-  const avatarColor = side === "sarah" ? "from-violet-600 to-purple-700" : "from-blue-600 to-cyan-700";
-  const initials = side === "sarah" ? "SC" : "MT";
-  const role = side === "sarah" ? "Team Lead" : "Senior Dev";
+function PartyCard({ name, profile, side }: { name: string; profile: PartyProfile; side: "A" | "B" }) {
+  const avatarColor = side === "A" ? "from-sky-500 to-sky-700" : "from-violet-600 to-violet-800";
+  const initials = side === "A" ? "SC" : "MT";
+  const role = side === "A" ? "Team Lead" : "Senior Dev";
+  const borderAccent = side === "A" ? "border-l-4 border-l-sky-500" : "border-l-4 border-l-violet-500";
 
   return (
-    <div className="bg-gray-800 border border-gray-700 rounded-xl p-4 space-y-3">
+    <div className={`bg-[#0d1120] border border-[#1e293b] ${borderAccent} rounded-xl p-4 space-y-3`}>
       {/* Header */}
       <div className="flex items-center gap-3">
         <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${avatarColor} flex items-center justify-center text-white text-xs font-bold shrink-0`}>
@@ -547,18 +560,18 @@ function PartyCard({ name, profile, side }: { name: string; profile: PartyProfil
         </div>
         <div>
           <div className="text-white text-sm font-semibold">{name}</div>
-          <div className="text-gray-400 text-xs">{role}</div>
+          <div className="text-[#64748b] text-xs">{role}</div>
         </div>
       </div>
 
       {/* Emotional state */}
       <div className="flex items-center justify-between">
-        <span className="text-xs text-gray-400">State</span>
+        <span className="text-xs text-[#64748b]">State</span>
         <motion.span
           key={profile.emotionalState}
           initial={{ opacity: 0, x: 8 }}
           animate={{ opacity: 1, x: 0 }}
-          className={`text-xs font-medium ${EMOTIONAL_STATE_COLORS[profile.emotionalState] ?? "text-gray-300"}`}
+          className={`text-xs font-medium ${EMOTIONAL_STATE_COLORS[profile.emotionalState] ?? "text-[#94a3b8]"}`}
         >
           {profile.emotionalState}
         </motion.span>
@@ -566,12 +579,12 @@ function PartyCard({ name, profile, side }: { name: string; profile: PartyProfil
 
       {/* Conflict style */}
       <div className="flex items-center justify-between">
-        <span className="text-xs text-gray-400">Style</span>
+        <span className="text-xs text-[#64748b]">Style</span>
         <motion.span
           key={profile.conflictStyle}
           initial={{ opacity: 0, scale: 0.8 }}
           animate={{ opacity: 1, scale: 1 }}
-          className={`text-xs px-2 py-0.5 rounded-full font-medium ${CONFLICT_STYLE_COLORS[profile.conflictStyle] ?? "bg-gray-700 text-gray-300"}`}
+          className={`text-xs px-2 py-0.5 rounded-full font-medium ${CONFLICT_STYLE_COLORS[profile.conflictStyle] ?? "bg-[#111827] text-[#94a3b8]"}`}
         >
           {profile.conflictStyle}
         </motion.span>
@@ -583,18 +596,18 @@ function PartyCard({ name, profile, side }: { name: string; profile: PartyProfil
 
       {/* Escalation mini */}
       <div className="space-y-1">
-        <div className="flex justify-between text-xs text-gray-400">
+        <div className="flex justify-between text-xs text-[#64748b]">
           <span>Escalation</span>
           <motion.span
             key={profile.escalation}
             initial={{ scale: 1.4, color: "#ef4444" }}
-            animate={{ scale: 1, color: "#9ca3af" }}
+            animate={{ scale: 1, color: "#64748b" }}
             transition={{ duration: 0.5 }}
           >
             {profile.escalation}
           </motion.span>
         </div>
-        <div className="h-2 rounded-full bg-gray-700 overflow-hidden">
+        <div className="h-2 rounded-full bg-[#1e293b] overflow-hidden">
           <motion.div
             className={`h-full rounded-full ${getEscalationColor(profile.escalation)}`}
             initial={false}
@@ -606,12 +619,12 @@ function PartyCard({ name, profile, side }: { name: string; profile: PartyProfil
 
       {/* Trust scores */}
       {profile.trust && (
-        <div className="pt-1 border-t border-gray-700 space-y-1">
-          <div className="text-xs text-gray-500 mb-1">Trust</div>
+        <div className="pt-1 border-t border-[#1e293b] space-y-1">
+          <div className="text-xs text-[#475569] mb-1">Trust</div>
           {(["ability", "benevolence", "integrity"] as const).map((k) => (
             <div key={k} className="flex items-center gap-2">
-              <span className="text-xs text-gray-500 w-16 capitalize">{k}</span>
-              <div className="flex-1 h-1 bg-gray-700 rounded-full overflow-hidden">
+              <span className="text-xs text-[#475569] w-16 capitalize">{k}</span>
+              <div className="flex-1 h-1 bg-[#1e293b] rounded-full overflow-hidden">
                 <motion.div
                   className="h-full bg-indigo-500 rounded-full"
                   initial={false}
@@ -623,7 +636,7 @@ function PartyCard({ name, profile, side }: { name: string; profile: PartyProfil
                 key={profile.trust[k]}
                 initial={{ scale: 1.2 }}
                 animate={{ scale: 1 }}
-                className="text-xs text-gray-400 w-6 text-right"
+                className="text-xs text-[#64748b] w-6 text-right"
               >
                 {profile.trust[k]}
               </motion.span>
@@ -653,8 +666,8 @@ function PrimitiveGrid({ counts }: { counts: PrimitiveCounts }) {
       {types.map((type) => (
         <motion.div
           key={type}
-          className="bg-gray-800 border border-gray-700 rounded-lg p-2 flex flex-col items-center gap-1"
-          animate={counts[type] > 0 ? { borderColor: "#6366f1" } : { borderColor: "#374151" }}
+          className="bg-[#111827] rounded-lg p-2 flex flex-col items-center gap-1 border"
+          animate={counts[type] > 0 ? { borderColor: "rgba(99,102,241,0.5)" } : { borderColor: "#1e293b" }}
           transition={{ duration: 0.3 }}
         >
           <div className="text-indigo-400">{PRIMITIVE_ICONS[type]}</div>
@@ -667,7 +680,7 @@ function PrimitiveGrid({ counts }: { counts: PrimitiveCounts }) {
           >
             {counts[type]}
           </motion.span>
-          <span className="text-xs text-gray-500 text-center leading-tight">{type}</span>
+          <span className="text-xs text-[#475569] text-center leading-tight">{type}</span>
         </motion.div>
       ))}
     </div>
@@ -683,6 +696,7 @@ export default function DemoPage() {
   const [displayedText, setDisplayedText] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [skipToPhase, setSkipToPhase] = useState("");
+  const [showCallout, setShowCallout] = useState(false);
 
   const transcriptRef = useRef<HTMLDivElement>(null);
   const typingRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -735,6 +749,13 @@ export default function DemoPage() {
       if (typingRef.current) clearTimeout(typingRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStep]);
+
+  // Show floating callout for 4s on each step change
+  useEffect(() => {
+    setShowCallout(true);
+    const timer = setTimeout(() => setShowCallout(false), 4000);
+    return () => clearTimeout(timer);
   }, [currentStep]);
 
   // Auto-scroll transcript
@@ -807,10 +828,9 @@ export default function DemoPage() {
   }
 
   function handleSkipToPhase(phase: string) {
-    const idx = STEPS.findLastIndex ? STEPS.findLastIndex((s) => s.phase === phase) : [...STEPS].reverse().findIndex((s) => s.phase === phase);
-    const resolvedIdx = STEPS.findIndex((s) => s.phase === phase);
-    if (resolvedIdx !== -1) {
-      goToStep(resolvedIdx);
+    const idx = STEPS.findIndex((s) => s.phase === phase);
+    if (idx !== -1) {
+      goToStep(idx);
       setSkipToPhase("");
     }
   }
@@ -821,15 +841,18 @@ export default function DemoPage() {
   // Get speaker style for transcript line
   function getSpeakerStyle(text: string) {
     if (text.startsWith("[CONCORDIA]")) return { color: "text-indigo-300", bg: "bg-indigo-950 border-indigo-800" };
-    if (text.startsWith("[Sarah]")) return { color: "text-violet-300", bg: "bg-violet-950 border-violet-800" };
-    if (text.startsWith("[Michael]")) return { color: "text-blue-300", bg: "bg-blue-950 border-blue-800" };
-    return { color: "text-gray-300", bg: "bg-gray-800 border-gray-700" };
+    if (text.startsWith("[Sarah]")) return { color: "text-sky-300", bg: "bg-sky-950 border-sky-800" };
+    if (text.startsWith("[Michael]")) return { color: "text-violet-300", bg: "bg-violet-950 border-violet-800" };
+    return { color: "text-[#94a3b8]", bg: "bg-[#111827] border-[#1e293b]" };
   }
 
+  const frameworkTag = extractFrameworkTag(step.annotation);
+  const techniqueDesc = extractTechniqueDescription(step.annotation);
+
   return (
-    <div className="min-h-screen bg-gray-950 text-white flex flex-col">
+    <div className="min-h-screen bg-[#0a0e1a] text-white flex flex-col">
       {/* ── Top Bar ── */}
-      <header className="border-b border-gray-800 bg-gray-900/80 backdrop-blur-sm sticky top-0 z-50">
+      <header className="border-b border-[#1a2236] bg-[#0d1120]/90 backdrop-blur-sm sticky top-0 z-50">
         <div className="flex items-center gap-4 px-6 py-3">
           {/* Logo */}
           <div className="flex items-center gap-2 shrink-0">
@@ -843,11 +866,20 @@ export default function DemoPage() {
             <span className="text-xs bg-indigo-900 text-indigo-300 border border-indigo-700 px-2 py-0.5 rounded-full font-medium">
               Interactive Demo
             </span>
-            <span className="text-xs text-gray-500">Workplace Mediation — Sarah vs Michael</span>
+            {/* LIVE DEMO pulsing indicator */}
+            <span className="flex items-center gap-1.5 text-xs text-emerald-400 font-medium">
+              <motion.span
+                animate={{ opacity: [1, 0.3, 1] }}
+                transition={{ duration: 1.4, repeat: Infinity }}
+                className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block"
+              />
+              LIVE DEMO
+            </span>
+            <span className="text-xs text-[#475569]">Workplace Mediation — Sarah vs Michael</span>
           </div>
 
           <div className="flex-1 mx-4">
-            <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
+            <div className="h-1.5 bg-[#111827] rounded-full overflow-hidden">
               <motion.div
                 className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full"
                 initial={false}
@@ -857,21 +889,33 @@ export default function DemoPage() {
             </div>
           </div>
 
-          <Link
-            href="/"
-            className="flex items-center gap-1 text-xs text-gray-400 hover:text-white transition-colors shrink-0"
-          >
-            <ChevronLeft className="w-3 h-3" />
-            Back to Home
-          </Link>
+          <div className="flex items-center gap-3 shrink-0">
+            <Link
+              href="/workspace"
+              className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1.5 rounded-lg font-medium flex items-center gap-1.5 transition-colors"
+            >
+              Start Live Session
+              <ChevronRight className="w-3 h-3" />
+            </Link>
+            <Link
+              href="/"
+              className="flex items-center gap-1 text-xs text-[#64748b] hover:text-white transition-colors"
+            >
+              <ChevronLeft className="w-3 h-3" />
+              Back
+            </Link>
+          </div>
         </div>
       </header>
 
       {/* ── Main 3-col layout ── */}
       <div className="flex-1 flex gap-4 p-4 min-h-0">
         {/* ── LEFT: Annotation ── */}
-        <div className="w-60 shrink-0 space-y-3">
-          <div className="text-xs text-gray-500 uppercase tracking-widest font-medium">AI Annotation</div>
+        <div className="w-64 shrink-0 space-y-3">
+          <div className="text-xs text-[#475569] uppercase tracking-widest font-medium flex items-center gap-2">
+            <Brain className={`w-3.5 h-3.5 text-indigo-400 ${isTyping ? "animate-spin" : ""}`} />
+            AI Annotation
+          </div>
 
           <AnimatePresence mode="wait">
             <motion.div
@@ -880,24 +924,31 @@ export default function DemoPage() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -12 }}
               transition={{ duration: 0.35 }}
-              className="bg-gray-800 border border-gray-700 rounded-xl p-4 space-y-3"
+              className={`bg-[#111827] rounded-xl p-4 space-y-3 border ${
+                step.escalationAlert
+                  ? "border-red-500/40"
+                  : step.deEscalation
+                  ? "border-emerald-500/40"
+                  : "border-[#1e293b]"
+              }`}
             >
               {/* Phase badge */}
-              <div className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full font-medium ${PHASE_COLORS[step.phase] ?? "bg-gray-700"} bg-opacity-20 ${PHASE_TEXT_COLORS[step.phase] ?? "text-gray-300"}`}
+              <div
+                className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full font-medium ${PHASE_COLORS[step.phase] ?? "bg-[#111827]"} bg-opacity-20 ${PHASE_TEXT_COLORS[step.phase] ?? "text-[#94a3b8]"}`}
                 style={{ backgroundColor: undefined }}
               >
-                <span className={`w-1.5 h-1.5 rounded-full ${PHASE_COLORS[step.phase] ?? "bg-gray-500"}`} />
+                <span className={`w-1.5 h-1.5 rounded-full ${PHASE_COLORS[step.phase] ?? "bg-[#475569]"}`} />
                 {step.phase}
               </div>
 
               {/* Target */}
-              <div className="flex items-center gap-2 text-xs text-gray-400">
+              <div className="flex items-center gap-2 text-xs text-[#64748b]">
                 <Users className="w-3 h-3" />
                 <span>Target: {step.targetActor}</span>
               </div>
 
               {/* Annotation text */}
-              <p className="text-xs text-gray-300 leading-relaxed">{step.annotation}</p>
+              <p className="text-xs text-[#94a3b8] leading-relaxed">{step.annotation}</p>
 
               {/* Alert banners */}
               {step.escalationAlert && (
@@ -912,14 +963,38 @@ export default function DemoPage() {
                   <span className="text-xs text-green-300">De-escalation Protocol Engaged</span>
                 </div>
               )}
+
+              {/* What's happening breakdown */}
+              <div className="pt-2 border-t border-[#1e293b] space-y-2">
+                <div className="text-xs text-[#475569] font-medium uppercase tracking-wider">What&apos;s happening</div>
+                {frameworkTag && (
+                  <div className="flex items-start gap-2">
+                    <span className="text-[10px] text-indigo-300 bg-indigo-950 border border-indigo-800 px-1.5 py-0.5 rounded font-mono shrink-0 mt-0.5">
+                      {frameworkTag}
+                    </span>
+                  </div>
+                )}
+                <div>
+                  <div className="text-[10px] text-[#475569] uppercase tracking-wider mb-0.5">Technique</div>
+                  <p className="text-xs text-[#94a3b8] leading-snug">{techniqueDesc}</p>
+                </div>
+                <div>
+                  <div className="text-[10px] text-[#475569] uppercase tracking-wider mb-0.5">Next move</div>
+                  <p className="text-xs text-[#64748b] leading-snug">
+                    {currentStep < STEPS.length - 1
+                      ? `Step ${currentStep + 2}: ${STEPS[currentStep + 1]?.targetActor ?? ""} responds`
+                      : "Agreement — session complete"}
+                  </p>
+                </div>
+              </div>
             </motion.div>
           </AnimatePresence>
 
           {/* Framework legend */}
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-3 space-y-2">
-            <div className="text-xs text-gray-500 font-medium">Frameworks Active</div>
+          <div className="bg-[#0d1120] border border-[#1a2236] rounded-xl p-3 space-y-2">
+            <div className="text-xs text-[#475569] font-medium">Frameworks Active</div>
             {["Fisher & Ury", "Glasl Escalation", "Lederach Transform.", "Bush & Folger"].map((fw) => (
-              <div key={fw} className="flex items-center gap-2 text-xs text-gray-400">
+              <div key={fw} className="flex items-center gap-2 text-xs text-[#64748b]">
                 <div className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
                 {fw}
               </div>
@@ -942,8 +1017,8 @@ export default function DemoPage() {
                     isActive
                       ? `${PHASE_COLORS[phase] ?? "bg-indigo-500"} text-white border-transparent`
                       : isPast
-                      ? "bg-gray-800 text-gray-400 border-gray-700"
-                      : "bg-gray-900 text-gray-600 border-gray-800"
+                      ? "bg-[#111827] text-[#64748b] border-[#1e293b]"
+                      : "bg-[#0d1120] text-[#475569] border-[#1a2236]"
                   }`}
                 >
                   {phase}
@@ -954,14 +1029,14 @@ export default function DemoPage() {
 
           {/* Party cards */}
           <div className="grid grid-cols-2 gap-3">
-            <PartyCard name="Sarah Chen" profile={sarah} side="sarah" />
-            <PartyCard name="Michael Torres" profile={michael} side="michael" />
+            <PartyCard name="Sarah Chen" profile={sarah} side="A" />
+            <PartyCard name="Michael Torres" profile={michael} side="B" />
           </div>
 
           {/* Transcript panel */}
-          <div className="flex-1 bg-gray-900 border border-gray-800 rounded-xl flex flex-col min-h-0" style={{ minHeight: 200 }}>
-            <div className="px-4 py-2 border-b border-gray-800 flex items-center justify-between">
-              <span className="text-xs text-gray-400 font-medium">Transcript</span>
+          <div className="flex-1 bg-[#0d1120] border border-[#1a2236] rounded-xl flex flex-col min-h-0" style={{ minHeight: 200 }}>
+            <div className="px-4 py-2 border-b border-[#1a2236] flex items-center justify-between">
+              <span className="text-xs text-[#64748b] font-medium">Transcript</span>
               {isTyping && (
                 <motion.div
                   animate={{ opacity: [0.4, 1, 0.4] }}
@@ -1006,18 +1081,54 @@ export default function DemoPage() {
 
           {/* Primitive grid */}
           <div>
-            <div className="text-xs text-gray-500 mb-2 uppercase tracking-widest font-medium">Extracted Primitives</div>
+            <div className="text-xs text-[#475569] mb-2 uppercase tracking-widest font-medium">Extracted Primitives</div>
             <PrimitiveGrid counts={primitiveCounts} />
           </div>
+
+          {/* CTA panel at end of demo */}
+          <AnimatePresence>
+            {currentStep === STEPS.length - 1 && (
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 16 }}
+                transition={{ duration: 0.5, delay: 0.3 }}
+                className="bg-gradient-to-br from-indigo-950/60 to-purple-950/60 border border-indigo-500/30 rounded-xl p-5 space-y-3"
+              >
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="w-5 h-5 text-emerald-400" />
+                  <h3 className="text-white font-semibold text-sm">That&apos;s CONCORDIA in action.</h3>
+                </div>
+                <p className="text-[#94a3b8] text-xs leading-relaxed">
+                  Ready to mediate a real dispute? Start a live session or explore the library of mediation frameworks.
+                </p>
+                <div className="flex gap-2 flex-wrap">
+                  <Link
+                    href="/workspace"
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition-colors"
+                  >
+                    Start Live Session
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </Link>
+                  <Link
+                    href="/library"
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#111827] hover:bg-[#1e293b] border border-[#1e293b] text-[#94a3b8] hover:text-white text-xs font-medium transition-colors"
+                  >
+                    Explore the Library
+                  </Link>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
         {/* ── RIGHT ── */}
         <div className="w-52 shrink-0 space-y-3">
           {/* Escalation meter */}
-          <div className="bg-gray-800 border border-gray-700 rounded-xl p-4 space-y-3">
+          <div className="bg-[#111827] border border-[#1e293b] rounded-xl p-4 space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-xs text-gray-400 font-medium uppercase tracking-widest">Escalation</span>
-              <TrendingUp className="w-3.5 h-3.5 text-gray-500" />
+              <span className="text-xs text-[#64748b] font-medium uppercase tracking-widest">Escalation</span>
+              <TrendingUp className="w-3.5 h-3.5 text-[#475569]" />
             </div>
             {/* Combined score (average) */}
             {(() => {
@@ -1038,7 +1149,7 @@ export default function DemoPage() {
                       {getEscalationLabel(combined)}
                     </span>
                   </div>
-                  <div className="h-2.5 bg-gray-700 rounded-full overflow-hidden">
+                  <div className="h-2.5 bg-[#1e293b] rounded-full overflow-hidden">
                     <motion.div
                       className={`h-full rounded-full ${getEscalationColor(combined)}`}
                       initial={false}
@@ -1048,26 +1159,26 @@ export default function DemoPage() {
                   </div>
                   <div className="grid grid-cols-2 gap-1.5 pt-1">
                     <div>
-                      <div className="text-xs text-gray-500 mb-1">Sarah</div>
-                      <div className="h-1 bg-gray-700 rounded-full overflow-hidden">
+                      <div className="text-xs text-[#475569] mb-1">Sarah</div>
+                      <div className="h-1 bg-[#1e293b] rounded-full overflow-hidden">
                         <motion.div
                           className={`h-full rounded-full ${getEscalationColor(sarah.escalation)}`}
                           animate={{ width: `${sarah.escalation}%` }}
                           transition={{ duration: 0.6 }}
                         />
                       </div>
-                      <motion.span key={sarah.escalation} initial={{ scale: 1.2 }} animate={{ scale: 1 }} className="text-xs text-gray-400">{sarah.escalation}</motion.span>
+                      <motion.span key={sarah.escalation} initial={{ scale: 1.2 }} animate={{ scale: 1 }} className="text-xs text-[#64748b]">{sarah.escalation}</motion.span>
                     </div>
                     <div>
-                      <div className="text-xs text-gray-500 mb-1">Michael</div>
-                      <div className="h-1 bg-gray-700 rounded-full overflow-hidden">
+                      <div className="text-xs text-[#475569] mb-1">Michael</div>
+                      <div className="h-1 bg-[#1e293b] rounded-full overflow-hidden">
                         <motion.div
                           className={`h-full rounded-full ${getEscalationColor(michael.escalation)}`}
                           animate={{ width: `${michael.escalation}%` }}
                           transition={{ duration: 0.6 }}
                         />
                       </div>
-                      <motion.span key={michael.escalation} initial={{ scale: 1.2 }} animate={{ scale: 1 }} className="text-xs text-gray-400">{michael.escalation}</motion.span>
+                      <motion.span key={michael.escalation} initial={{ scale: 1.2 }} animate={{ scale: 1 }} className="text-xs text-[#64748b]">{michael.escalation}</motion.span>
                     </div>
                   </div>
                 </div>
@@ -1076,9 +1187,9 @@ export default function DemoPage() {
           </div>
 
           {/* Common Ground */}
-          <div className="bg-gray-800 border border-gray-700 rounded-xl p-4 space-y-2">
+          <div className="bg-[#111827] border border-[#1e293b] rounded-xl p-4 space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-xs text-gray-400 font-medium uppercase tracking-widest">Common Ground</span>
+              <span className="text-xs text-[#64748b] font-medium uppercase tracking-widest">Common Ground</span>
               <motion.span
                 key={step.commonGround.length}
                 initial={{ scale: 1.5, backgroundColor: "#4f46e5" }}
@@ -1091,7 +1202,7 @@ export default function DemoPage() {
             </div>
             <AnimatePresence>
               {step.commonGround.length === 0 && (
-                <p className="text-xs text-gray-600 italic">None identified yet</p>
+                <p className="text-xs text-[#475569] italic">None identified yet</p>
               )}
               {step.commonGround.map((item, i) => (
                 <motion.div
@@ -1099,7 +1210,7 @@ export default function DemoPage() {
                   initial={{ opacity: 0, x: -12 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: i * 0.08 }}
-                  className="flex items-start gap-2 text-xs text-gray-300"
+                  className="flex items-start gap-2 text-xs text-[#94a3b8]"
                 >
                   <CheckCircle className="w-3 h-3 text-green-500 mt-0.5 shrink-0" />
                   <span className="leading-tight">{item}</span>
@@ -1109,8 +1220,8 @@ export default function DemoPage() {
           </div>
 
           {/* Phase indicator */}
-          <div className="bg-gray-800 border border-gray-700 rounded-xl p-4 space-y-3">
-            <div className="text-xs text-gray-400 font-medium uppercase tracking-widest">Phase</div>
+          <div className="bg-[#111827] border border-[#1e293b] rounded-xl p-4 space-y-3">
+            <div className="text-xs text-[#64748b] font-medium uppercase tracking-widest">Phase</div>
             <AnimatePresence mode="wait">
               <motion.div
                 key={step.phase}
@@ -1123,7 +1234,7 @@ export default function DemoPage() {
               </motion.div>
             </AnimatePresence>
             <div className="space-y-1">
-              {uniquePhases.map((phase, i) => {
+              {uniquePhases.map((phase) => {
                 const phaseStepIdx = STEPS.findIndex((s) => s.phase === phase);
                 const done = phaseStepIdx < currentStep;
                 const active = step.phase === phase;
@@ -1131,12 +1242,12 @@ export default function DemoPage() {
                   <div key={phase} className="flex items-center gap-2">
                     <motion.div
                       animate={{
-                        backgroundColor: active ? "#6366f1" : done ? "#22c55e" : "#374151",
+                        backgroundColor: active ? "#6366f1" : done ? "#22c55e" : "#1e293b",
                       }}
                       transition={{ duration: 0.3 }}
                       className="w-2 h-2 rounded-full shrink-0"
                     />
-                    <span className={`text-xs ${active ? "text-white font-medium" : done ? "text-gray-400" : "text-gray-600"}`}>
+                    <span className={`text-xs ${active ? "text-white font-medium" : done ? "text-[#64748b]" : "text-[#475569]"}`}>
                       {phase}
                     </span>
                   </div>
@@ -1148,7 +1259,7 @@ export default function DemoPage() {
       </div>
 
       {/* ── Bottom Controls ── */}
-      <div className="border-t border-gray-800 bg-gray-900/90 backdrop-blur-sm px-6 py-3">
+      <div className="border-t border-[#1a2236] bg-[#0d1120]/90 backdrop-blur-sm px-6 py-3">
         <div className="flex items-center gap-4 flex-wrap">
           {/* Play/Pause */}
           <motion.button
@@ -1172,30 +1283,30 @@ export default function DemoPage() {
             <button
               onClick={() => currentStep > 0 && goToStep(currentStep - 1)}
               disabled={currentStep === 0}
-              className="w-8 h-8 rounded-lg bg-gray-800 hover:bg-gray-700 disabled:opacity-30 flex items-center justify-center transition-colors"
+              className="w-8 h-8 rounded-lg bg-[#111827] hover:bg-[#1e293b] disabled:opacity-30 flex items-center justify-center transition-colors"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
             <button
               onClick={() => currentStep < STEPS.length - 1 && advanceStep()}
               disabled={currentStep >= STEPS.length - 1}
-              className="w-8 h-8 rounded-lg bg-gray-800 hover:bg-gray-700 disabled:opacity-30 flex items-center justify-center transition-colors"
+              className="w-8 h-8 rounded-lg bg-[#111827] hover:bg-[#1e293b] disabled:opacity-30 flex items-center justify-center transition-colors"
             >
-              <ChevronDown className="w-4 h-4 -rotate-90" />
+              <ChevronRight className="w-4 h-4" />
             </button>
           </div>
 
           {/* Speed selector */}
-          <div className="flex items-center gap-1 bg-gray-800 rounded-full p-1">
+          <div className="flex items-center gap-1 bg-[#111827] rounded-full p-1">
             {[1, 2, 3].map((s) => (
               <button
                 key={s}
                 onClick={() => setSpeed(s)}
                 className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
-                  speed === s ? "bg-indigo-600 text-white" : "text-gray-400 hover:text-white"
+                  speed === s ? "bg-indigo-600 text-white" : "text-[#64748b] hover:text-white"
                 }`}
               >
-                {s}×
+                {s}x
               </button>
             ))}
           </div>
@@ -1203,7 +1314,7 @@ export default function DemoPage() {
           {/* Reset */}
           <button
             onClick={handleReset}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white text-sm transition-colors"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#111827] hover:bg-[#1e293b] text-[#64748b] hover:text-white text-sm transition-colors"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             Reset
@@ -1216,7 +1327,7 @@ export default function DemoPage() {
               onChange={(e) => {
                 if (e.target.value) handleSkipToPhase(e.target.value);
               }}
-              className="appearance-none bg-gray-800 border border-gray-700 rounded-lg text-sm text-gray-300 px-3 py-2 pr-8 cursor-pointer hover:bg-gray-700 transition-colors focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              className="appearance-none bg-[#111827] border border-[#1e293b] rounded-lg text-sm text-[#94a3b8] px-3 py-2 pr-8 cursor-pointer hover:bg-[#1e293b] transition-colors focus:outline-none focus:ring-1 focus:ring-indigo-500"
             >
               <option value="">Skip to phase...</option>
               {uniquePhases.map((phase) => (
@@ -1225,16 +1336,16 @@ export default function DemoPage() {
                 </option>
               ))}
             </select>
-            <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500 pointer-events-none" />
+            <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#475569] pointer-events-none" />
           </div>
 
           {/* Step counter */}
-          <div className="ml-auto text-sm text-gray-400 tabular-nums">
+          <div className="ml-auto text-sm text-[#64748b] tabular-nums">
             Step{" "}
             <motion.span
               key={currentStep}
               initial={{ scale: 1.3, color: "#a5b4fc" }}
-              animate={{ scale: 1, color: "#9ca3af" }}
+              animate={{ scale: 1, color: "#64748b" }}
               transition={{ duration: 0.3 }}
               className="font-bold text-white inline-block"
             >
@@ -1245,6 +1356,39 @@ export default function DemoPage() {
         </div>
       </div>
 
+      {/* ── Floating AI Technique Callout ── */}
+      <AnimatePresence>
+        {showCallout && (
+          <motion.div
+            key={`callout-${currentStep}`}
+            initial={{ opacity: 0, y: 24, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 16, scale: 0.95 }}
+            transition={{ duration: 0.35, ease: "easeOut" }}
+            className="fixed bottom-20 right-5 z-50 w-72 bg-[#0d1120] border border-indigo-500/30 rounded-xl shadow-2xl p-4 space-y-2"
+          >
+            <div className="flex items-center gap-2">
+              <Brain className="w-4 h-4 text-indigo-400 shrink-0" />
+              <span className="text-xs text-indigo-300 font-semibold uppercase tracking-wider">AI Technique Applied</span>
+            </div>
+            {frameworkTag && (
+              <span className="inline-block text-[10px] text-indigo-200 bg-indigo-950 border border-indigo-700 px-2 py-0.5 rounded font-mono">
+                {frameworkTag}
+              </span>
+            )}
+            <p className="text-xs text-[#94a3b8] leading-relaxed">{techniqueDesc}</p>
+            <div className="h-0.5 bg-[#1e293b] rounded-full overflow-hidden">
+              <motion.div
+                className="h-full bg-indigo-500 rounded-full"
+                initial={{ width: "100%" }}
+                animate={{ width: "0%" }}
+                transition={{ duration: 4, ease: "linear" }}
+              />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* ── Demo Completion Screen ── */}
       <AnimatePresence>
         {currentStep >= STEPS.length - 1 && !isTyping && (
@@ -1253,13 +1397,13 @@ export default function DemoPage() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.6, delay: 1.2 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/80 backdrop-blur-sm"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-[#0a0e1a]/80 backdrop-blur-sm"
           >
             <motion.div
               initial={{ scale: 0.9, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               transition={{ duration: 0.5, delay: 1.4, ease: "easeOut" }}
-              className="bg-gray-900 border border-gray-700 rounded-2xl p-8 max-w-lg w-full mx-4 shadow-2xl text-center"
+              className="bg-[#0d1120] border border-[#1e293b] rounded-2xl p-8 max-w-lg w-full mx-4 shadow-2xl text-center"
             >
               {/* Icon */}
               <div className="w-16 h-16 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center mx-auto mb-5">
@@ -1267,7 +1411,7 @@ export default function DemoPage() {
               </div>
 
               <h2 className="text-2xl font-bold text-white mb-2">Agreement Reached</h2>
-              <p className="text-gray-400 text-sm mb-6 leading-relaxed">
+              <p className="text-[#64748b] text-sm mb-6 leading-relaxed">
                 CONCORDIA guided Sarah and Michael from heated conflict to a signed framework in{" "}
                 <span className="text-white font-semibold">12 exchanges</span> — extracting{" "}
                 <span className="text-white font-semibold">14 conflict primitives</span>, de-escalating
@@ -1281,9 +1425,9 @@ export default function DemoPage() {
                   { label: "Trust increase", value: "+35%", color: "text-emerald-400" },
                   { label: "Escalation", value: "78→10", color: "text-amber-400" },
                 ].map(({ label, value, color }) => (
-                  <div key={label} className="bg-gray-800 rounded-xl p-3 border border-gray-700">
+                  <div key={label} className="bg-[#111827] rounded-xl p-3 border border-[#1e293b]">
                     <div className={`text-xl font-bold ${color}`}>{value}</div>
-                    <div className="text-[10px] text-gray-500 uppercase tracking-wider mt-0.5">{label}</div>
+                    <div className="text-[10px] text-[#475569] uppercase tracking-wider mt-0.5">{label}</div>
                   </div>
                 ))}
               </div>
@@ -1299,7 +1443,7 @@ export default function DemoPage() {
                 </Link>
                 <button
                   onClick={handleReset}
-                  className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white text-sm transition-colors border border-gray-700"
+                  className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-[#111827] hover:bg-[#1e293b] text-[#94a3b8] hover:text-white text-sm transition-colors border border-[#1e293b]"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
                   Replay Demo
