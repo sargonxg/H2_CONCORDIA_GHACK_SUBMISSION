@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { motion, useInView } from "motion/react";
+import { motion, useInView, AnimatePresence } from "motion/react";
 import Link from "next/link";
 import {
   Shield, Mic, BookOpen, Brain, Target, TrendingUp,
@@ -33,13 +33,13 @@ function AnimatedDemoPreview() {
   }, []);
 
   useEffect(() => {
-    const text = DEMO_STEPS[step].text;
+    const text = DEMO_STEPS[step]!.text;
     if (charIdx >= text.length) return;
     const t = setTimeout(() => setCharIdx((c) => c + 1), 20);
     return () => clearTimeout(t);
   }, [step, charIdx]);
 
-  const d = DEMO_STEPS[step];
+  const d = DEMO_STEPS[step]!;
   const PHASES_DEMO = ["Opening", "Discovery", "Exploration", "Negotiation", "Resolution"];
   const phaseIdx = PHASES_DEMO.indexOf(d.phase);
   const speakerColor = d.speaker === "Sarah" ? "#0ea5e9" : d.speaker === "Michael" ? "#8b5cf6" : "#3b82f6";
@@ -525,7 +525,7 @@ export default function LandingPage() {
             <div className="space-y-3">
               <h4 className="text-[10px] font-semibold uppercase tracking-wider text-[#334155]">Platform</h4>
               {[["Live Workspace","/workspace"],["Interactive Demo","/demo"],["Resolution Library","/library"],["Advisor Chat","/chat"]].map(([l,h]) => (
-                <Link key={l} href={h} className="block text-xs text-[#475569] hover:text-white transition-colors">{l}</Link>
+                <Link key={l} href={h!} className="block text-xs text-[#475569] hover:text-white transition-colors">{l}</Link>
               ))}
             </div>
             {/* Resources */}
