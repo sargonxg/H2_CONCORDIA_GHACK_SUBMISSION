@@ -21,6 +21,10 @@ import {
   TrendingUp,
   TrendingDown,
   Brain,
+  Volume2,
+  VolumeX,
+  X,
+  Info,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -74,6 +78,7 @@ interface DemoStep {
 
 const PHASES = ["Opening", "Discovery", "Escalation", "De-escalation", "Exploration", "Negotiation", "Resolution", "Agreement"];
 
+
 const PHASE_COLORS: Record<string, string> = {
   Opening: "bg-blue-500",
   Discovery: "bg-purple-500",
@@ -122,9 +127,9 @@ const STEPS: DemoStep[] = [
     phase: "Opening",
     targetActor: "Both",
     transcript:
-      "[CONCORDIA]: Welcome, Sarah and Michael. Thank you for being here. I'm CONCORDIA, your AI mediator. Ground rules: mutual respect, one person at a time, confidentiality. Sarah, could you start by telling me what brought you here today?",
+      "[CONCORDIA]: Welcome, Sarah and Michael. I'm CONCORDIA — I'll be your mediator today. Sarah, could you say a quick hello so I can learn your voice? ... Great. Michael, you too? ... Perfect, I've got you both. One ground rule before we begin: we'll speak one at a time, treat each other with respect, and everything here stays in this room. Sarah, what brought you here today?",
     annotation:
-      "CONCORDIA establishes ground rules and creates a safe container [Fisher & Ury: Separate people from the problem]",
+      "CONCORDIA performs voice calibration with both parties and establishes ground rules [Fisher & Ury: Separate people from the problem]",
     sarah: {
       cooperativeness: 45,
       defensiveness: 55,
@@ -149,9 +154,9 @@ const STEPS: DemoStep[] = [
     phase: "Discovery",
     targetActor: "Sarah",
     transcript:
-      "[Sarah]: The issue is that Michael keeps missing sprint commitments. I've established a clear Agile process — daily standups, velocity tracking — but he treats it like optional bureaucracy. My stakeholders are asking for updates I can't give them.",
+      "[Sarah]: Honestly? I'm exhausted. Michael keeps missing sprint commitments — I built a whole Agile process, daily standups, velocity tracking — and he just... ignores it. My stakeholders are asking me for updates I literally cannot give them because I don't know where anything stands.",
     annotation:
-      "[Narrative Mediation] Sarah frames Michael as 'villain' — detecting grievance narrative. Primary emotion: Frustration (intensity 7/10, escalating)",
+      "[Narrative Mediation] Sarah frames Michael as 'villain' — detecting grievance narrative with emotional exhaustion. Primary emotion: Frustration (intensity 7/10, escalating)",
     sarah: {
       cooperativeness: 42,
       defensiveness: 65,
@@ -177,7 +182,7 @@ const STEPS: DemoStep[] = [
     phase: "Discovery",
     targetActor: "Sarah",
     transcript:
-      "[CONCORDIA]: I hear real frustration here, Sarah. Before I turn to Michael — are there any deadline pressures or organizational constraints I should understand?",
+      "[CONCORDIA]: That sounds genuinely stressful — being caught between your stakeholders and your team. Before I turn to Michael, are there any hard deadlines or organizational pressures I should know about? Things that make this more urgent than it might look from the outside?",
     annotation:
       "⚠️ AI detects ontology gap: No Constraints primitive from Sarah. Probing with targeted question [Gap type: primitive_missing, priority: critical]",
     sarah: {
@@ -205,9 +210,9 @@ const STEPS: DemoStep[] = [
     phase: "Discovery",
     targetActor: "Michael",
     transcript:
-      "[Michael]: With respect, Sarah has turned this into a surveillance operation. Every task has a ticket, every hour is tracked. I do my best work in flow — deep work that doesn't fit into 2-hour sprint slots. I'm not missing commitments, I'm doing them differently.",
+      "[Michael]: Look — I get that Sarah's under pressure, but she's turned this into a surveillance operation. Every hour tracked, every task in a ticket. I'm a senior engineer. I do my best work in deep focus — that doesn't fit into 2-hour sprint slots. I'm not failing, I'm just working differently than the system expects.",
     annotation:
-      "[Glasl Stage 2] Debate stage — polarized thinking, blame language detected. Michael's conflict style: Avoiding→Competing under pressure",
+      "[Glasl Stage 2] Debate stage — polarized thinking, counterclaim detected. Michael's conflict style: Avoiding→Competing under pressure. New Interest: autonomy in workflow.",
     sarah: {
       cooperativeness: 42,
       defensiveness: 65,
@@ -230,12 +235,12 @@ const STEPS: DemoStep[] = [
   },
   {
     stepNumber: 5,
-    phase: "Discovery",
+    phase: "Escalation",
     targetActor: "Both",
     transcript:
-      "[Michael]: You micromanage every sprint! I've shipped three major features this quarter but you only see the standup attendance. This process is killing my creativity!",
+      "[Michael]: You micromanage everything! I shipped three major features this quarter and all you track is whether I showed up to standup. Three features! You're strangling this team with process and calling it management.",
     annotation:
-      "🚨 ESCALATION DETECTED — Score: 78 | Level 3 Circuit Break activated. Blame language: 'you micromanage'. Gottman: Contempt detected. Protocol: Name the pattern, suggest pause",
+      "🚨 ESCALATION DETECTED — Score: 78 | Level 3 Circuit Break activated. Blame language: 'you micromanage', 'strangling'. Gottman: Contempt detected. Protocol: Hard circuit-break, name the dynamic without blame",
     sarah: {
       cooperativeness: 42,
       defensiveness: 65,
@@ -259,12 +264,12 @@ const STEPS: DemoStep[] = [
   },
   {
     stepNumber: 6,
-    phase: "Discovery",
+    phase: "De-escalation",
     targetActor: "Both",
     transcript:
-      "[CONCORDIA]: I'd like to pause for a moment. Michael, I can hear how important creative flow is to you — that's a real and valid need. Sarah, I also hear genuine pressure to deliver stakeholder visibility. Both of these are legitimate concerns. Let's slow down and make sure each of you feels truly heard.",
+      "[CONCORDIA]: I need to pause us. Michael — three features this quarter is real work, and I hear how unseen that feels. Sarah — I also hear that you're in an impossible spot with your stakeholders. Both of those things are true at the same time. Let's slow down. This is important enough to get right.",
     annotation:
-      "[Ury: 'Go to the balcony'] CONCORDIA names the dynamic without blame. Applies reflective listening. De-escalation Level 3 → 2. Both parties visibly stabilize.",
+      "[Ury: 'Go to the balcony'] CONCORDIA names the dynamic without assigning blame. Validates both parties simultaneously. De-escalation Level 3 → 2. Both parties visibly stabilize.",
     sarah: {
       cooperativeness: 50,
       defensiveness: 58,
@@ -290,9 +295,9 @@ const STEPS: DemoStep[] = [
     phase: "Exploration",
     targetActor: "Both",
     transcript:
-      "[CONCORDIA]: I'm noticing something interesting. Sarah, you need your stakeholders to trust the team's predictability. Michael, you need your manager to trust your judgment. Am I hearing that correctly? Both of you are fundamentally asking for trust?",
+      "[CONCORDIA]: I'm noticing something. Sarah, underneath the process question — you need your stakeholders to trust that this team delivers. Michael, underneath the autonomy question — you need Sarah to trust your judgment as a senior engineer. I could be wrong, but is what you're both really asking for... trust?",
     annotation:
-      "[Fisher & Ury] Reframing from positions to interests. Extracting shared value: TRUST. Zartman Ripeness check: mutually hurting stalemate detected — both parties feel pain.",
+      "[Fisher & Ury] Reframing from positions to interests using hedged guess technique. Extracting shared value: TRUST. Zartman Ripeness: mutually hurting stalemate — both parties feel pain.",
     sarah: {
       cooperativeness: 58,
       defensiveness: 45,
@@ -317,9 +322,9 @@ const STEPS: DemoStep[] = [
     phase: "Exploration",
     targetActor: "Sarah",
     transcript:
-      "[Sarah]: ...I hadn't thought of it that way. I suppose I do need to trust that Michael will surface blockers before they become missed deadlines. Not watch him every hour.",
+      "[Sarah]: ... yeah. Yeah, actually. I don't need to see every hour of work — I need to know a blocker isn't going to blindside me on Friday afternoon. That's what I actually need.",
     annotation:
-      "[Bush & Folger: Recognition] Sarah recognizes Michael's perspective — empowerment moment. Trust scores rising. Glasl stage reverting from Stage 2 toward Stage 1.",
+      "[Bush & Folger: Recognition] Sarah shifts from position to underlying interest — empowerment moment. 'I don't need to see every hour' is a major concession. Trust scores rising. Glasl reverting from Stage 2 toward Stage 1.",
     sarah: {
       cooperativeness: 65,
       defensiveness: 38,
@@ -344,9 +349,9 @@ const STEPS: DemoStep[] = [
     phase: "Negotiation",
     targetActor: "Both",
     transcript:
-      "[CONCORDIA]: Michael, what would it look like if you had autonomy over *how* you work, but committed to *outcome visibility* twice a week — so Sarah has what she needs for stakeholders?",
+      "[CONCORDIA]: What if we built something that gave Michael full control over *how* he works — his flow, his hours, no microtracking — and gave Sarah *outcome visibility* twice a week so she's never blindsided? What would that need to look like for each of you to actually trust it?",
     annotation:
-      "[Fisher & Ury: Golden Bridge] Building a path that gives both parties a face-saving win. Testing hybrid solution: autonomy + transparency. ZOPA identified.",
+      "[Fisher & Ury: Golden Bridge] Building a path that gives both parties a face-saving win. Testing hybrid solution: autonomy + outcome transparency. ZOPA confirmed — overlap exists on 'no task tracking, yes outcome updates'.",
     sarah: {
       cooperativeness: 65,
       defensiveness: 38,
@@ -376,9 +381,9 @@ const STEPS: DemoStep[] = [
     phase: "Negotiation",
     targetActor: "Michael",
     transcript:
-      "[Michael]: Yes — I could do a Monday outcome summary and Friday blockers call. No task-level tracking, just deliverable status. That I can commit to.",
+      "[Michael]: Okay. Monday outcome summary, Friday blockers call. Short, async — not a standup. No task-level tracking, just deliverable status and anything that's going to slip. That I can actually commit to.",
     annotation:
-      "Commitment primitive forming: Michael proposes concrete outcome visibility protocol. ZOPA confirmed. Risk scores dropping across all axes.",
+      "Commitment primitive forming: Michael proposes concrete, specific outcome visibility protocol. ZOPA confirmed. Specificity ('async', 'not a standup') signals genuine buy-in. Risk scores dropping across all axes.",
     sarah: {
       cooperativeness: 65,
       defensiveness: 38,
@@ -414,9 +419,9 @@ const STEPS: DemoStep[] = [
     phase: "Resolution",
     targetActor: "Sarah",
     transcript:
-      "[Sarah]: I can work with that. If I know where we stand on Monday and Friday, I can give stakeholders what they need. And Michael... I hear that the tracking felt invasive. I'll adjust the standup format.",
+      "[Sarah]: I can work with that. Monday and Friday is enough for my stakeholders. And Michael... the tracking thing — I hear you. I didn't realize it felt that way. I'll pull back the task-level requirements. I just need to know when something's going sideways before it's too late.",
     annotation:
-      "[Lederach: Transformation] Relationship repair alongside practical agreement. Sarah makes a reciprocal concession — conflict transformed, not just settled.",
+      "[Lederach: Conflict Transformation] Relationship repair alongside practical agreement. Sarah makes a reciprocal concession AND acknowledges Michael's experience — conflict transformed, not merely settled.",
     sarah: {
       cooperativeness: 78,
       defensiveness: 22,
@@ -446,9 +451,9 @@ const STEPS: DemoStep[] = [
     phase: "Agreement",
     targetActor: "Both",
     transcript:
-      "[CONCORDIA]: This is a meaningful breakthrough. You've moved from competing processes to a shared framework built on trust. Let me summarize what you've agreed: Michael provides outcome summaries Monday + Friday. Sarah shifts from task-level tracking to deliverable oversight. Both commit to a monthly check-in on this arrangement. Shall I draft formal terms?",
+      "[CONCORDIA]: This is a real breakthrough. You both came in with competing systems — and you've built something neither of you had at the start. Here's what I heard you agree to: Michael provides an async outcome summary on Mondays and flags blockers on Fridays. Sarah removes task-level tracking and moves to deliverable oversight. You both commit to a monthly 30-minute check-in to see how it's working. Should I draft this as formal terms?",
     annotation:
-      "🎉 Agreement reached in 12 exchanges. [Fisher & Ury + Lederach + Transformative] Framework synthesis. Conflict primitive counts: 14 extracted. Trust scores: +35% average. Escalation: 78→10.",
+      "🎉 Agreement reached in 12 exchanges. [Fisher & Ury + Lederach + Transformative Mediation] Framework synthesis. Conflict primitives extracted: 14. Trust scores: +35% average. Escalation arc: 78 → 10.",
     sarah: {
       cooperativeness: 78,
       defensiveness: 22,
@@ -698,6 +703,15 @@ export default function DemoPage() {
   const [skipToPhase, setSkipToPhase] = useState("");
   const [showCallout, setShowCallout] = useState(false);
 
+  // ── TTS voice playback ──
+  const [voiceEnabled, setVoiceEnabled] = useState(false);
+  const [voiceFailed, setVoiceFailed] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // ── Guided tour ──
+  const [showTour, setShowTour] = useState(false);
+  const [tourStep, setTourStep] = useState(0);
+
   const transcriptRef = useRef<HTMLDivElement>(null);
   const typingRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoAdvanceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -757,6 +771,51 @@ export default function DemoPage() {
     const timer = setTimeout(() => setShowCallout(false), 4000);
     return () => clearTimeout(timer);
   }, [currentStep]);
+
+  // Check if this is first visit — show guided tour
+  useEffect(() => {
+    if (typeof window !== "undefined" && !localStorage.getItem("concordia_demo_toured")) {
+      setShowTour(true);
+    }
+  }, []);
+
+  // TTS voice playback for CONCORDIA's lines when auto-playing
+  useEffect(() => {
+    if (!voiceEnabled || !isPlaying || voiceFailed) return;
+    const currentTranscript = STEPS[currentStep]?.transcript ?? "";
+    // Only play CONCORDIA lines
+    if (!currentTranscript.startsWith("[CONCORDIA]")) return;
+    // Strip the [CONCORDIA]: prefix and any stage directions
+    const text = currentTranscript.replace(/^\[CONCORDIA\]:\s*/, "").slice(0, 400);
+    if (text.length < 5) return;
+
+    fetch("/api/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, voiceName: "Zephyr" }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.error) {
+          // API key not configured or other error — disable voice silently
+          setVoiceFailed(true);
+          setVoiceEnabled(false);
+          return;
+        }
+        if (data.audio && audioRef.current) {
+          audioRef.current.src = `data:audio/mp3;base64,${data.audio}`;
+          audioRef.current.play().catch(() => {
+            // Autoplay blocked — silently ignore
+          });
+        }
+      })
+      .catch(() => {
+        // Network error or API unavailable — disable voice silently
+        setVoiceFailed(true);
+        setVoiceEnabled(false);
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStep, isPlaying, voiceEnabled]);
 
   // Auto-scroll transcript
   useEffect(() => {
@@ -1320,6 +1379,55 @@ export default function DemoPage() {
             Reset
           </button>
 
+          {/* Voice toggle */}
+          <div className="relative group">
+            <button
+              onClick={() => {
+                if (voiceFailed) return;
+                setVoiceEnabled((v) => !v);
+              }}
+              title={
+                voiceFailed
+                  ? "Voice requires API credentials — running in silent mode"
+                  : voiceEnabled
+                  ? "Disable CONCORDIA voice"
+                  : "Enable CONCORDIA voice (requires API key)"
+              }
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm transition-colors border ${
+                voiceFailed
+                  ? "opacity-40 cursor-not-allowed bg-[#111827] border-[#1e293b] text-[#475569]"
+                  : voiceEnabled
+                  ? "bg-indigo-900/60 border-indigo-700 text-indigo-300 hover:bg-indigo-900"
+                  : "bg-[#111827] border-[#1e293b] text-[#64748b] hover:text-white hover:border-indigo-700"
+              }`}
+            >
+              {voiceEnabled && !voiceFailed ? (
+                <Volume2 className="w-3.5 h-3.5" />
+              ) : (
+                <VolumeX className="w-3.5 h-3.5" />
+              )}
+              <span className="hidden sm:inline">
+                {voiceFailed ? "Voice N/A" : voiceEnabled ? "Voice On" : "Voice"}
+              </span>
+            </button>
+            {/* Tooltip */}
+            {voiceFailed && (
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 bg-[#0d1120] border border-[#1e293b] rounded-lg p-2 text-[10px] text-[#94a3b8] shadow-xl pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity z-50">
+                Voice requires API credentials. Running in silent mode.
+              </div>
+            )}
+          </div>
+
+          {/* Tour button */}
+          <button
+            onClick={() => { setTourStep(0); setShowTour(true); }}
+            title="Guided walkthrough"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#111827] hover:bg-[#1e293b] border border-[#1e293b] text-[#64748b] hover:text-white text-sm transition-colors"
+          >
+            <Info className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Tour</span>
+          </button>
+
           {/* Skip to phase */}
           <div className="relative">
             <select
@@ -1387,6 +1495,156 @@ export default function DemoPage() {
             </div>
           </motion.div>
         )}
+      </AnimatePresence>
+
+      {/* ── Hidden Audio Element for TTS ── */}
+      <audio ref={audioRef} className="hidden" />
+
+      {/* ── Guided Walkthrough Tour ── */}
+      <AnimatePresence>
+        {showTour && (() => {
+          const TOUR_STEPS = [
+            {
+              title: "Live Transcript",
+              description: "Watch the conversation unfold in real-time with speaker identification, timestamps, and colour-coded dialogue — exactly as CONCORDIA hears it.",
+              position: "center",
+              icon: MessageSquare,
+            },
+            {
+              title: "Psychological Profiles",
+              description: "Party profiles update every turn — tracking emotional state, conflict style (Thomas-Kilmann), trust dimensions, cooperativeness, and risk indicators.",
+              position: "center",
+              icon: Brain,
+            },
+            {
+              title: "Conflict Knowledge Graph",
+              description: "Every claim, interest, constraint, and narrative is extracted and mapped as a structured primitive — building a live conflict ontology (TACITUS 8-primitive model).",
+              position: "center",
+              icon: Shield,
+            },
+            {
+              title: "Phase Progression",
+              description: "CONCORDIA guides the session through 6 structured phases: Opening → Discovery → Exploration → Negotiation → Resolution → Agreement, with transition gates.",
+              position: "center",
+              icon: TrendingUp,
+            },
+            {
+              title: "Resolution Pathways",
+              description: "After each extraction cycle, CONCORDIA identifies ZOPA, resolution pathways, and framework-grounded recommendations — and injects them back into the live session.",
+              position: "center",
+              icon: Target,
+            },
+          ];
+          const tourData = TOUR_STEPS[tourStep];
+          const Icon = tourData.icon;
+          const isLast = tourStep === TOUR_STEPS.length - 1;
+
+          return (
+            <motion.div
+              key="tour-overlay"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
+              onClick={() => {
+                // Click outside to dismiss
+                localStorage.setItem("concordia_demo_toured", "1");
+                setShowTour(false);
+              }}
+            >
+              <motion.div
+                key={tourStep}
+                initial={{ opacity: 0, scale: 0.92, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                transition={{ duration: 0.3, ease: "easeOut" }}
+                onClick={(e) => e.stopPropagation()}
+                className="bg-[#0d1120] border border-indigo-500/30 rounded-2xl p-6 max-w-sm w-full shadow-2xl"
+              >
+                {/* Step indicator */}
+                <div className="flex items-center justify-between mb-5">
+                  <div className="flex gap-1.5">
+                    {TOUR_STEPS.map((_, i) => (
+                      <div
+                        key={i}
+                        className={`h-1 rounded-full transition-all ${
+                          i === tourStep
+                            ? "w-6 bg-indigo-500"
+                            : i < tourStep
+                            ? "w-3 bg-indigo-800"
+                            : "w-3 bg-[#1e293b]"
+                        }`}
+                      />
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => {
+                      localStorage.setItem("concordia_demo_toured", "1");
+                      setShowTour(false);
+                    }}
+                    className="text-[#475569] hover:text-white transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Icon */}
+                <div className="w-12 h-12 rounded-xl bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center mb-4">
+                  <Icon className="w-6 h-6 text-indigo-400" />
+                </div>
+
+                {/* Content */}
+                <div className="mb-2 text-[10px] text-indigo-400 font-mono uppercase tracking-widest">
+                  {tourStep + 1} / {TOUR_STEPS.length}
+                </div>
+                <h3 className="text-white font-bold text-lg mb-2">{tourData.title}</h3>
+                <p className="text-[#94a3b8] text-sm leading-relaxed mb-6">
+                  {tourData.description}
+                </p>
+
+                {/* Navigation */}
+                <div className="flex items-center gap-3">
+                  {tourStep > 0 && (
+                    <button
+                      onClick={() => setTourStep((t) => t - 1)}
+                      className="px-4 py-2 rounded-lg bg-[#111827] hover:bg-[#1e293b] border border-[#1e293b] text-[#94a3b8] hover:text-white text-sm transition-colors"
+                    >
+                      Back
+                    </button>
+                  )}
+                  <button
+                    onClick={() => {
+                      if (isLast) {
+                        localStorage.setItem("concordia_demo_toured", "1");
+                        setShowTour(false);
+                      } else {
+                        setTourStep((t) => t + 1);
+                      }
+                    }}
+                    className="flex-1 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                  >
+                    {isLast ? (
+                      <>Let&apos;s go <ChevronRight className="w-3.5 h-3.5" /></>
+                    ) : (
+                      <>Next <ChevronRight className="w-3.5 h-3.5" /></>
+                    )}
+                  </button>
+                  {!isLast && (
+                    <button
+                      onClick={() => {
+                        localStorage.setItem("concordia_demo_toured", "1");
+                        setShowTour(false);
+                      }}
+                      className="text-[10px] text-[#475569] hover:text-[#64748b] transition-colors"
+                    >
+                      Skip
+                    </button>
+                  )}
+                </div>
+              </motion.div>
+            </motion.div>
+          );
+        })()}
       </AnimatePresence>
 
       {/* ── Demo Completion Screen ── */}

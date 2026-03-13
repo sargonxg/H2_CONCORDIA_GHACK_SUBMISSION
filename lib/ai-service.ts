@@ -842,6 +842,51 @@ LANGUAGE VARIETY ROTATION — use different acknowledgments every turn:
   Never use the same one twice in a row.`;
 }
 
+// ── Background Common Ground Analysis ──────────────────────────────────────────
+// Runs in parallel after each extraction cycle to surface common ground,
+// tension points, and ZOPA hints that the live model may have missed.
+export const backgroundAnalyzeCommonGround = async (
+  transcript: string,
+  primitives: { type: string; actorId: string; description: string }[],
+  actors: { id: string; name: string }[],
+): Promise<{ commonGround: string[]; tensionPoints: string[]; zopaHints: string[] }> => {
+  const ai = initAI();
+  const response = await ai.models.generateContent({
+    model: _MODEL_TEXT,
+    contents: `Analyze this mediation transcript and extracted conflict structure for COMMON GROUND, TENSION POINTS, and ZOPA HINTS.
+
+TRANSCRIPT (latest):
+${transcript.slice(-6000)}
+
+EXTRACTED PRIMITIVES:
+${primitives.map((p) => `[${p.type}] ${actors.find((a) => a.id === p.actorId)?.name || "?"}: ${p.description}`).join("\n")}
+
+INSTRUCTIONS:
+1. COMMON GROUND: Identify areas where both parties share interests, values, or goals — even if they don't realize it yet. Be specific. "Both value team success" is too vague. "Both want the project delivered on time but disagree on methodology" is good. List 2-5 items.
+2. TENSION POINTS: Identify specific points of active disagreement, especially emotional flashpoints. List 2-5 items.
+3. ZOPA HINTS: Where do the parties' flexibility ranges seem to overlap? What trades might be possible? Be concrete about what each party might concede and what they'd gain. List 1-4 items.
+
+Return JSON only. Be specific and evidence-based — only include items you can support from the transcript.`,
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          commonGround: { type: Type.ARRAY, items: { type: Type.STRING } },
+          tensionPoints: { type: Type.ARRAY, items: { type: Type.STRING } },
+          zopaHints: { type: Type.ARRAY, items: { type: Type.STRING } },
+        },
+        required: ["commonGround", "tensionPoints", "zopaHints"],
+      },
+    },
+  });
+  try {
+    return JSON.parse(response.text || '{"commonGround":[],"tensionPoints":[],"zopaHints":[]}');
+  } catch {
+    return { commonGround: [], tensionPoints: [], zopaHints: [] };
+  }
+};
+
 export const createLiveSession = (
   callbacks: any,
   context: string = "",
