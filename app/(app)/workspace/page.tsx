@@ -38,6 +38,8 @@ import {
   Filter,
   GitMerge,
   Timer,
+  Printer,
+  Copy,
 } from "lucide-react";
 import {
   getLiveSession,
@@ -51,7 +53,7 @@ import {
 } from "@/services/gemini-client";
 import type { Actor, Primitive, PrimitiveType, Case, LiveMediationState, OntologyStats, PartyProfile, GapNotification, CaseSummary, TimelineEntry, PrimitiveCluster, Agreement, EscalationFlag, SolutionProposal, PowerDynamics, ImpasseEvent, IntakeData, EmotionSnapshot } from "@/lib/types";
 import { safeJsonParse } from "@/lib/utils";
-import { exportAsMarkdown, exportAsJSON, downloadFile, generateAgreementHTML } from "@/lib/export";
+import { exportAsMarkdown, exportAsJSON, downloadFile, generateAgreementHTML, formatAgreementAsText } from "@/lib/export";
 import IntakeWizard from "@/components/workspace/IntakeWizard";
 import { useConflictGraph } from "@/hooks/useConflictGraph";
 import ConflictGraph from "@/components/workspace/ConflictGraph";
@@ -335,12 +337,12 @@ function buildContextSummary(
   // 5. Party imbalance check
   const actors = activeCase.actors;
   if (actors.length >= 2) {
-    const a1Count = activeCase.primitives.filter((p) => p.actorId === actors[0].id).length;
-    const a2Count = activeCase.primitives.filter((p) => p.actorId === actors[1].id).length;
+    const a1Count = activeCase.primitives.filter((p) => p.actorId === actors[0]?.id).length;
+    const a2Count = activeCase.primitives.filter((p) => p.actorId === actors[1]?.id).length;
     if (a1Count > 0 && a2Count > 0) {
       const ratio = Math.max(a1Count, a2Count) / Math.min(a1Count, a2Count);
       if (ratio > 2) {
-        const underRepresented = a1Count < a2Count ? actors[0].name : actors[1].name;
+        const underRepresented = a1Count < a2Count ? (actors[0]?.name ?? "Party A") : (actors[1]?.name ?? "Party B");
         sections.push(
           `⚠️ EXTRACTION IMBALANCE: ${underRepresented} is under-represented (${Math.min(a1Count, a2Count)} vs ${Math.max(a1Count, a2Count)} primitives). Give them more airtime.`,
         );
@@ -429,6 +431,10 @@ function WorkspaceInner() {
   const [zopaHints, setZopaHints] = useState<string[]>([]);
   const [impaseBanner, setImpaseBanner] = useState<ImpasseEvent | null>(null);
   const [showBlindBidding, setShowBlindBidding] = useState(false);
+  const [showAgreementModal, setShowAgreementModal] = useState(false);
+  const [agreementHTML, setAgreementHTML] = useState<string | null>(null);
+  const [agreementData, setAgreementData] = useState<any>(null);
+  const [agreementLoading, setAgreementLoading] = useState(false);
   const [mobilePanel, setMobilePanel] = useState<"left" | "center" | "right">("center");
   const [pathwaysLoading, setPathwaysLoading] = useState(false);
   // ── Room mode ──────────────────────────────────────────────────────────────
@@ -1210,7 +1216,7 @@ function WorkspaceInner() {
         if (!isSessionOpen()) return;
 
         const { pcm16 } = e.data as { pcm16: Int16Array };
-        const base64 = arrayBufferToBase64(pcm16.buffer);
+        const base64 = arrayBufferToBase64(pcm16.buffer as ArrayBuffer);
 
         try {
           sessionRef.current.sendRealtimeInput({
@@ -1272,7 +1278,7 @@ function WorkspaceInner() {
       const pcm16 = new Int16Array(bytes.buffer);
       const floatData = new Float32Array(pcm16.length);
       for (let i = 0; i < pcm16.length; i++) {
-        floatData[i] = pcm16[i] / 0x7fff;
+        floatData[i] = (pcm16[i] ?? 0) / 0x7fff;
       }
 
       // Schedule on the shared AudioContext for sequential playback
@@ -1728,6 +1734,7 @@ function WorkspaceInner() {
         return;
       }
       const step = demoScript[stepIndex];
+      if (!step) return;
       if (activeCaseIdRef.current) {
         setCases((prev) =>
           prev.map((c) =>
@@ -1762,7 +1769,7 @@ function WorkspaceInner() {
     // Auto-stop after the last step
     const endTimer = setTimeout(() => {
       setStatus("DEMO COMPLETE");
-    }, demoScript[demoScript.length - 1].delay + 2000);
+    }, (demoScript[demoScript.length - 1]?.delay ?? 0) + 2000);
     demoTimersRef.current.push(endTimer);
   };
 
@@ -1776,7 +1783,7 @@ function WorkspaceInner() {
         setStatus("ERROR");
         return;
       }
-      const result = safeJsonParse(resultStr, null);
+      const result = safeJsonParse<any>(resultStr, null);
       if (!result) {
         console.error("[Extraction] Failed to parse extraction result:", resultStr);
         setStatus("ERROR");
@@ -1836,7 +1843,7 @@ function WorkspaceInner() {
       ]);
 
       setResearch(researchRes);
-      const parsedPathways = safeJsonParse(pathwaysResStr, null);
+      const parsedPathways = safeJsonParse<any>(pathwaysResStr, null);
       if (parsedPathways) {
         setPathways(parsedPathways);
         // Inject analysis results back into the live session so the model knows
@@ -1978,7 +1985,7 @@ function WorkspaceInner() {
     try {
       const resultStr = await extractPrimitives(currentCase.transcript);
       if (!resultStr) return;
-      const result = safeJsonParse(resultStr, null);
+      const result = safeJsonParse<any>(resultStr, null);
       if (!result) {
         console.warn("[AutoExtract] Could not parse extraction result:", resultStr);
         return;
@@ -2141,8 +2148,10 @@ function WorkspaceInner() {
     const prims = activeCase.primitives;
     for (let i = 0; i < prims.length; i++) {
       for (let j = i + 1; j < prims.length; j++) {
-        if (prims[i].type === prims[j].type && wordOverlap(prims[i].description, prims[j].description) > 0.6) {
-          pairs.push([prims[i].id, prims[j].id]);
+        const pi = prims[i];
+        const pj = prims[j];
+        if (pi && pj && pi.type === pj.type && wordOverlap(pi.description, pj.description) > 0.6) {
+          pairs.push([pi.id, pj.id]);
         }
       }
     }
@@ -2160,6 +2169,7 @@ function WorkspaceInner() {
 
   const handleGenerateAgreement = async () => {
     if (!activeCase || agreements.length === 0) return;
+    setAgreementLoading(true);
     try {
       const data = await generateAgreementDoc({
         caseTitle: activeCase.title,
@@ -2174,6 +2184,7 @@ function WorkspaceInner() {
         commonGround: liveMediationState?.commonGround || [],
         context: intakeData?.context || activeCase.transcript.slice(0, 4000),
       });
+      setAgreementData(data);
       const html = generateAgreementHTML(data, {
         caseTitle: activeCase.title,
         caseType: intakeData?.caseType || "Mediation",
@@ -2181,14 +2192,13 @@ function WorkspaceInner() {
         partyBName: activeCase.partyBName,
         date: new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
       });
-      const w = window.open("", "_blank");
-      if (w) {
-        w.document.write(html);
-        w.document.close();
-        setTimeout(() => w.print(), 500);
-      }
+      setAgreementHTML(html);
+      setShowAgreementModal(true);
     } catch (err) {
       console.error("Agreement generation error:", err);
+      setSessionToast("Failed to generate agreement");
+    } finally {
+      setAgreementLoading(false);
     }
   };
 
@@ -2253,7 +2263,7 @@ function WorkspaceInner() {
         commonGround: liveMediationState?.commonGround || [],
         tensionPoints: liveMediationState?.tensionPoints || [],
       });
-      const parsed = safeJsonParse(resultStr, null);
+      const parsed = safeJsonParse<any>(resultStr, null);
       if (parsed) {
         // Normalize: the API may omit empty arrays — ensure every field has a safe default
         // so the render never hits ".length of undefined"
@@ -3905,6 +3915,59 @@ function WorkspaceInner() {
           <span className="text-[var(--color-text-muted)]">{status}</span>
         )}
       </div>
+
+      {/* ─── AGREEMENT PREVIEW MODAL ─── */}
+      {showAgreementModal && agreementHTML && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="bg-[#0a0e1a] border border-slate-700 rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b border-slate-800">
+              <h3 className="text-lg font-semibold text-white">Settlement Agreement</h3>
+              <button onClick={() => setShowAgreementModal(false)} className="text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto p-4">
+              <iframe
+                srcDoc={agreementHTML}
+                className="w-full h-[500px] bg-white rounded-lg"
+                title="Agreement Preview"
+              />
+            </div>
+            <div className="flex gap-3 p-4 border-t border-slate-800">
+              <button
+                onClick={() => {
+                  const w = window.open("", "_blank");
+                  if (w) { w.document.write(agreementHTML!); w.document.close(); setTimeout(() => w.print(), 500); }
+                }}
+                className="flex-1 bg-blue-600 hover:bg-blue-500 text-white py-2.5 rounded-lg font-medium flex items-center justify-center gap-2"
+              >
+                <Printer className="w-4 h-4" /> Print / PDF
+              </button>
+              <button
+                onClick={() => {
+                  downloadFile(agreementHTML!, `${activeCase!.title.replace(/\s+/g, "-")}-agreement.html`, "text/html");
+                  setSessionToast("Agreement downloaded");
+                }}
+                className="flex-1 bg-slate-700 hover:bg-slate-600 text-white py-2.5 rounded-lg font-medium flex items-center justify-center gap-2"
+              >
+                <Download className="w-4 h-4" /> Download HTML
+              </button>
+              <button
+                onClick={() => {
+                  const plainText = agreementData
+                    ? formatAgreementAsText(agreementData, activeCase!.partyAName, activeCase!.partyBName)
+                    : "";
+                  navigator.clipboard.writeText(plainText);
+                  setSessionToast("Agreement copied to clipboard");
+                }}
+                className="flex-1 bg-slate-700 hover:bg-slate-600 text-white py-2.5 rounded-lg font-medium flex items-center justify-center gap-2"
+              >
+                <Copy className="w-4 h-4" /> Copy Text
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ─── BLIND BIDDING MODAL ─── */}
       <AnimatePresence>

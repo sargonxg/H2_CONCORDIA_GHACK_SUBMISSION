@@ -16,7 +16,7 @@ export function parseTranscript(raw: string): TranscriptTurn[] {
     .filter(Boolean)
     .map((block) => {
       const match = block.match(/^\[(\d{2}:\d{2})\]\s*\[([^\]]+)\]:\s*(.*)/s);
-      if (match) return { timestamp: match[1], speaker: match[2], text: match[3] };
+      if (match) return { timestamp: match[1] ?? "", speaker: match[2] ?? "", text: match[3] ?? "" };
       return { timestamp: "", speaker: "System", text: block };
     });
 }
@@ -25,7 +25,7 @@ interface Props {
   transcript: string;
   isLive: boolean;
   isRecording: boolean;
-  transcriptEndRef: RefObject<HTMLDivElement>;
+  transcriptEndRef: RefObject<HTMLDivElement | null>;
   autoScrollEnabled: boolean;
   setAutoScrollEnabled: (v: boolean) => void;
   extractionNotice: boolean;

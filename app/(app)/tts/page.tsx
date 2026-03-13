@@ -26,7 +26,7 @@ export default function TTS() {
         const audioBuffer = audioContext.createBuffer(1, pcm16.length, 24000);
         const channelData = audioBuffer.getChannelData(0);
         for (let i = 0; i < pcm16.length; i++) {
-          channelData[i] = pcm16[i] / 0x7fff;
+          channelData[i] = (pcm16[i] ?? 0) / 0x7fff;
         }
 
         const source = audioContext.createBufferSource();

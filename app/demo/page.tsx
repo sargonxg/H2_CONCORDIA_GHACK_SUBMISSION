@@ -725,7 +725,7 @@ export default function DemoPage() {
     Commitment: 0, Agreement: 0, Narrative: 0, Risk: 0,
   });
 
-  const step = STEPS[currentStep];
+  const step = STEPS[currentStep]!;
 
   // Build cumulative profiles by merging all steps up to current
   const sarah: PartyProfile = STEPS.slice(0, currentStep + 1).reduce(
@@ -846,7 +846,7 @@ export default function DemoPage() {
         return prev;
       }
       const nextIdx = prev + 1;
-      const nextStep = STEPS[nextIdx];
+      const nextStep = STEPS[nextIdx]!;
       // Add to transcript history
       setTranscriptHistory((h) => [...h, { step: nextIdx + 1, text: nextStep.transcript, phase: nextStep.phase }]);
       // Update primitives
@@ -867,7 +867,7 @@ export default function DemoPage() {
     const newCounts: PrimitiveCounts = { Claim: 0, Interest: 0, Event: 0, Constraint: 0, Commitment: 0, Agreement: 0, Narrative: 0, Risk: 0 };
 
     for (let i = 0; i <= idx; i++) {
-      const s = STEPS[i];
+      const s = STEPS[i]!;
       newHistory.push({ step: i + 1, text: s.transcript, phase: s.phase });
       Object.entries(s.primitivesAdded).forEach(([k, v]) => {
         newCounts[k as keyof PrimitiveCounts] = (newCounts[k as keyof PrimitiveCounts] ?? 0) + (v ?? 0);
@@ -1535,7 +1535,7 @@ export default function DemoPage() {
               icon: Target,
             },
           ];
-          const tourData = TOUR_STEPS[tourStep];
+          const tourData = TOUR_STEPS[tourStep]!;
           const Icon = tourData.icon;
           const isLast = tourStep === TOUR_STEPS.length - 1;
 

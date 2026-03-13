@@ -27,6 +27,11 @@ vi.mock('@/lib/ai-service', () => ({
     disclaimer: 'CONCORDIA is a communication facilitation tool.',
   }),
   processDocument: vi.fn().mockResolvedValue('Document summary: key facts extracted.'),
+  backgroundAnalyzeCommonGround: vi.fn().mockResolvedValue({
+    commonGroundItems: ['Both parties value long-term collaboration', 'Both prefer to avoid litigation'],
+    zopaHints: ['Flexible on payment schedule', 'Open to mediated timeline'],
+    readinessScore: 72,
+  }),
 }));
 
 // ── /api/health ───────────────────────────────────────────────────────────────
@@ -115,6 +120,57 @@ describe('POST /api/chat', () => {
     const response = await POST(request);
     // Should return a 4xx error
     expect(response.status).toBeGreaterThanOrEqual(400);
+  });
+});
+
+// ── /api/common-ground ────────────────────────────────────────────────────────
+describe('POST /api/common-ground', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('returns 200 with common ground data for valid input', async () => {
+    const { POST } = await import('@/app/api/common-ground/route');
+    const request = new Request('http://localhost/api/common-ground', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        transcript: 'Both parties discussed project timelines and expressed interest in continuing their collaboration.',
+        primitives: [],
+        actors: [{ id: 'a1', name: 'Alice', role: 'Claimant' }, { id: 'a2', name: 'Bob', role: 'Respondent' }],
+      }),
+    });
+    const response = await POST(request);
+    expect(response.status).toBe(200);
+    const data = await response.json();
+    expect(data).toBeDefined();
+  });
+
+  it('calls backgroundAnalyzeCommonGround mock with transcript and actors', async () => {
+    const { backgroundAnalyzeCommonGround } = await import('@/lib/ai-service');
+    const { POST } = await import('@/app/api/common-ground/route');
+    const request = new Request('http://localhost/api/common-ground', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        transcript: 'Alice and Bob agree on the importance of communication.',
+        primitives: [],
+        actors: [],
+      }),
+    });
+    await POST(request);
+    expect(backgroundAnalyzeCommonGround).toHaveBeenCalled();
+  });
+
+  it('returns common ground items from mock', async () => {
+    const { POST } = await import('@/app/api/common-ground/route');
+    const request = new Request('http://localhost/api/common-ground', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ transcript: 'Sample transcript', primitives: [], actors: [] }),
+    });
+    const response = await POST(request);
+    const data = await response.json();
+    expect(data.commonGroundItems).toBeDefined();
+    expect(Array.isArray(data.commonGroundItems)).toBe(true);
   });
 });
 

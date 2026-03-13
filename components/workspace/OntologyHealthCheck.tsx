@@ -179,7 +179,7 @@ export default function OntologyHealthCheck({
                 borderRadius: "8px",
                 fontSize: "11px",
               }}
-              formatter={(value: number, _name: string, props: any) => [
+              formatter={(value: any, _name: any, props: any) => [
                 `${value}% (${props.payload.count} captured)`,
                 props.payload.type,
               ]}

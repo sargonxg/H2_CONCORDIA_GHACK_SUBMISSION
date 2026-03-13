@@ -2244,8 +2244,8 @@ function parseGlaslRange(range: string | number[]): { min: number; max: number }
   }
   if (range === "all") return { min: 1, max: 9 };
   const parts = range.split("-").map(Number);
-  if (parts.length === 1) return { min: parts[0], max: parts[0] };
-  return { min: parts[0], max: parts[1] };
+  if (parts.length === 1) return { min: parts[0] ?? 1, max: parts[0] ?? 9 };
+  return { min: parts[0] ?? 1, max: parts[1] ?? 9 };
 }
 
 export function getRelevantFrameworks(context: {

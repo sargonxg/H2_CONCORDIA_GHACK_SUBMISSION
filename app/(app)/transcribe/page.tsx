@@ -54,7 +54,7 @@ export default function Transcribe() {
       reader.readAsDataURL(blob);
       reader.onloadend = async () => {
         const base64data = reader.result as string;
-        const base64Audio = base64data.split(",")[1];
+        const base64Audio = base64data.split(",")[1] ?? "";
 
         const result = await transcribeAudio(base64Audio, blob.type);
         setTranscript(result);

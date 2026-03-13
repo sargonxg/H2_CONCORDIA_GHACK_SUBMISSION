@@ -72,6 +72,7 @@ export default function Chat() {
             (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
           );
           const c = sorted[0];
+          if (!c) return;
           setActiveCase(c);
           activeCaseIdRef.current = c.id;
           // Restore per-case chat history
