@@ -7,3 +7,6 @@ coverage/
 *.log
 .env*
 !.env.example
+H2_CONCORDIA_GHACK_SUBMISSION
+key.json
+*.json.key
