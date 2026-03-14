@@ -1,31 +1,36 @@
-# Stage 1: Install dependencies
+# Stage 1: Install ALL dependencies (including dev for build)
 FROM node:20-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 
-# Stage 2: Build the Next.js app and bundle the custom server
+# Stage 2: Build the Next.js app + bundle custom server
 FROM node:20-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Build Next.js with standalone output
+# Build Next.js (no standalone mode — we use full node_modules)
 RUN npm run build
 
-# Bundle the custom server (server.ts + lib/) into a single server.js
-# Keep 'next' external — it's in standalone's node_modules
-# Bundle ws and @google/genai into the output (pure JS, no native deps)
+# Bundle custom server.ts into server.compiled.js
+# Keep 'next' external — we'll provide full node_modules
 RUN npx esbuild server.ts \
     --bundle \
     --platform=node \
     --target=node20 \
     --format=cjs \
-    --outfile=.next/standalone/server.js \
+    --outfile=server.compiled.js \
     --external:next \
-    --external:next/dist/server/lib/start-server
+    --external:next/*
 
-# Stage 3: Production image
+# Stage 3: Production dependencies only
+FROM node:20-alpine AS prod-deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+
+# Stage 4: Production image
 FROM node:20-alpine AS runner
 WORKDIR /app
 
@@ -35,13 +40,26 @@ ENV PORT=8080
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
+# Copy the FULL production node_modules (not standalone's minimal subset)
+COPY --from=prod-deps --chown=nextjs:nodejs /app/node_modules ./node_modules
+
+# Copy the built Next.js app
+COPY --from=builder --chown=nextjs:nodejs /app/.next ./.next
+
+# Copy package.json (needed by Next.js at runtime)
+COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
+
+# Copy next.config (needed by Next.js at runtime)
+COPY --from=builder --chown=nextjs:nodejs /app/next.config.ts ./next.config.ts
+
+# Copy public assets
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+# Copy the bundled custom server
+COPY --from=builder --chown=nextjs:nodejs /app/server.compiled.js ./server.js
 
 USER nextjs
 
 EXPOSE 8080
 
-# Run our custom server (replaces Next.js's default standalone server.js)
 CMD ["node", "server.js"]
