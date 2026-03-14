@@ -1178,7 +1178,7 @@ function WorkspaceInner() {
     }
   };
 
-  const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
+  const arrayBufferToBase64 = (buffer: ArrayBufferLike): string => {
     const bytes = new Uint8Array(buffer);
     let binary = "";
     // Process in chunks of 8192 to avoid stack overflow from spread operator
@@ -1216,7 +1216,7 @@ function WorkspaceInner() {
         if (!isSessionOpen()) return;
 
         const { pcm16 } = e.data as { pcm16: Int16Array };
-        const base64 = arrayBufferToBase64(pcm16.buffer as ArrayBuffer);
+        const base64 = arrayBufferToBase64(pcm16.buffer);
 
         try {
           sessionRef.current.sendRealtimeInput({
