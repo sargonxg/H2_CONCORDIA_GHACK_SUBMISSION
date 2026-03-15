@@ -1207,6 +1207,10 @@ function WorkspaceInner() {
       // Use AudioWorkletNode instead of the deprecated ScriptProcessorNode.
       // The worklet runs in a dedicated audio thread — no main-thread blocking.
       await audioContext.audioWorklet.addModule("/pcm-processor.js");
+
+      // Guard: context may have been closed while awaiting addModule (race with stopAudioCapture)
+      if (audioContext.state === "closed") return;
+
       const workletNode = new AudioWorkletNode(audioContext, "pcm-processor");
       processorRef.current = workletNode;
 
