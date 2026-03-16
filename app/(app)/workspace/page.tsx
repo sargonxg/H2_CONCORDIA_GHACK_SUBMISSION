@@ -70,6 +70,12 @@ import KeyboardShortcutsHelp from "@/components/workspace/KeyboardShortcutsHelp"
 import PowerMap from "@/components/workspace/PowerMap";
 import BlindBidding from "@/components/workspace/BlindBidding";
 import EmotionTimeline from "@/components/workspace/EmotionTimeline";
+import WorkspaceLayout from "@/components/workspace/WorkspaceLayout";
+import PhaseTimeline from "@/components/workspace/PhaseTimeline";
+import MediationTimer from "@/components/workspace/MediationTimer";
+import ConnectionStatus from "@/components/workspace/ConnectionStatus";
+import PartyCardNew from "@/components/workspace/PartyCard";
+import QuickActions from "@/components/workspace/QuickActions";
 
 const PRIMITIVE_TYPES: PrimitiveType[] = [
   "Actor",
@@ -2511,6 +2517,12 @@ function WorkspaceInner() {
     liveMediationState?.phase || "Opening",
   );
 
+  // Map status to ConnectionStatus state
+  const connectionState = status === "LIVE" || status === "DEMO" ? "connected" as const
+    : status === "RECONNECTING" ? "reconnecting" as const
+    : status === "ERROR" ? "error" as const
+    : "disconnected" as const;
+
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden bg-[var(--color-bg)]">
       {/* ─── TOP BAR ─── */}
@@ -2535,7 +2547,7 @@ function WorkspaceInner() {
                 onChange={(e) =>
                   updateActiveCase({ partyAName: e.target.value })
                 }
-                className="text-xs bg-transparent border-b border-sky-500/30 focus:border-sky-500 focus:outline-none text-sky-400 font-mono w-24 px-1"
+                className="text-xs bg-transparent border-b border-[#4ECDC4]/30 focus:border-[#4ECDC4] focus:outline-none text-[#4ECDC4] font-mono w-24 px-1"
                 placeholder="Party A"
               />
               <span className="text-xs text-[var(--color-text-muted)]">vs</span>
@@ -2544,14 +2556,27 @@ function WorkspaceInner() {
                 onChange={(e) =>
                   updateActiveCase({ partyBName: e.target.value })
                 }
-                className="text-xs bg-transparent border-b border-violet-500/30 focus:border-violet-500 focus:outline-none text-violet-400 font-mono w-24 px-1"
+                className="text-xs bg-transparent border-b border-[#A78BFA]/30 focus:border-[#A78BFA] focus:outline-none text-[#A78BFA] font-mono w-24 px-1"
                 placeholder="Party B"
               />
             </div>
           </div>
         </div>
 
-        <SessionControls
+        <div className="flex items-center gap-4">
+          {/* Timer + Phase + Connection */}
+          <div className="hidden md:flex items-center gap-3">
+            {(isRecording || status === "LIVE" || status === "DEMO") && sessionDuration > 0 && (
+              <MediationTimer
+                startTime={sessionStartTimeRef.current}
+                sessionDuration={sessionDuration}
+                currentPhase={liveMediationState?.phase || "Opening"}
+              />
+            )}
+            <ConnectionStatus status={connectionState} />
+          </div>
+
+          <SessionControls
           isRecording={isRecording}
           status={status}
           sessionDuration={sessionDuration}
@@ -2582,7 +2607,15 @@ function WorkspaceInner() {
           onGenerateAgreement={handleGenerateAgreement}
           hasAgreements={agreements.length > 0}
         />
+        </div>
       </header>
+
+      {/* ─── PHASE TIMELINE BAR ─── */}
+      {(isRecording || liveMediationState) && (
+        <div className="px-6 py-2 border-b border-[var(--color-border)] bg-[var(--color-surface)] shrink-0 hidden md:block">
+          <PhaseTimeline currentPhase={liveMediationState?.phase || "Opening"} />
+        </div>
+      )}
 
       {/* ─── LIVE STATUS BAR ─── */}
       {(isRecording || liveMediationState || gapNotifications.some((n) => !n.dismissed) || escalationBanner || sessionToast || healthScore < 50) && (
@@ -2702,10 +2735,10 @@ function WorkspaceInner() {
       {/* ─── MOBILE PANEL TABS ─── */}
       <div className="flex lg:hidden shrink-0 overflow-x-auto border-b border-[var(--color-border)] bg-[var(--color-surface)] px-3 gap-1 py-2">
         {([
-          { id: "left",   label: "Profiles" },
-          { id: "center", label: "Workspace" },
-          { id: "right",  label: "Tools" },
-        ] as const).map((p) => (
+          { id: "left" as const,   label: "Profiles" },
+          { id: "center" as const, label: "Workspace" },
+          { id: "right" as const,  label: "Tools" },
+        ]).map((p) => (
           <button
             key={p.id}
             onClick={() => setMobilePanel(p.id)}
@@ -2722,7 +2755,11 @@ function WorkspaceInner() {
         <div className="ml-auto flex items-center gap-2 text-[10px] font-mono text-[var(--color-text-muted)] whitespace-nowrap">
           <span className="hidden sm:block">{liveMediationState?.phase || "Opening"}</span>
           {(isRecording || status === "LIVE") && sessionDuration > 0 && (
-            <span>{String(Math.floor(sessionDuration / 60)).padStart(2, "0")}:{String(sessionDuration % 60).padStart(2, "0")}</span>
+            <MediationTimer
+              startTime={sessionStartTimeRef.current}
+              sessionDuration={sessionDuration}
+              currentPhase={liveMediationState?.phase || "Opening"}
+            />
           )}
         </div>
       </div>

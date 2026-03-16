@@ -87,6 +87,34 @@ export const getLiveSession = (
                 ws.send(JSON.stringify({ type: "context", text }));
               }
             },
+            startCaucus: (partyId: 'A' | 'B') => {
+              if (ws.readyState === WebSocket.OPEN) {
+                ws.send(
+                  JSON.stringify({ type: "caucus", action: "start", partyId }),
+                );
+              }
+            },
+            endCaucus: (summary?: string) => {
+              if (ws.readyState === WebSocket.OPEN) {
+                ws.send(
+                  JSON.stringify({ type: "caucus", action: "end", summary }),
+                );
+              }
+            },
+            setInterruptionMode: (mode: 'normal' | 'crisis') => {
+              if (ws.readyState === WebSocket.OPEN) {
+                ws.send(
+                  JSON.stringify({ type: "setInterruptionMode", mode }),
+                );
+              }
+            },
+            correctSpeaker: (name: string) => {
+              if (ws.readyState === WebSocket.OPEN) {
+                ws.send(
+                  JSON.stringify({ type: "correctSpeaker", name }),
+                );
+              }
+            },
             close: () => {
               intentionallyClosed = true;
               stopKeepAlive();
@@ -111,6 +139,23 @@ export const getLiveSession = (
         } else if (msg.type === "goAway" || msg.type === "reconnecting") {
           console.log(`[Live] Server sent ${msg.type}`);
           callbacks.onreconnecting?.();
+        } else if (msg.type === "caucusStarted") {
+          console.log(`[Live] Caucus started with Party ${msg.partyId}`);
+          callbacks.onCaucusStarted?.(msg.partyId);
+        } else if (msg.type === "caucusEnded") {
+          console.log("[Live] Caucus ended");
+          callbacks.onCaucusEnded?.();
+        } else if (msg.type === "interruptionModeChanged") {
+          console.log(`[Live] Interruption mode changed to: ${msg.mode}`);
+          callbacks.onInterruptionModeChanged?.(msg.mode);
+        } else if (msg.type === "silenceDetected") {
+          callbacks.onSilenceDetected?.(msg.data);
+        } else if (msg.type === "lowAudio") {
+          callbacks.onLowAudio?.(msg.data);
+        } else if (msg.type === "speakerBalance") {
+          callbacks.onSpeakerBalance?.(msg.data);
+        } else if (msg.type === "groundingUpdate") {
+          callbacks.onGroundingUpdate?.(msg.data);
         } else if (msg.type === "error") {
           console.error("[Live] Server error:", msg.error);
           if (!resolved) {

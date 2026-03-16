@@ -391,6 +391,11 @@ export type IntakeData = {
   caseType: string;
   mediatorStyle: 'professional' | 'empathic';
   language: string;
+  languageCode?: string;
+  partyALanguage?: string;
+  partyALanguageCode?: string;
+  partyBLanguage?: string;
+  partyBLanguageCode?: string;
   partyA: { name: string; role?: string; relationship: string };
   partyB: { name: string; role?: string; relationship: string };
   powerBalance: 'yes' | 'no' | 'unsure';
@@ -402,4 +407,131 @@ export type IntakeData = {
   partyAStatement?: string;
   partyBStatement?: string;
   context: string;
+};
+
+// ── Prompt 1: Core Conversation Engine Types ──
+
+// Caucus Mode
+export type CaucusState = {
+  active: boolean;
+  partyId: 'A' | 'B' | null;
+  startedAt: string | null;
+};
+
+// Speaker tracking
+export type SpeakerTurn = {
+  speaker: string;
+  startTime: number;
+  endTime?: number;
+  durationMs: number;
+};
+
+// Silence detection
+export type SilenceEvent = {
+  durationMs: number;
+  afterQuestion: boolean;
+  suggestedAction: string;
+};
+
+// Grounding metadata (for Prompt 5)
+export type GroundingUpdate = {
+  queries: string[];
+  sources: { title: string; uri: string }[];
+  supports: any[];
+};
+
+// Pre-session briefing (for Prompt 2)
+export type PreSessionBriefing = {
+  caseTimeline: { date: string; event: string; source: string }[];
+  partyAProfile: { knownInterests: string[]; statedPositions: string[]; constraints: string[] };
+  partyBProfile: { knownInterests: string[]; statedPositions: string[]; constraints: string[] };
+  contradictions: { topic: string; partyAVersion: string; partyBVersion: string; source: string }[];
+  keyQuestions: string[];
+  ontologySnapshot: { actors: Actor[]; primitives: Primitive[] };
+};
+
+// Document metadata (for Prompt 2)
+export type DocumentMetadata = {
+  type: 'contract' | 'email' | 'complaint' | 'report' | 'other';
+  date?: string;
+  author?: string;
+  recipients?: string[];
+  filename: string;
+};
+
+// Theory engine (for Prompt 8)
+export type TheoryRecommendation = {
+  framework: string;
+  relevanceScore: number;
+  reason: string;
+  suggestedTechniques: string[];
+  keyQuestions: string[];
+  warningSignals: string[];
+  pivotFramework: string;
+};
+
+// Cognitive bias (for Prompt 8)
+export type CognitiveBias = {
+  party: string;
+  bias: string;
+  evidence: string;
+  debiasingSuggestion: string;
+  timestamp: string;
+};
+
+// Graph analytics (for Prompt 4)
+export type ConflictKnowledgeGraph = {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  clusters: PrimitiveCluster[];
+  analytics: GraphAnalytics;
+};
+
+export type GraphAnalytics = {
+  centralityScores: Record<string, number>;
+  bridgingNodes: string[];
+  isolatedNodes: string[];
+  tensionEdges: GraphEdge[];
+  alignmentEdges: GraphEdge[];
+  narrativeCoherence: { partyA: number; partyB: number };
+};
+
+// Session store (for Prompt 6)
+export type AuditEntry = {
+  timestamp: string;
+  action: string;
+  details: Record<string, any>;
+  actor: 'system' | 'mediator' | 'partyA' | 'partyB' | 'concordia';
+};
+
+export type StoredSession = {
+  id: string;
+  caseId: string;
+  intakeData: IntakeData;
+  createdAt: string;
+  updatedAt: string;
+  duration: number;
+  status: 'active' | 'paused' | 'completed' | 'abandoned';
+  transcript: string;
+  actors: Actor[];
+  primitives: Primitive[];
+  agreements: Agreement[];
+  mediationState: LiveMediationState;
+  timeline: TimelineEntry[];
+  emotionTimeline: EmotionSnapshot[];
+  preSessionBriefing?: PreSessionBriefing;
+  auditTrail: AuditEntry[];
+};
+
+export type SessionSummary = {
+  id: string;
+  caseId: string;
+  title: string;
+  createdAt: string;
+  duration: number;
+  status: StoredSession['status'];
+  phaseReached: string;
+  agreementCount: number;
+  partyAName: string;
+  partyBName: string;
 };

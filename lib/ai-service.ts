@@ -466,6 +466,126 @@ function buildToolDeclarations(): any[] {
     },
   };
 
+  const speakerIdentified: any = {
+    name: "speakerIdentified",
+    description:
+      "Confirm or correct speaker identity with confidence level. Call when you identify which party is speaking based on voice characteristics.",
+    ...nonBlocking,
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        speaker: {
+          type: Type.STRING,
+          description: "Identified speaker name",
+        },
+        confidence: {
+          type: Type.NUMBER,
+          description: "0-1 confidence score",
+        },
+        voiceCharacteristics: {
+          type: Type.STRING,
+          description:
+            "Voice characteristics that identified this speaker (pitch, pace, timbre, accent)",
+        },
+      },
+      required: ["speaker", "confidence", "voiceCharacteristics"],
+    },
+  };
+
+  const updateConflictGraph: any = {
+    name: "updateConflictGraph",
+    description:
+      "Update the conflict knowledge graph with new nodes, edges, and analytical observations.",
+    ...nonBlocking,
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        newNodes: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              id: { type: Type.STRING },
+              type: {
+                type: Type.STRING,
+                description:
+                  "Actor|Claim|Interest|Constraint|Leverage|Commitment|Event|Narrative",
+              },
+              label: { type: Type.STRING },
+              actorId: { type: Type.STRING },
+            },
+          },
+        },
+        newEdges: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              sourceId: { type: Type.STRING },
+              targetId: { type: Type.STRING },
+              type: {
+                type: Type.STRING,
+                description:
+                  "MAKES|HAS|FACES|OPPOSES|ALIGNS_WITH|CONFLICTS_WITH|BLOCKS|WIELDS|TRIGGERS|FRAMES|ADDRESSES",
+              },
+              evidence: { type: Type.STRING },
+            },
+          },
+        },
+        removedEdges: { type: Type.ARRAY, items: { type: Type.STRING } },
+        analyticalNote: { type: Type.STRING },
+      },
+    },
+  };
+
+  const detectCognitiveBias: any = {
+    name: "detectCognitiveBias",
+    description:
+      "Flag when a party exhibits a cognitive bias that may block resolution.",
+    ...nonBlocking,
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        party: { type: Type.STRING },
+        bias: {
+          type: Type.STRING,
+          description:
+            "anchoring|confirmation|sunk-cost|attribution-error|zero-sum|reactive-devaluation|status-quo|loss-aversion|framing-effect",
+        },
+        evidence: { type: Type.STRING },
+        debiasingSuggestion: { type: Type.STRING },
+      },
+      required: ["party", "bias", "evidence", "debiasingSuggestion"],
+    },
+  };
+
+  const referenceDocument: any = {
+    name: "referenceDocument",
+    description:
+      "Reference a specific finding from pre-session documents during live mediation. " +
+      "Use this when a party's statement connects to or contradicts something found in " +
+      "the uploaded documents. Helps the mediator ground the conversation in documented facts.",
+    ...nonBlocking,
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        documentFinding: {
+          type: Type.STRING,
+          description: "The specific finding to reference from the pre-session document analysis",
+        },
+        relevance: {
+          type: Type.STRING,
+          description: "Why this finding is relevant to the current moment in the mediation",
+        },
+        suggestedIntervention: {
+          type: Type.STRING,
+          description: "How to bring this up diplomatically without breaking rapport or trust",
+        },
+      },
+      required: ["documentFinding", "relevance", "suggestedIntervention"],
+    },
+  };
+
   return [
     updateMediationState,
     requestMissingInformation,
@@ -474,6 +594,10 @@ function buildToolDeclarations(): any[] {
     proposeSolution,
     assessPowerDynamics,
     detectImpasse,
+    speakerIdentified,
+    updateConflictGraph,
+    detectCognitiveBias,
+    referenceDocument,
   ];
 }
 
@@ -488,10 +612,27 @@ export const MEDIATOR_VOICES = {
 
 // ── Live Audio Session ──
 
+// ── Language options for live sessions ──
+export interface LanguageOptions {
+  /** Primary session language BCP-47 code (e.g. 'en-US', 'es-ES') */
+  language?: string;
+  /** Human-readable name of the primary language */
+  languageName?: string;
+  /** Party A's language (BCP-47) — used for cross-language mediation */
+  partyALanguage?: string;
+  /** Party A's language name */
+  partyALanguageName?: string;
+  /** Party B's language (BCP-47) — used for cross-language mediation */
+  partyBLanguage?: string;
+  /** Party B's language name */
+  partyBLanguageName?: string;
+}
+
 function buildSystemInstruction(
   mediatorProfile: any,
   partyNames: { partyA: string; partyB: string },
   context: string,
+  languageOptions?: LanguageOptions,
 ) {
   const stylePreamble =
     mediatorProfile.style === "empathic"
@@ -839,7 +980,20 @@ LANGUAGE VARIETY ROTATION — use different acknowledgments every turn:
   "That makes sense." / "I hear that." / "Got it." / "That's clear." / "Right." /
   "[Their exact phrase back]" / "So [their words]" / "Mm-hmm." / "[silence]" /
   "I'm with you." / "That tracks." / "That lands." / "Understood." / "Noted."
-  Never use the same one twice in a row.`;
+  Never use the same one twice in a row.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+RESEARCH GUIDELINES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+When you search, contextualize findings within mediation frameworks:
+- If searching legal precedents → frame through Fisher & Ury's "objective criteria" principle
+- If searching market rates → present as "external reference points" not "the answer"
+- NEVER present search results as authoritative verdicts
+- Always disclose when referencing external sources
+- Use search results to inform your mediation strategy, not to take sides
+- When citing external information, always say: "Based on external reference points..." or "Industry standards suggest..."
+- Search proactively when parties reference specific laws, standards, or market rates that could inform fair criteria`;
 }
 
 // ── Background Common Ground Analysis ──────────────────────────────────────────
@@ -887,6 +1041,55 @@ Return JSON only. Be specific and evidence-based — only include items you can 
   }
 };
 
+// ── Caucus System Instruction Builder ──
+// Creates a modified system instruction for private caucus sessions
+// where the mediator speaks with only one party at a time.
+export function buildCaucusInstruction(
+  mediatorProfile: any,
+  partyNames: { partyA: string; partyB: string },
+  context: string,
+  caucusPartyId: 'A' | 'B',
+): string {
+  const caucusPartyName = caucusPartyId === 'A' ? partyNames.partyA : partyNames.partyB;
+  const otherPartyName = caucusPartyId === 'A' ? partyNames.partyB : partyNames.partyA;
+
+  const stylePreamble =
+    mediatorProfile.style === "empathic"
+      ? `YOUR STYLE: Warm, human, deeply present. Lead with emotion before structure. Use everyday language.`
+      : `YOUR STYLE: Measured, precise, professionally warm. Reference frameworks by name when it adds value.`;
+
+  return `You are CONCORDIA, an elite AI Mediator created by the TACITUS Institute for Conflict Resolution.
+
+You are now in a PRIVATE CAUCUS SESSION with "${caucusPartyName}". ${otherPartyName} CANNOT hear this conversation.
+
+${stylePreamble}
+Mediation approach: ${mediatorProfile.approach}.
+${context ? `\nCase Context:\n${context}` : ""}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CAUCUS SESSION RULES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+CONFIDENTIALITY: Everything said here is between you and ${caucusPartyName} UNLESS they explicitly give permission to share something with ${otherPartyName}.
+
+PURPOSE: Use this private time to:
+1. Explore underlying interests they may not want to reveal in joint session
+2. Reality-test their positions safely ("What would happen if you didn't reach agreement?")
+3. Surface hidden concerns, fears, or needs
+4. Discuss potential concessions they might consider
+5. Build trust and rapport one-on-one
+
+OPENING: "This is a private conversation, ${caucusPartyName}. Nothing you say here goes back to ${otherPartyName} unless you tell me it's okay. What's on your mind that you haven't been able to say?"
+
+BREVITY: Maximum 2 sentences per turn. One question at a time.
+
+DOUBLE-BLIND PROPOSALS: You may propose specific options for ${caucusPartyName} to consider privately. If both parties independently accept similar terms in separate caucuses, you can bring that convergence back to the joint session.
+
+BEFORE ENDING: Ask "Is there anything you'd like me to bring back to the joint session? And anything that stays just between us?"
+
+TOOLS: Continue using updateMediationState and other tools. Mark currentAction with "[Caucus] " prefix.`;
+}
+
 export const createLiveSession = (
   callbacks: any,
   context: string = "",
@@ -896,6 +1099,8 @@ export const createLiveSession = (
     partyB: "Party B",
   },
   resumptionHandle?: string,
+  interruptionMode: 'normal' | 'crisis' = 'normal',
+  caucusConfig?: { partyId: 'A' | 'B' },
 ) => {
   const ai = initAI();
 
@@ -947,9 +1152,12 @@ export const createLiveSession = (
             // 2.5s of silence before the model considers a turn complete.
             silenceDurationMs: 2500,
           },
-          // Do not interrupt ongoing model speech when the user starts talking.
-          // Prevents the AI from talking over a party during emotional moments.
-          activityHandling: ActivityHandling.NO_INTERRUPTION,
+          // In 'crisis' mode, use START_OF_ACTIVITY_INTERRUPTION so the model
+          // can be interrupted by urgent speech. In 'normal' mode, NO_INTERRUPTION
+          // prevents the AI from talking over a party during emotional moments.
+          activityHandling: interruptionMode === 'crisis'
+            ? ActivityHandling.START_OF_ACTIVITY_INTERRUPTS
+            : ActivityHandling.NO_INTERRUPTION,
         },
       }
     : {};
@@ -962,12 +1170,13 @@ export const createLiveSession = (
         prebuiltVoiceConfig: { voiceName: mediatorProfile.voice },
       },
     },
-    tools: [{ functionDeclarations: buildToolDeclarations() }],
-    systemInstruction: buildSystemInstruction(
-      mediatorProfile,
-      partyNames,
-      context,
-    ),
+    tools: [
+      { functionDeclarations: buildToolDeclarations() },
+      { googleSearch: {} },  // Enable Google Search grounding
+    ],
+    systemInstruction: caucusConfig
+      ? buildCaucusInstruction(mediatorProfile, partyNames, context, caucusConfig.partyId)
+      : buildSystemInstruction(mediatorProfile, partyNames, context),
     // Transcribe both parties' speech and the model's own speech.
     // Results arrive as message.serverContent.inputTranscription.text
     // and message.serverContent.outputTranscription.text respectively.
@@ -985,16 +1194,19 @@ export const createLiveSession = (
       : { sessionResumption: {} }),
   };
 
+  const interruptLabel = interruptionMode === 'crisis' ? 'START_OF_ACTIVITY' : 'NO_INTERRUPT';
   const activeFeatures = [
     _useVertexAI ? "affectiveDialog" : null,
     _useVertexAI ? "proactiveAudio" : null,
-    _useVertexAI ? "VAD(END_SENSITIVITY_LOW,2500ms,NO_INTERRUPT)" : null,
+    _useVertexAI ? `VAD(END_SENSITIVITY_LOW,2500ms,${interruptLabel})` : null,
     "transcription(in+out)",
     "contextCompression",
     "sessionResumption",
+    caucusConfig ? `caucus(party${caucusConfig.partyId})` : null,
+    interruptionMode === 'crisis' ? "crisisMode" : null,
   ].filter(Boolean).join(" | ");
 
-  console.log(`[Live] model=${_MODEL_LIVE} voice=${mediatorProfile.voice} resume=${!!resumptionHandle}`);
+  console.log(`[Live] model=${_MODEL_LIVE} voice=${mediatorProfile.voice} resume=${!!resumptionHandle} mode=${interruptionMode}`);
   console.log(`[Live] features: ${activeFeatures}`);
 
   return ai.live.connect({
