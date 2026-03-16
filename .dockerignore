@@ -1,8 +1,8 @@
 node_modules
-dist
+.next
+dist-server
 .git
 .env
 .env.local
 *.md
-H2_CONCORDIA_GHACK_SUBMISSION
 key.json
