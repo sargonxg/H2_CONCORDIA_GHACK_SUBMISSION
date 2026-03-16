@@ -46,7 +46,8 @@ function initAI(): GoogleGenAI {
         vertexai: true,
         project:
           process.env.GOOGLE_CLOUD_PROJECT || "gcloud-hackathon-ybh0sdqtc9kco",
-        location: process.env.GOOGLE_CLOUD_LOCATION || "us-central1",
+        // Live API is ONLY available in us-central1. Force it.
+        location: "us-central1",
       }
     : {
         apiKey: process.env.GEMINI_API_KEY,
@@ -1160,7 +1161,7 @@ export const createLiveSession = (
   //    • END_SENSITIVITY_LOW   — more tolerant of pauses. Prevents the model
   //                              cutting off speakers in the middle of emotional
   //                              sentences where people pause to gather thoughts.
-  //    • silenceDurationMs:2500 — 2.5s of silence required before turn ends.
+  //    • silenceDurationMs:2000 — 2s of silence required before turn ends.
   //                               Standard is ~500ms; 2.5s is better for mediation
   //                               where emotional speakers often pause mid-sentence.
   //    • NO_INTERRUPTION_HANDLING — model does not interrupt when new speech begins;
@@ -1186,7 +1187,7 @@ export const createLiveSession = (
             // Mediation parties often pause when emotional — we don't want to cut them off.
             endOfSpeechSensitivity: EndSensitivity.END_SENSITIVITY_LOW,
             // 2.5s of silence before the model considers a turn complete.
-            silenceDurationMs: 2500,
+            silenceDurationMs: 2000,
           },
           // In 'crisis' mode, use START_OF_ACTIVITY_INTERRUPTION so the model
           // can be interrupted by urgent speech. In 'normal' mode, NO_INTERRUPTION
@@ -1244,7 +1245,7 @@ export const createLiveSession = (
   const activeFeatures = [
     _useVertexAI ? "affectiveDialog" : null,
     _useVertexAI ? "proactiveAudio" : null,
-    _useVertexAI ? `VAD(END_SENSITIVITY_LOW,2500ms,${interruptLabel})` : null,
+    _useVertexAI ? `VAD(END_SENSITIVITY_LOW,2000ms,${interruptLabel})` : null,
     !_useVertexAI ? "thinking(2048)" : null,
     skipGoogleSearch ? null : "googleSearch",
     "functionCalling(7tools)",
@@ -1263,7 +1264,7 @@ export const createLiveSession = (
     console.log("  ✓ Affective Dialog — reads vocal emotion (tone, pace, tremor)");
     console.log("  ✓ Proactive Audio — model decides when to speak vs. listen");
     console.log("  ✓ Google Search Grounding — real-time fact verification");
-    console.log("  ✓ VAD: end_sensitivity=LOW, silence=2500ms, activity=" + interruptLabel);
+    console.log("  ✓ VAD: end_sensitivity=LOW, silence=2000ms, activity=" + interruptLabel);
     console.log("  ✓ 7 Function Calling tools (updateMediationState, flagEscalation, etc.)");
     console.log("  ✓ Input+Output transcription, Context compression, Session resumption");
     console.log("  ✗ thinkingConfig — not supported on Vertex AI GA model (API key preview only)");
