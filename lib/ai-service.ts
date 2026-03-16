@@ -808,9 +808,15 @@ LISTENING & AFFECT INTELLIGENCE
 
 AFFECTIVE AUDIO: You hear vocal emotion directly — tone, pace, tremor, hesitation, breath. This is one of your most powerful capabilities. Use it constantly.
 
-AFFECTIVE AUDIO INTEGRATION: You have affective dialog enabled — you can hear vocal emotion directly. When you detect emotional signals from voice (not just words), report them in the partyProfiles:
-  emotionalState: Include vocal observations like "Voice trembling — suppressed anger" or "Pace quickening — rising anxiety"
-  emotionalIntensity: Weight both WORD content and VOCAL signals. Vocal signals should carry MORE weight when they contradict words.
+AFFECTIVE DIALOG INTEGRATION (Vertex AI native feature — active in this session):
+You have affective dialog enabled. You perceive vocal emotion DIRECTLY from audio — tone, pace, tremor, hesitation, breath. This is far richer than text analysis.
+
+When reporting party emotional states in updateMediationState.partyProfiles:
+  emotionalState: ALWAYS include vocal observations, e.g., "Voice trembling — suppressed anger beneath calm words" or "Pace accelerating, pitch rising — anxiety building despite measured language"
+  emotionalIntensity: Weight vocal signals MORE than word content when they contradict. A calm statement delivered with vocal tension should show intensity 6-7, not 2-3.
+
+You MUST flag vocal-word mismatches to the mediator UI. When someone says "I'm fine" but their voice reveals distress, note this in partyProfiles.riskFactors: ["Vocal-verbal mismatch: states calm but voice indicates distress"]
+
   → Emotional flooding (voice tremor + pace increase): slow your pace, soften your tone, lower your volume. Become a calming presence, not a mirror.
   → Mismatch (calm words / stressed voice): name it with a hedged guess: "Your words sound okay, but I'm picking up something else — am I sensing some tension there?"
   → Quiet/withdrawn voice: "You've gone quiet — what's going on for you right now?"
@@ -1129,6 +1135,7 @@ export const createLiveSession = (
   resumptionHandle?: string,
   interruptionMode: 'normal' | 'crisis' = 'normal',
   caucusConfig?: { partyId: 'A' | 'B' },
+  skipGoogleSearch?: boolean,
 ) => {
   const ai = initAI();
 
@@ -1194,52 +1201,56 @@ export const createLiveSession = (
   const config: any = {
     responseModalities: [Modality.AUDIO],
     ...vertexOnlyConfig,
-    // Enable thinking for higher-quality mediation reasoning.
-    // The model thinks before responding, producing more deliberate mediator behavior.
-    // Thoughts are logged server-side (ws-handler.ts) but not spoken aloud.
-    thinkingConfig: {
-      thinkingBudget: 2048,   // generous thinking budget for complex mediation reasoning
-      includeThoughts: true,  // include thought summaries so we can log them
-    },
     speechConfig: {
       voiceConfig: {
         prebuiltVoiceConfig: { voiceName: mediatorProfile.voice },
       },
     },
+    // Tools: function calling + Google Search grounding
+    // Google Search is confirmed working with gemini-live-2.5-flash-native-audio on Vertex AI
+    // (see: docs.cloud.google.com/vertex-ai/generative-ai/docs/live-api/configure-gemini-capabilities)
     tools: [
       { functionDeclarations: buildToolDeclarations() },
-      { googleSearch: {} },  // Enable Google Search grounding
+      ...(skipGoogleSearch ? [] : [{ googleSearch: {} }]),
     ],
     systemInstruction: caucusConfig
       ? buildCaucusInstruction(mediatorProfile, partyNames, context, caucusConfig.partyId)
       : buildSystemInstruction(mediatorProfile, partyNames, context),
-    // Transcribe both parties' speech and the model's own speech.
-    // Results arrive as message.serverContent.inputTranscription.text
-    // and message.serverContent.outputTranscription.text respectively.
+    // Transcribe both parties' speech and the model's own speech
     inputAudioTranscription: {},
     outputAudioTranscription: {},
-    // Sliding window compression keeps long mediation sessions (30min+) alive
-    // by summarizing older context instead of dropping it.
+    // Sliding window compression keeps long mediation sessions alive
     contextWindowCompression: {
       slidingWindow: {},
     },
-    // Session resumption: {} enables handle tracking for the new session.
-    // Pass the handle when actually resuming a dropped session.
+    // Session resumption for reconnection
     ...(resumptionHandle
       ? { sessionResumption: { handle: resumptionHandle } }
       : { sessionResumption: {} }),
   };
+
+  // thinkingConfig: ONLY supported on the API key preview model
+  // (gemini-2.5-flash-native-audio-preview-12-2025), NOT on the Vertex AI GA model
+  // (gemini-live-2.5-flash-native-audio). Including it on Vertex AI causes
+  // immediate session close with code 1008 (policy violation).
+  if (!_useVertexAI) {
+    config.thinkingConfig = {
+      thinkingBudget: 2048,
+      includeThoughts: true,
+    };
+  }
 
   const interruptLabel = interruptionMode === 'crisis' ? 'START_OF_ACTIVITY' : 'NO_INTERRUPT';
   const activeFeatures = [
     _useVertexAI ? "affectiveDialog" : null,
     _useVertexAI ? "proactiveAudio" : null,
     _useVertexAI ? `VAD(END_SENSITIVITY_LOW,2500ms,${interruptLabel})` : null,
+    !_useVertexAI ? "thinking(2048)" : null,
+    skipGoogleSearch ? null : "googleSearch",
+    "functionCalling(7tools)",
     "transcription(in+out)",
     "contextCompression",
     "sessionResumption",
-    "thinking(2048)",
-    "googleSearch",
     caucusConfig ? `caucus(party${caucusConfig.partyId})` : null,
     interruptionMode === 'crisis' ? "crisisMode" : null,
   ].filter(Boolean).join(" | ");
@@ -1248,11 +1259,14 @@ export const createLiveSession = (
   console.log(`[Live] features: ${activeFeatures}`);
 
   if (_useVertexAI) {
-    console.log("[Live] Vertex AI-exclusive features ENABLED:");
-    console.log("  → Affective Dialog: Model reads vocal emotion (tone, pace, tremor)");
-    console.log("  → Proactive Audio: Model decides when to respond vs. listen silently");
-    console.log("  → VAD: END_SENSITIVITY_LOW (2500ms silence), NO_INTERRUPTION mode");
-    console.log("  → Thinking: 2048 token budget with thought summaries");
+    console.log("[Live] Vertex AI features active:");
+    console.log("  ✓ Affective Dialog — reads vocal emotion (tone, pace, tremor)");
+    console.log("  ✓ Proactive Audio — model decides when to speak vs. listen");
+    console.log("  ✓ Google Search Grounding — real-time fact verification");
+    console.log("  ✓ VAD: end_sensitivity=LOW, silence=2500ms, activity=" + interruptLabel);
+    console.log("  ✓ 7 Function Calling tools (updateMediationState, flagEscalation, etc.)");
+    console.log("  ✓ Input+Output transcription, Context compression, Session resumption");
+    console.log("  ✗ thinkingConfig — not supported on Vertex AI GA model (API key preview only)");
   } else {
     console.warn("[Live] ⚠️  Running in API key mode — affective dialog, proactive audio, and custom VAD are NOT available");
     console.warn("[Live]     For full mediation features, deploy with Vertex AI (USE_VERTEX_AI=true)");
