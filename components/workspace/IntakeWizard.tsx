@@ -14,6 +14,9 @@ import {
   ChevronDown,
   ChevronUp,
   Loader2,
+  User,
+  Users,
+  UserPlus,
 } from "lucide-react";
 import type { IntakeData } from "@/lib/types";
 import { processDocument } from "@/services/gemini-client";
@@ -121,6 +124,7 @@ export default function IntakeWizard({
   const [language, setLanguage] = useState("English");
 
   // Step 2
+  const [sessionType, setSessionType] = useState<"solo" | "two-party" | "multi-party">("two-party");
   const [partyAName, setPartyAName] = useState(defaultPartyAName !== "Party A" ? defaultPartyAName : "");
   const [partyARole, setPartyARole] = useState("");
   const [partyARelationship, setPartyARelationship] = useState("colleague");
@@ -151,8 +155,8 @@ export default function IntakeWizard({
   const step1Valid = caseTitle.trim().length > 0 && caseType !== "";
   const step2Valid =
     partyAName.trim().length > 0 &&
-    partyBName.trim().length > 0 &&
-    (powerBalance !== "no" || powerDetail.trim().length > 0);
+    (sessionType === "solo" || partyBName.trim().length > 0) &&
+    (sessionType === "solo" || powerBalance !== "no" || powerDetail.trim().length > 0);
   const step4Valid = consentGoodFaith && consentAI;
 
   const canNext = () => {
@@ -230,16 +234,17 @@ export default function IntakeWizard({
       caseType,
       mediatorStyle,
       language,
-      partyA: { name: partyAName, role: partyARole || undefined, relationship: partyARelationship },
-      partyB: { name: partyBName, role: partyBRole || undefined, relationship: partyBRelationship },
-      powerBalance,
+      sessionMode: sessionType,
+      partyA: { name: partyAName, role: partyARole || undefined, relationship: sessionType === "solo" ? "self" : partyARelationship },
+      partyB: { name: sessionType === "solo" ? partyAName : partyBName, role: (sessionType === "solo" ? undefined : partyBRole) || undefined, relationship: sessionType === "solo" ? "self" : partyBRelationship },
+      powerBalance: sessionType === "solo" ? "yes" : powerBalance,
       powerDetail: powerDetail || undefined,
       description: description || undefined,
       partyAGoal: partyAGoal || undefined,
-      partyBGoal: partyBGoal || undefined,
+      partyBGoal: sessionType === "solo" ? undefined : (partyBGoal || undefined),
       documentSummaries: docs.map((d) => d.summary),
       partyAStatement: partyAStatement || undefined,
-      partyBStatement: partyBStatement || undefined,
+      partyBStatement: sessionType === "solo" ? undefined : (partyBStatement || undefined),
       context,
     };
 
@@ -400,8 +405,44 @@ export default function IntakeWizard({
                 exit={{ opacity: 0, x: -20 }}
                 className="space-y-5"
               >
-                <h3 className="text-sm font-semibold text-white mb-3">Party Information</h3>
-                {(["A", "B"] as const).map((side) => {
+                <h3 className="text-sm font-semibold text-white mb-3">Session Type & Party Information</h3>
+
+                {/* Session type selector */}
+                <div className="space-y-2">
+                  <label className={labelCls}>Session type</label>
+                  <div className="flex gap-2">
+                    {([
+                      { value: "solo" as const, icon: User, label: "Solo", desc: "Work through a conflict on my own" },
+                      { value: "two-party" as const, icon: Users, label: "Two-party", desc: "Mediation between two parties" },
+                      { value: "multi-party" as const, icon: UserPlus, label: "Multi-party", desc: "Three or more parties" },
+                    ]).map(({ value, icon: Icon, label, desc }) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => setSessionType(value)}
+                        className={`flex-1 flex flex-col items-center gap-1.5 py-3 rounded-lg border text-sm transition-all ${
+                          sessionType === value
+                            ? "border-blue-500 bg-blue-500/10 text-blue-400"
+                            : "border-slate-700 text-slate-400 hover:border-slate-600"
+                        }`}
+                      >
+                        <Icon className="w-4 h-4" />
+                        <span className="font-medium text-xs">{label}</span>
+                        <span className="text-[10px] text-slate-500">{desc}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {sessionType === "multi-party" && (
+                  <div className="flex items-start gap-2 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg text-xs text-blue-300">
+                    <UserPlus className="w-4 h-4 shrink-0 mt-0.5" />
+                    <span>Additional parties can be added during the session.</span>
+                  </div>
+                )}
+
+                {/* Party cards */}
+                {(sessionType === "solo" ? (["A"] as const) : (["A", "B"] as const)).map((side) => {
                   const isA = side === "A";
                   const nameVal = isA ? partyAName : partyBName;
                   const setName = isA ? setPartyAName : setPartyBName;
@@ -413,15 +454,15 @@ export default function IntakeWizard({
                   return (
                     <div key={side} className={`p-4 rounded-xl border ${accent} space-y-3`}>
                       <div className={`text-xs font-semibold uppercase tracking-wider ${isA ? "text-sky-400" : "text-violet-400"}`}>
-                        Party {side}
+                        {sessionType === "solo" ? "Your Info" : `Party ${side}`}
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className={labelCls}>Name *</label>
+                          <label className={labelCls}>{sessionType === "solo" && isA ? "Your name *" : "Name *"}</label>
                           <input
                             value={nameVal}
                             onChange={(e) => setName(e.target.value)}
-                            placeholder={`Party ${side} name`}
+                            placeholder={sessionType === "solo" && isA ? "Your name" : `Party ${side} name`}
                             className={inputCls}
                           />
                         </div>
@@ -435,66 +476,70 @@ export default function IntakeWizard({
                           />
                         </div>
                       </div>
-                      <div>
-                        <label className={labelCls}>Relationship to other party</label>
-                        <select
-                          value={relVal}
-                          onChange={(e) => setRel(e.target.value)}
-                          className={inputCls}
-                        >
-                          {RELATIONSHIPS.map((r) => (
-                            <option key={r} value={r}>
-                              {r.replace("-", " / ")}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+                      {sessionType !== "solo" && (
+                        <div>
+                          <label className={labelCls}>Relationship to other party</label>
+                          <select
+                            value={relVal}
+                            onChange={(e) => setRel(e.target.value)}
+                            className={inputCls}
+                          >
+                            {RELATIONSHIPS.map((r) => (
+                              <option key={r} value={r}>
+                                {r.replace("-", " / ")}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
 
-                <div className="space-y-2">
-                  <label className={labelCls}>
-                    Do both parties have roughly equal negotiating power?
-                  </label>
-                  <div className="flex gap-2">
-                    {(["yes", "no", "unsure"] as const).map((v) => (
-                      <button
-                        key={v}
-                        type="button"
-                        onClick={() => setPowerBalance(v)}
-                        className={`flex-1 py-2 rounded-lg border text-sm capitalize transition-all ${
-                          powerBalance === v
-                            ? v === "no"
-                              ? "border-amber-500 bg-amber-500/10 text-amber-400"
-                              : "border-blue-500 bg-blue-500/10 text-blue-400"
-                            : "border-slate-700 text-slate-400 hover:border-slate-600"
-                        }`}
+                {sessionType !== "solo" && (
+                  <div className="space-y-2">
+                    <label className={labelCls}>
+                      Do both parties have roughly equal negotiating power?
+                    </label>
+                    <div className="flex gap-2">
+                      {(["yes", "no", "unsure"] as const).map((v) => (
+                        <button
+                          key={v}
+                          type="button"
+                          onClick={() => setPowerBalance(v)}
+                          className={`flex-1 py-2 rounded-lg border text-sm capitalize transition-all ${
+                            powerBalance === v
+                              ? v === "no"
+                                ? "border-amber-500 bg-amber-500/10 text-amber-400"
+                                : "border-blue-500 bg-blue-500/10 text-blue-400"
+                              : "border-slate-700 text-slate-400 hover:border-slate-600"
+                          }`}
+                        >
+                          {v}
+                        </button>
+                      ))}
+                    </div>
+                    {powerBalance === "no" && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        className="space-y-2"
                       >
-                        {v}
-                      </button>
-                    ))}
+                        <div className="flex items-start gap-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-xs text-amber-300">
+                          <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                          <span>CONCORDIA will actively balance participation to ensure equitable voice.</span>
+                        </div>
+                        <textarea
+                          value={powerDetail}
+                          onChange={(e) => setPowerDetail(e.target.value)}
+                          placeholder="Who holds more power and why?"
+                          rows={2}
+                          className={inputCls + " resize-none"}
+                        />
+                      </motion.div>
+                    )}
                   </div>
-                  {powerBalance === "no" && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: "auto" }}
-                      className="space-y-2"
-                    >
-                      <div className="flex items-start gap-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-xs text-amber-300">
-                        <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-                        <span>CONCORDIA will actively balance participation to ensure equitable voice.</span>
-                      </div>
-                      <textarea
-                        value={powerDetail}
-                        onChange={(e) => setPowerDetail(e.target.value)}
-                        placeholder="Who holds more power and why?"
-                        rows={2}
-                        className={inputCls + " resize-none"}
-                      />
-                    </motion.div>
-                  )}
-                </div>
+                )}
               </motion.div>
             )}
 
@@ -516,7 +561,7 @@ export default function IntakeWizard({
                   <textarea
                     value={description}
                     onChange={(e) => setDescription(e.target.value.slice(0, 500))}
-                    placeholder="Briefly describe the dispute..."
+                    placeholder={sessionType === "solo" ? "Describe the situation you're working through..." : "Briefly describe the dispute..."}
                     rows={3}
                     className={inputCls + " resize-none"}
                   />

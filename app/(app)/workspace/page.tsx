@@ -80,6 +80,8 @@ import MediationTimer from "@/components/workspace/MediationTimer";
 import ConnectionStatus from "@/components/workspace/ConnectionStatus";
 import PartyCardNew from "@/components/workspace/PartyCard";
 import QuickActions from "@/components/workspace/QuickActions";
+import MediatorControls from "@/components/workspace/MediatorControls";
+import type { SessionMode } from "@/components/workspace/MediatorControls";
 
 const PRIMITIVE_TYPES: PrimitiveType[] = [
   "Actor",
@@ -462,6 +464,9 @@ function WorkspaceInner() {
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
   const [showIntake, setShowIntake] = useState(false);
   const [intakeData, setIntakeData] = useState<IntakeData | null>(null);
+  const [sessionMode, setSessionMode] = useState<SessionMode>("two-party");
+  const [mediatorPaused, setMediatorPaused] = useState(false);
+  const [partyCount, setPartyCount] = useState(2);
   const [connectionLostBanner, setConnectionLostBanner] = useState(false);
   const [micDenied, setMicDenied] = useState(false);
   // Mediator state tracking for visual indicators
@@ -2473,9 +2478,59 @@ function WorkspaceInner() {
   );
 
   // ─── INTAKE WIZARD ───
+  const handleSkipPhase = () => {
+    const phases = ["Opening", "Discovery", "Exploration", "Negotiation", "Resolution", "Agreement"];
+    const currentIdx = phases.indexOf(liveMediationState?.phase || "Opening");
+    const nextPhase = phases[Math.min(currentIdx + 1, phases.length - 1)];
+    sessionRef.current?.sendContext(
+      `[MEDIATOR DIRECTIVE: Skip to ${nextPhase} phase now. Announce the transition briefly and begin ${nextPhase} behaviors.]`
+    );
+  };
+
+  const handlePauseMediator = () => {
+    setMediatorPaused(true);
+    sessionRef.current?.sendContext(
+      "[MEDIATOR DIRECTIVE: Go silent. Do NOT speak until you receive a resume directive. Continue listening.]"
+    );
+  };
+
+  const handleResumeMediator = () => {
+    setMediatorPaused(false);
+    sessionRef.current?.sendContext(
+      "[MEDIATOR DIRECTIVE: Resume. Pick up where we left off with a brief acknowledgment of what you heard during the pause.]"
+    );
+  };
+
+  const handleSkipToQuestion = () => {
+    sessionRef.current?.sendContext(
+      "[MEDIATOR DIRECTIVE: Move forward. Ask the next important question. Do not summarize or repeat anything.]"
+    );
+  };
+
+  const handleSetSessionMode = (mode: SessionMode) => {
+    setSessionMode(mode);
+    const instructions: Record<SessionMode, string> = {
+      solo: "[SESSION MODE: Solo. One person working through their own conflict. Use coaching/reflective approach. Ask 'What situation are you working through?' not 'What brought you here?' Help them see multiple perspectives. Frameworks: Solution-Focused, NVC, Argyris.]",
+      "two-party": "[SESSION MODE: Two-party. Standard mediation with two parties. Follow normal protocol.]",
+      "multi-party": "[SESSION MODE: Multi-party. 3+ parties. Use round-robin. Watch for alliances. Give each person explicit turns.]",
+    };
+    sessionRef.current?.sendContext(instructions[mode]);
+  };
+
+  const handleAddParty = () => {
+    const n = partyCount + 1;
+    setPartyCount(n);
+    sessionRef.current?.sendContext(
+      `[PARTY ADDED: Party ${String.fromCharCode(64 + n)} joined. Welcome them and ask for a brief introduction.]`
+    );
+  };
+
   const handleIntakeComplete = (data: IntakeData) => {
     setIntakeData(data);
     setShowIntake(false);
+    if (data.sessionMode) {
+      setSessionMode(data.sessionMode);
+    }
     // Apply intake data to the active case
     updateActiveCase({
       title: data.caseTitle,
@@ -2727,6 +2782,24 @@ function WorkspaceInner() {
       {(isRecording || liveMediationState) && (
         <div className="px-6 py-2 border-b border-[var(--color-border)] bg-[var(--color-surface)] shrink-0 hidden md:block">
           <PhaseTimeline currentPhase={liveMediationState?.phase || "Opening"} />
+        </div>
+      )}
+
+      {/* ─── MEDIATOR CONTROLS ─── */}
+      {isRecording && (
+        <div className="px-6 py-1.5 border-b border-[var(--color-border)] shrink-0">
+          <MediatorControls
+            isRecording={isRecording}
+            sessionMode={sessionMode}
+            onSetSessionMode={handleSetSessionMode}
+            onSkipPhase={handleSkipPhase}
+            onPauseMediator={handlePauseMediator}
+            onResumeMediator={handleResumeMediator}
+            onSkipToQuestion={handleSkipToQuestion}
+            mediatorPaused={mediatorPaused}
+            partyCount={partyCount}
+            onAddParty={handleAddParty}
+          />
         </div>
       )}
 

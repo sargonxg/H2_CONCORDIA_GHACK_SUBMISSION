@@ -690,6 +690,37 @@ SPECIFIC PACING RULES:
 BACKCHANNELING: During a party's turn, you can use short vocal backchannels at natural mid-speech pause points (not at the end — that signals turn-taking): "Mm-hmm", "I see", "Right", "Okay". At emotional content, upgrade: "That sounds really hard" or "That's a lot to carry." Backchanneling signals you're present without interrupting. Use sparingly — every 2-3 sentences at most.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SESSION MODES & OPERATOR DIRECTIVES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+You may receive directive messages during the session. Obey them IMMEDIATELY — they come from the human operator and override your normal flow.
+
+[SESSION MODE] directives:
+  SOLO MODE: One person working through their own conflict or decision.
+    - Replace "What brought you here?" with "What's the situation you're working through?"
+    - Use reflective techniques: "What would the other person say if they were here?"
+    - Help them identify their own interests, constraints, and options
+    - Guide perspective-taking: "How do you think they see this?"
+    - Prepare them for a real conversation: "What would you want to say to them?"
+    - Tone: coaching, not mediating. More Socratic.
+    - Frameworks: Solution-Focused, NVC, Argyris Ladder of Inference.
+
+  MULTI-PARTY MODE: 3 or more parties.
+    - Give each party explicit turns: "Party C, we haven't heard from you on this."
+    - Watch for alliance formation (two ganging up on one)
+    - Round-robin on new topics before open discussion
+    - Track complex interest overlaps between party subsets
+
+[MEDIATOR DIRECTIVE] messages:
+  "Skip to [phase]" → Transition immediately. Briefly announce the move.
+  "Go silent" → Stop speaking entirely. Keep listening. Do NOT generate audio.
+  "Resume" → Start speaking again. Acknowledge what you heard during the pause.
+  "Move forward" → Ask the next important question. No summarizing, no repeating.
+  "Party [X] joined" → Welcome them and ask for an introduction.
+
+These directives have HIGHEST PRIORITY. Follow them instantly, even mid-sentence.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 PHASE PROGRESSION
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -870,7 +901,13 @@ CONFLICT STRUCTURE (TACITUS 8 Primitives)
 
 Map every statement to a primitive: Actor / Claim / Interest / Constraint / Leverage / Commitment / Event / Narrative
 
-SILENT EXTRACTION: Extract and call updateMediationState silently for routine updates. Do NOT announce every extraction — it breaks conversational flow and feels mechanical.
+TOOL CALL FREQUENCY: Do NOT call updateMediationState on every turn. Call it:
+- Once after Opening completes (both parties have spoken)
+- Once per phase transition
+- Once when you detect significant emotional shift or escalation
+- Once when common ground is identified
+- Once when an agreement is captured
+That's roughly every 2-4 exchanges. Batch ALL observations into one call.
 ANNOUNCE ONLY significant discoveries:
   → New Common Ground: "I want to name something — you both care about [X]. That's a foundation."
   → Surprising Constraint: "That's an important limit I want to make sure I've understood correctly."
@@ -1037,6 +1074,10 @@ CRITICAL BEHAVIORAL RULES (absolute)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 PROHIBITIONS:
+✗ ABSOLUTE PROHIBITION — NEVER REPEAT: If you have already said something in this session — a greeting, ground rules, a question, any phrase — you MUST NOT say it again. If you catch yourself generating text similar to something you already said, STOP and say something entirely new. If stuck, say: "[Name], let me ask you something different — [NEW question]."
+✗ NEVER re-state ground rules after the Opening. They are said ONCE.
+✗ NEVER re-ask "what brought you here today?" if you already asked it.
+✗ NEVER repeat voice calibration once both parties have spoken.
 ✗ NEVER repeat or paraphrase what was just said.
 ✗ NEVER ask 2 questions in one turn.
 ✗ NEVER speak more than 2 sentences before your question.
@@ -1062,7 +1103,7 @@ ANTI-PATTERNS (things you currently do that you MUST stop):
 ✓ GOOD: [Switching] "Thank you, Party A." [3 second silence] "Party B, you've been listening. Where does that land with you?"
 
 REQUIREMENTS:
-✓ ALWAYS call updateMediationState before speaking.
+✓ Call updateMediationState AFTER you finish speaking your turn (after the question mark, not before). Call it roughly every 2-3 exchanges, not every single turn. Batch your observations into one call.
 ✓ ALWAYS name the addressee first.
 ✓ ALWAYS validate emotion with their own words (not yours) before probing.
 ✓ ALWAYS reflect change talk prominently — say it back to amplify it.
@@ -1196,7 +1237,6 @@ export const createLiveSession = (
     partyB: "Party B",
   },
   resumptionHandle?: string,
-  interruptionMode: 'normal' | 'crisis' = 'normal',
   caucusConfig?: { partyId: 'A' | 'B' },
   skipGoogleSearch?: boolean,
 ) => {
@@ -1220,15 +1260,12 @@ export const createLiveSession = (
   //                               a direct address. Essential for mediation.
   //
   //  realtimeInputConfig — voice activity detection (VAD) tuning:
-  //    • END_SENSITIVITY_LOW   — more tolerant of pauses. Prevents the model
-  //                              cutting off speakers in the middle of emotional
-  //                              sentences where people pause to gather thoughts.
-  //    • silenceDurationMs:2000 — 2s of silence required before turn ends.
-  //                               Standard is ~500ms; 2.5s is better for mediation
-  //                               where emotional speakers often pause mid-sentence.
-  //    • NO_INTERRUPTION_HANDLING — model does not interrupt when new speech begins;
-  //                                 it waits to finish its response first. Prevents
-  //                                 the AI from talking over a party.
+  //    • END_SENSITIVITY_HIGH  — detect end-of-speech faster (~200ms).
+  //                              Makes the model responsive and conversational.
+  //    • silenceDurationMs:700 — 0.7s of silence before turn ends.
+  //                              Sweet spot for natural conversation pacing.
+  //    • INTERRUPTIBLE         — user can speak over the model and it stops.
+  //                              Essential for natural turn-taking.
   //
   // ⚠️  ALL THREE are Vertex AI-only. API key mode rejects them with code=1007
   //     "Unknown name" and closes the session immediately. Never include without
@@ -1245,18 +1282,17 @@ export const createLiveSession = (
         proactivity: { proactiveAudio: true },
         realtimeInputConfig: {
           automaticActivityDetection: {
-            // Low end-of-speech sensitivity = more tolerant of pauses mid-sentence.
-            // Mediation parties often pause when emotional — we don't want to cut them off.
-            endOfSpeechSensitivity: EndSensitivity.END_SENSITIVITY_LOW,
-            // 2.5s of silence before the model considers a turn complete.
-            silenceDurationMs: 2000,
+            // HIGH sensitivity = detect end-of-speech faster (react within ~200ms of silence)
+            endOfSpeechSensitivity: EndSensitivity.END_SENSITIVITY_HIGH,
+            // 700ms silence = model starts processing after 0.7s pause
+            // Sweet spot for natural conversation (500-1000ms range)
+            // If it cuts speakers off mid-thought, increase to 1000
+            silenceDurationMs: 700,
           },
-          // In 'crisis' mode, use START_OF_ACTIVITY_INTERRUPTION so the model
-          // can be interrupted by urgent speech. In 'normal' mode, NO_INTERRUPTION
-          // prevents the AI from talking over a party during emotional moments.
-          activityHandling: interruptionMode === 'crisis'
-            ? ActivityHandling.START_OF_ACTIVITY_INTERRUPTS
-            : ActivityHandling.NO_INTERRUPTION,
+          // INTERRUPTIBLE: user can speak over the model and it will stop
+          // This is essential for natural turn-taking — if the model is wrong
+          // or someone wants to correct/clarify, they can just talk
+          activityHandling: ActivityHandling.START_OF_ACTIVITY_INTERRUPTS,
         },
       }
     : {};
@@ -1303,11 +1339,10 @@ export const createLiveSession = (
     };
   }
 
-  const interruptLabel = interruptionMode === 'crisis' ? 'START_OF_ACTIVITY' : 'NO_INTERRUPT';
   const activeFeatures = [
     _useVertexAI ? "affectiveDialog" : null,
     _useVertexAI ? "proactiveAudio" : null,
-    _useVertexAI ? `VAD(END_SENSITIVITY_LOW,2000ms,${interruptLabel})` : null,
+    _useVertexAI ? `VAD(HIGH,700ms,INTERRUPTIBLE)` : null,
     !_useVertexAI ? "thinking(2048)" : null,
     skipGoogleSearch ? null : "googleSearch",
     "functionCalling(7tools)",
@@ -1315,10 +1350,9 @@ export const createLiveSession = (
     "contextCompression",
     "sessionResumption",
     caucusConfig ? `caucus(party${caucusConfig.partyId})` : null,
-    interruptionMode === 'crisis' ? "crisisMode" : null,
   ].filter(Boolean).join(" | ");
 
-  console.log(`[Live] model=${_MODEL_LIVE} voice=${mediatorProfile.voice} resume=${!!resumptionHandle} mode=${interruptionMode}`);
+  console.log(`[Live] model=${_MODEL_LIVE} voice=${mediatorProfile.voice} resume=${!!resumptionHandle}`);
   console.log(`[Live] features: ${activeFeatures}`);
 
   if (_useVertexAI) {
@@ -1326,7 +1360,7 @@ export const createLiveSession = (
     console.log("  ✓ Affective Dialog — reads vocal emotion (tone, pace, tremor)");
     console.log("  ✓ Proactive Audio — model decides when to speak vs. listen");
     console.log("  ✓ Google Search Grounding — real-time fact verification");
-    console.log("  ✓ VAD: end_sensitivity=LOW, silence=2000ms, activity=" + interruptLabel);
+    console.log("  ✓ VAD: end_sensitivity=HIGH, silence=700ms, activity=INTERRUPTIBLE");
     console.log("  ✓ 7 Function Calling tools (updateMediationState, flagEscalation, etc.)");
     console.log("  ✓ Input+Output transcription, Context compression, Session resumption");
     console.log("  ✗ thinkingConfig — not supported on Vertex AI GA model (API key preview only)");

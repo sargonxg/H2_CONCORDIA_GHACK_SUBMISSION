@@ -391,6 +391,7 @@ export type IntakeData = {
   caseType: string;
   mediatorStyle: 'professional' | 'empathic';
   language: string;
+  sessionMode?: 'solo' | 'two-party' | 'multi-party';
   languageCode?: string;
   partyALanguage?: string;
   partyALanguageCode?: string;
