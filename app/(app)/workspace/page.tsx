@@ -417,8 +417,8 @@ function WorkspaceInner() {
   });
   const [showSettings, setShowSettings] = useState(false);
   const [activeTab, setActiveTab] = useState<
-    "transcript" | "structure" | "pathways" | "graph" | "timeline"
-  >("transcript");
+    "structure" | "pathways" | "graph" | "timeline"
+  >("structure");
   const [selectedFramework, setSelectedFramework] = useState("");
   const [expandedPathways, setExpandedPathways] = useState<Set<number>>(new Set([0]));
   const [showSummary, setShowSummary] = useState(false);
@@ -541,6 +541,23 @@ function WorkspaceInner() {
       waitingTimerRef.current = null;
     }
     setWaitingSeconds(0);
+  }, []);
+
+  const playTurnChime = useCallback(() => {
+    try {
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(880, ctx.currentTime);       // A5
+      osc.frequency.setValueAtTime(1047, ctx.currentTime + 0.1); // C6
+      gain.gain.setValueAtTime(0.08, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.3);
+    } catch {}
   }, []);
 
   useEffect(() => {
@@ -888,6 +905,7 @@ function WorkspaceInner() {
               if (message.serverContent?.turnComplete) {
                 setMediatorState("waiting");
                 startWaitingTimer();
+                playTurnChime();  // Soft chime: "your turn"
               }
               const elapsed = Math.floor((Date.now() - sessionStartTimeRef.current) / 1000);
               const mm = String(Math.floor(elapsed / 60)).padStart(2, "0");
@@ -2920,36 +2938,133 @@ function WorkspaceInner() {
         </div>
       )}
 
-      {/* ─── MOBILE PANEL TABS ─── */}
-      <div className="flex lg:hidden shrink-0 overflow-x-auto border-b border-[var(--color-border)] bg-[var(--color-surface)] px-3 gap-1 py-2">
-        {([
-          { id: "left" as const,   label: "Profiles" },
-          { id: "center" as const, label: "Workspace" },
-          { id: "right" as const,  label: "Tools" },
-        ]).map((p) => (
-          <button
-            key={p.id}
-            onClick={() => setMobilePanel(p.id)}
-            className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-              mobilePanel === p.id
-                ? "bg-[var(--color-accent)] text-white"
-                : "text-[var(--color-text-muted)] hover:text-white bg-[var(--color-bg)] border border-[var(--color-border)]"
-            }`}
-          >
-            {p.label}
-          </button>
-        ))}
-        {/* Mini duration + phase */}
-        <div className="ml-auto flex items-center gap-2 text-[10px] font-mono text-[var(--color-text-muted)] whitespace-nowrap">
-          <span className="hidden sm:block">{liveMediationState?.phase || "Opening"}</span>
-          {(isRecording || status === "LIVE") && sessionDuration > 0 && (
-            <MediationTimer
-              startTime={sessionStartTimeRef.current}
-              sessionDuration={sessionDuration}
-              currentPhase={liveMediationState?.phase || "Opening"}
-            />
-          )}
-        </div>
+      {/* ─── MOBILE LAYOUT ─── */}
+      <div className="flex lg:hidden flex-col flex-1 overflow-hidden">
+        {isRecording ? (
+          /* LIVE SESSION: Full-screen transcript with floating controls */
+          <div className="flex flex-col flex-1 overflow-hidden relative">
+            {/* Status bar */}
+            <div className="shrink-0 px-3 py-1.5 bg-[var(--color-surface)] border-b border-[var(--color-border)]">
+              <MediatorStatus
+                state={mediatorState}
+                targetParty={liveMediationState?.targetActor || activeCase?.partyAName || "Party A"}
+                secondsWaiting={waitingSeconds}
+              />
+            </div>
+
+            {/* Scrollable transcript (main area) */}
+            <div className="flex-1 overflow-y-auto">
+              <TranscriptPanel
+                transcript={activeCase?.transcript ?? ""}
+                isLive={true}
+                extractionNotice={extractionNotice}
+                autoScrollEnabled={autoScrollEnabled}
+                setAutoScrollEnabled={setAutoScrollEnabled}
+                transcriptEndRef={transcriptEndRef}
+                partyAName={activeCase?.partyAName ?? "Party A"}
+                partyBName={activeCase?.partyBName ?? "Party B"}
+                onTranscriptChange={(val) => updateActiveCase({ transcript: val })}
+                onScrollToLatest={() => {
+                  setAutoScrollEnabled(true);
+                  transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
+                }}
+                onAnalyze={handleSimulateExtraction}
+                isAnalyzing={status === "ANALYZING"}
+                isRecording={isRecording}
+              />
+            </div>
+
+            {/* Fixed bottom: speaker buttons + text input */}
+            <div className="shrink-0 border-t border-[var(--color-border)] bg-[var(--color-surface)] p-2 safe-area-bottom">
+              {/* Speaker buttons */}
+              <div className="flex items-center justify-center gap-2 pb-2">
+                <span className="text-[9px] text-[var(--color-text-muted)] uppercase">Speaking:</span>
+                {[
+                  { name: activeCase?.partyAName || "Party A", color: "#4ECDC4" },
+                  { name: activeCase?.partyBName || "Party B", color: "#A78BFA" },
+                ].map(({ name, color }) => (
+                  <button key={name}
+                    onClick={() => sessionRef.current?.sendContext(`[SPEAKER IDENTIFICATION: Current speaker is ${name}]`)}
+                    className="px-3 py-1 rounded-full text-[11px] font-medium border"
+                    style={{ color, borderColor: color + "35", backgroundColor: color + "10" }}>
+                    {name}
+                  </button>
+                ))}
+              </div>
+              {/* Text input */}
+              <TextInput
+                partyAName={activeCase?.partyAName || "Party A"}
+                partyBName={activeCase?.partyBName || "Party B"}
+                disabled={false}
+                onSendMessage={(text, party) => {
+                  if (!sessionRef.current) return;
+                  sessionRef.current.sendContext(`[${party} says (typed)]: "${text}"`);
+                  const elapsed = Math.floor((Date.now() - sessionStartTimeRef.current) / 1000);
+                  const mm = String(Math.floor(elapsed / 60)).padStart(2, "0");
+                  const ss = String(elapsed % 60).padStart(2, "0");
+                  setCases((prev) =>
+                    prev.map((c) => c.id === activeCaseIdRef.current
+                      ? { ...c, transcript: c.transcript + `\n\n[${mm}:${ss}] [${party} — typed]: ${text}` }
+                      : c));
+                  setMediatorState("processing");
+                }}
+              />
+            </div>
+
+            {/* Floating access to other panels */}
+            <div className="absolute bottom-20 right-3 flex flex-col gap-2 z-20">
+              {[
+                { panel: "left" as const, label: "Profiles", icon: "👤" },
+                { panel: "right" as const, label: "Findings", icon: "📊" },
+              ].map(({ panel, icon, label }) => (
+                <button key={panel}
+                  onClick={() => setMobilePanel(mobilePanel === panel ? "center" : panel)}
+                  className={`w-10 h-10 rounded-full flex items-center justify-center text-sm shadow-lg border transition-all ${
+                    mobilePanel === panel
+                      ? "bg-[var(--color-accent)] border-[var(--color-accent)] text-white"
+                      : "bg-[var(--color-surface)] border-[var(--color-border)] text-[var(--color-text-muted)]"
+                  }`}
+                  title={label}>
+                  {icon}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          /* NON-LIVE: Original tab-based mobile layout */
+          <>
+            <div className="flex shrink-0 overflow-x-auto border-b border-[var(--color-border)] bg-[var(--color-surface)] px-3 gap-1 py-2">
+              {([
+                { id: "left" as const,   label: "Profiles" },
+                { id: "center" as const, label: "Workspace" },
+                { id: "right" as const,  label: "Tools" },
+              ]).map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => setMobilePanel(p.id)}
+                  className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                    mobilePanel === p.id
+                      ? "bg-[var(--color-accent)] text-white"
+                      : "text-[var(--color-text-muted)] hover:text-white bg-[var(--color-bg)] border border-[var(--color-border)]"
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+              {/* Mini duration + phase */}
+              <div className="ml-auto flex items-center gap-2 text-[10px] font-mono text-[var(--color-text-muted)] whitespace-nowrap">
+                <span className="hidden sm:block">{liveMediationState?.phase || "Opening"}</span>
+                {(isRecording || status === "LIVE") && sessionDuration > 0 && (
+                  <MediationTimer
+                    startTime={sessionStartTimeRef.current}
+                    sessionDuration={sessionDuration}
+                    currentPhase={liveMediationState?.phase || "Opening"}
+                  />
+                )}
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       {/* ─── MAIN CONTENT AREA ─── */}
@@ -3203,120 +3318,134 @@ function WorkspaceInner() {
           </div>
         </div>
 
-        {/* ─── CENTER: Tabbed Content ─── */}
+        {/* ─── CENTER: Split — Transcript + Tabs ─── */}
         <div className={`flex-1 flex flex-col overflow-hidden ${mobilePanel === "center" ? "flex" : "hidden"} lg:flex`}>
-          <div className="flex gap-1 mb-3 shrink-0 flex-wrap">
-            {(
-              [
-                { id: "transcript" as const, label: "Live Transcript", icon: FileText },
-                { id: "structure" as const, label: `Case Structure${activeCase?.primitives.length ? ` (${activeCase.primitives.length})` : ""}`, icon: Database },
-                { id: "pathways" as const, label: "Resolution Pathways", icon: Lightbulb },
-                { id: "graph" as const, label: "Knowledge Graph", icon: Network },
-                { id: "timeline" as const, label: "Timeline", icon: History },
-              ] as const
-            ).map((tab) => {
-              const Icon = tab.icon;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                    activeTab === tab.id
-                      ? "bg-[var(--color-accent)] text-white shadow-md shadow-[var(--color-accent)]/20"
-                      : "bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:text-white border border-[var(--color-border)]"
-                  }`}
-                >
-                  <Icon className="w-4 h-4" />
-                  {tab.label}
-                </button>
-              );
-            })}
-          </div>
 
-          {/* ── MEDIATOR STATUS & CONTROLS ── */}
-          {isRecording && (
-            <MediatorStatus
-              state={mediatorState}
-              targetParty={liveMediationState?.targetActor || activeCase?.partyAName || "Party A"}
-              secondsWaiting={waitingSeconds}
-            />
-          )}
-          {isRecording && (
-            <div className="flex items-center justify-center gap-2 py-1.5">
-              <span className="text-[10px] text-[var(--color-text-muted)] uppercase tracking-wider">Speaking:</span>
-              {[
-                { name: activeCase?.partyAName || "Party A", color: "#4ECDC4" },
-                { name: activeCase?.partyBName || "Party B", color: "#A78BFA" },
-              ].map(({ name, color }) => (
-                <button
-                  key={name}
-                  onClick={() => {
-                    sessionRef.current?.sendContext(
-                      `[SPEAKER IDENTIFICATION: The person currently speaking is ${name}. Update your speaker tracking and address them by name.]`
-                    );
+          {/* ── TOP: Always-visible transcript (during live session) ── */}
+          {(isRecording || status === "LIVE" || status === "RECONNECTING" || activeCase?.transcript) && (
+            <div className="flex flex-col min-h-[200px] max-h-[55%] border-b border-[var(--color-border)]">
+              {/* Transcript header with MediatorStatus + Speaker buttons */}
+              <div className="flex items-center justify-between px-3 py-1.5 bg-[var(--color-surface)] border-b border-[var(--color-border)] shrink-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-semibold text-[var(--color-text)] uppercase tracking-wider">Live Transcript</span>
+                  {isRecording && (
+                    <span className="flex items-center gap-1 text-[10px] text-red-400">
+                      <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
+                      LIVE
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  {/* Speaker ID buttons */}
+                  {isRecording && (
+                    <>
+                      <span className="text-[9px] text-[var(--color-text-muted)] uppercase tracking-wider">Speaking:</span>
+                      {[
+                        { name: activeCase?.partyAName || "Party A", color: "#4ECDC4" },
+                        { name: activeCase?.partyBName || "Party B", color: "#A78BFA" },
+                      ].map(({ name, color }) => (
+                        <button
+                          key={name}
+                          onClick={() => sessionRef.current?.sendContext(`[SPEAKER IDENTIFICATION: Current speaker is ${name}]`)}
+                          className="px-2 py-0.5 rounded-full text-[10px] font-medium border transition-colors hover:brightness-125"
+                          style={{ color, borderColor: color + "35", backgroundColor: color + "10" }}
+                        >
+                          {name}
+                        </button>
+                      ))}
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* MediatorStatus bar */}
+              {isRecording && (
+                <MediatorStatus
+                  state={mediatorState}
+                  targetParty={liveMediationState?.targetActor || activeCase?.partyAName || "Party A"}
+                  secondsWaiting={waitingSeconds}
+                />
+              )}
+
+              {/* Transcript content — scrollable */}
+              <div className="flex-1 overflow-y-auto">
+                <TranscriptPanel
+                  transcript={activeCase?.transcript ?? ""}
+                  isLive={isRecording || status === "LIVE" || status === "RECONNECTING"}
+                  extractionNotice={extractionNotice}
+                  autoScrollEnabled={autoScrollEnabled}
+                  setAutoScrollEnabled={setAutoScrollEnabled}
+                  transcriptEndRef={transcriptEndRef}
+                  partyAName={activeCase?.partyAName ?? "Party A"}
+                  partyBName={activeCase?.partyBName ?? "Party B"}
+                  onTranscriptChange={(val) => updateActiveCase({ transcript: val })}
+                  onScrollToLatest={() => {
+                    setAutoScrollEnabled(true);
+                    transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
                   }}
-                  className="px-3 py-1 rounded-full text-[11px] font-medium border transition-colors hover:brightness-110"
-                  style={{ color, borderColor: color + "35", backgroundColor: color + "10" }}
-                >
-                  {name}
-                </button>
-              ))}
+                  onAnalyze={handleSimulateExtraction}
+                  isAnalyzing={status === "ANALYZING"}
+                  isRecording={isRecording}
+                />
+              </div>
+
+              {/* Text input at bottom of transcript */}
+              {isRecording && (
+                <div className="shrink-0 border-t border-[var(--color-border)]">
+                  <TextInput
+                    partyAName={activeCase?.partyAName || "Party A"}
+                    partyBName={activeCase?.partyBName || "Party B"}
+                    disabled={!isRecording}
+                    onSendMessage={(text, party) => {
+                      if (!sessionRef.current) return;
+                      sessionRef.current.sendContext(`[${party} says (typed input)]: "${text}"`);
+                      const elapsed = Math.floor((Date.now() - sessionStartTimeRef.current) / 1000);
+                      const mm = String(Math.floor(elapsed / 60)).padStart(2, "0");
+                      const ss = String(elapsed % 60).padStart(2, "0");
+                      setCases((prev) =>
+                        prev.map((c) =>
+                          c.id === activeCaseIdRef.current
+                            ? { ...c, transcript: c.transcript + (c.transcript ? "\n\n" : "") + `[${mm}:${ss}] [${party} — typed]: ${text}` }
+                            : c,
+                        ),
+                      );
+                      setMediatorState("processing");
+                    }}
+                  />
+                </div>
+              )}
             </div>
           )}
 
-          {/* ── TRANSCRIPT TAB ── */}
-          {activeTab === "transcript" && (
-            <TranscriptPanel
-              transcript={activeCase?.transcript ?? ""}
-              isLive={isRecording || status === "LIVE" || status === "RECONNECTING"}
-              extractionNotice={extractionNotice}
-              autoScrollEnabled={autoScrollEnabled}
-              setAutoScrollEnabled={setAutoScrollEnabled}
-              transcriptEndRef={transcriptEndRef}
-              partyAName={activeCase?.partyAName ?? "Party A"}
-              partyBName={activeCase?.partyBName ?? "Party B"}
-              onTranscriptChange={(val) => updateActiveCase({ transcript: val })}
-              onScrollToLatest={() => {
-                setAutoScrollEnabled(true);
-                transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
-              }}
-              onAnalyze={handleSimulateExtraction}
-              isAnalyzing={status === "ANALYZING"}
-              isRecording={isRecording}
-            />
-          )}
-          {isRecording && (
-            <div className="flex justify-center py-2">
-              <TextInput
-                partyAName={activeCase?.partyAName || "Party A"}
-                partyBName={activeCase?.partyBName || "Party B"}
-                disabled={!isRecording}
-                onSendMessage={(text, party) => {
-                  if (!sessionRef.current) return;
-                  sessionRef.current.sendContext(
-                    `[${party} says (typed input)]: "${text}"`
-                  );
-                  const elapsed = Math.floor((Date.now() - sessionStartTimeRef.current) / 1000);
-                  const mm = String(Math.floor(elapsed / 60)).padStart(2, "0");
-                  const ss = String(elapsed % 60).padStart(2, "0");
-                  setCases((prev) =>
-                    prev.map((c) =>
-                      c.id === activeCaseIdRef.current
-                        ? {
-                            ...c,
-                            transcript:
-                              c.transcript +
-                              (c.transcript ? "\n\n" : "") +
-                              `[${mm}:${ss}] [${party} — typed]: ${text}`,
-                          }
-                        : c,
-                    ),
-                  );
-                  setMediatorState("processing");
-                }}
-              />
+          {/* ── BOTTOM: Tabbed analysis panels ── */}
+          <div className="flex-1 flex flex-col overflow-hidden">
+            {/* Tab bar */}
+            <div className="flex gap-1 mb-3 shrink-0 flex-wrap p-2">
+              {(
+                [
+                  { id: "structure" as const, label: `Case Structure${activeCase?.primitives.length ? ` (${activeCase.primitives.length})` : ""}`, icon: Database },
+                  { id: "pathways" as const, label: "Resolution Pathways", icon: Lightbulb },
+                  { id: "graph" as const, label: "Knowledge Graph", icon: Network },
+                  { id: "timeline" as const, label: "Timeline", icon: History },
+                ] as const
+              ).map((tab) => {
+                const Icon = tab.icon;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                      activeTab === tab.id
+                        ? "bg-[var(--color-accent)] text-white shadow-md shadow-[var(--color-accent)]/20"
+                        : "bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:text-white border border-[var(--color-border)]"
+                    }`}
+                  >
+                    <Icon className="w-4 h-4" />
+                    {tab.label}
+                  </button>
+                );
+              })}
             </div>
-          )}
 
           {/* ── STRUCTURE TAB ── */}
           {activeTab === "structure" && (
@@ -4001,6 +4130,7 @@ function WorkspaceInner() {
               </div>
             </div>
           )}
+          </div>{/* end BOTTOM tabbed panels */}
         </div>
 
         {/* ─── RIGHT: Live Structured Items ─── */}

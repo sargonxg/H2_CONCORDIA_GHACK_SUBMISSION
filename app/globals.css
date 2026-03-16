@@ -139,6 +139,11 @@ body {
   background: var(--color-accent);
 }
 
+/* ── Safe area for mobile notch/home bar ── */
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 8px);
+}
+
 /* ── Accessibility: reduced-motion ── */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
