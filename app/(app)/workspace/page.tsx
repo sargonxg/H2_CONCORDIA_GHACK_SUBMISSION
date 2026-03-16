@@ -76,6 +76,8 @@ import BlindBidding from "@/components/workspace/BlindBidding";
 import EmotionTimeline from "@/components/workspace/EmotionTimeline";
 import WorkspaceLayout from "@/components/workspace/WorkspaceLayout";
 import PhaseTimeline from "@/components/workspace/PhaseTimeline";
+import MediatorControls from "@/components/workspace/MediatorControls";
+import type { SessionMode } from "@/components/workspace/MediatorControls";
 import MediationTimer from "@/components/workspace/MediationTimer";
 import ConnectionStatus from "@/components/workspace/ConnectionStatus";
 import PartyCardNew from "@/components/workspace/PartyCard";
@@ -457,6 +459,11 @@ function WorkspaceInner() {
   const [joinName, setJoinName] = useState("");
   const [joinLoading, setJoinLoading] = useState(false);
   const [joinError, setJoinError] = useState("");
+
+  // ── Mediator session controls ──────────────────────────────────────────────
+  const [sessionMode, setSessionMode] = useState<SessionMode>("two-party");
+  const [mediatorPaused, setMediatorPaused] = useState(false);
+  const [partyCount, setPartyCount] = useState(2);
 
   const [demoMode, setDemoMode] = useState(false);
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
@@ -2290,6 +2297,67 @@ function WorkspaceInner() {
     );
   };
 
+  // ── Mediator session control handlers ──────────────────────────────────────
+  const handleSkipPhase = () => {
+    const phases = ["Opening", "Discovery", "Exploration", "Negotiation", "Resolution", "Agreement"];
+    const currentIdx = phases.indexOf(liveMediationState?.phase || "Opening");
+    const nextPhase = phases[Math.min(currentIdx + 1, phases.length - 1)];
+    if (sessionRef.current) {
+      sessionRef.current.sendContext(
+        `[MEDIATOR DIRECTIVE: Skip to ${nextPhase} phase immediately. The human mediator has decided to advance. Announce the transition briefly and begin ${nextPhase} phase behaviors.]`
+      );
+    }
+  };
+
+  const handlePauseMediator = () => {
+    setMediatorPaused(true);
+    if (sessionRef.current) {
+      sessionRef.current.sendContext(
+        "[MEDIATOR DIRECTIVE: Go silent. The human mediator has paused you. Do NOT speak until you receive a resume directive. Continue listening and tracking but do not generate audio output.]"
+      );
+    }
+  };
+
+  const handleResumeMediator = () => {
+    setMediatorPaused(false);
+    if (sessionRef.current) {
+      sessionRef.current.sendContext(
+        "[MEDIATOR DIRECTIVE: Resume active mediation. The human mediator has un-paused you. Pick up where we left off with a brief acknowledgment of what you heard during the pause.]"
+      );
+    }
+  };
+
+  const handleSkipToQuestion = () => {
+    if (sessionRef.current) {
+      sessionRef.current.sendContext(
+        "[MEDIATOR DIRECTIVE: Move forward. Ask the next most important question for this phase. Do not summarize or repeat anything already discussed.]"
+      );
+    }
+  };
+
+  const handleSetSessionMode = (mode: SessionMode) => {
+    setSessionMode(mode);
+    if (sessionRef.current) {
+      const modeInstructions: Record<SessionMode, string> = {
+        "solo": "[SESSION MODE CHANGE: Solo mode. There is only ONE person in this session. They are working through an internal conflict, a decision, or processing a dispute they're involved in. Adapt your approach: use reflective questioning, help them see multiple perspectives of their situation, guide them through interest identification and option generation for their own decision-making. Address them directly, not as 'Party A'.]",
+        "two-party": "[SESSION MODE CHANGE: Standard two-party mediation. Two parties are present. Follow normal mediation protocol.]",
+        "multi-party": "[SESSION MODE CHANGE: Multi-party mode. More than two parties are involved. Ensure each party gets balanced speaking time. Use round-robin questioning when introducing new topics. Track alliances and sub-conflicts between party pairs.]",
+      };
+      sessionRef.current.sendContext(modeInstructions[mode]);
+    }
+  };
+
+  const handleAddParty = () => {
+    const newCount = partyCount + 1;
+    setPartyCount(newCount);
+    const letter = String.fromCharCode(64 + newCount); // C, D, E...
+    if (sessionRef.current) {
+      sessionRef.current.sendContext(
+        `[PARTY ADDED: Party ${letter} has joined the mediation. Welcome them briefly and ask them to introduce themselves.]`
+      );
+    }
+  };
+
   const handleGenerateAgreement = async () => {
     if (!activeCase || agreements.length === 0) return;
     setAgreementLoading(true);
@@ -2727,6 +2795,25 @@ function WorkspaceInner() {
       {(isRecording || liveMediationState) && (
         <div className="px-6 py-2 border-b border-[var(--color-border)] bg-[var(--color-surface)] shrink-0 hidden md:block">
           <PhaseTimeline currentPhase={liveMediationState?.phase || "Opening"} />
+        </div>
+      )}
+
+      {/* ─── MEDIATOR CONTROLS ─── */}
+      {isRecording && (
+        <div className="px-6 py-1.5 border-b border-[var(--color-border)] shrink-0">
+          <MediatorControls
+            isRecording={isRecording}
+            currentPhase={liveMediationState?.phase || "Opening"}
+            sessionMode={sessionMode}
+            onSetSessionMode={handleSetSessionMode}
+            onSkipPhase={handleSkipPhase}
+            onPauseMediator={handlePauseMediator}
+            onResumeMediator={handleResumeMediator}
+            onSkipToQuestion={handleSkipToQuestion}
+            mediatorPaused={mediatorPaused}
+            partyCount={partyCount}
+            onAddParty={handleAddParty}
+          />
         </div>
       )}
 

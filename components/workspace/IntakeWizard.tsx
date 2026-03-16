@@ -121,6 +121,7 @@ export default function IntakeWizard({
   const [language, setLanguage] = useState("English");
 
   // Step 2
+  const [sessionModeLocal, setSessionModeLocal] = useState<"solo" | "two-party" | "multi-party">("two-party");
   const [partyAName, setPartyAName] = useState(defaultPartyAName !== "Party A" ? defaultPartyAName : "");
   const [partyARole, setPartyARole] = useState("");
   const [partyARelationship, setPartyARelationship] = useState("colleague");
@@ -151,7 +152,7 @@ export default function IntakeWizard({
   const step1Valid = caseTitle.trim().length > 0 && caseType !== "";
   const step2Valid =
     partyAName.trim().length > 0 &&
-    partyBName.trim().length > 0 &&
+    (sessionModeLocal === "solo" || partyBName.trim().length > 0) &&
     (powerBalance !== "no" || powerDetail.trim().length > 0);
   const step4Valid = consentGoodFaith && consentAI;
 
@@ -230,17 +231,18 @@ export default function IntakeWizard({
       caseType,
       mediatorStyle,
       language,
-      partyA: { name: partyAName, role: partyARole || undefined, relationship: partyARelationship },
-      partyB: { name: partyBName, role: partyBRole || undefined, relationship: partyBRelationship },
+      partyA: { name: partyAName || "Me", role: partyARole || undefined, relationship: partyARelationship },
+      partyB: { name: sessionModeLocal === "solo" ? "Self" : partyBName, role: partyBRole || undefined, relationship: partyBRelationship },
       powerBalance,
       powerDetail: powerDetail || undefined,
       description: description || undefined,
       partyAGoal: partyAGoal || undefined,
-      partyBGoal: partyBGoal || undefined,
+      partyBGoal: sessionModeLocal === "solo" ? undefined : (partyBGoal || undefined),
       documentSummaries: docs.map((d) => d.summary),
       partyAStatement: partyAStatement || undefined,
-      partyBStatement: partyBStatement || undefined,
+      partyBStatement: sessionModeLocal === "solo" ? undefined : (partyBStatement || undefined),
       context,
+      sessionMode: sessionModeLocal,
     };
 
     onComplete(data);
@@ -401,7 +403,34 @@ export default function IntakeWizard({
                 className="space-y-5"
               >
                 <h3 className="text-sm font-semibold text-white mb-3">Party Information</h3>
-                {(["A", "B"] as const).map((side) => {
+
+                {/* Session type selector */}
+                <div className="mb-4">
+                  <label className={labelCls}>Session Type</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {([
+                      { value: "solo" as const, label: "Solo", sub: "I want to work through a conflict on my own" },
+                      { value: "two-party" as const, label: "Two-party", sub: "Standard mediation between two parties" },
+                      { value: "multi-party" as const, label: "Multi-party", sub: "Three or more parties involved" },
+                    ]).map(({ value, label, sub }) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => setSessionModeLocal(value)}
+                        className={`p-3 rounded-lg border text-left transition-all ${
+                          sessionModeLocal === value
+                            ? "border-blue-500 bg-blue-500/10 text-white"
+                            : "border-slate-700 text-slate-400 hover:border-slate-600"
+                        }`}
+                      >
+                        <div className="text-sm font-medium">{label}</div>
+                        <div className="text-xs text-slate-500 mt-0.5">{sub}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {(sessionModeLocal === "solo" ? (["A"] as const) : (["A", "B"] as const)).map((side) => {
                   const isA = side === "A";
                   const nameVal = isA ? partyAName : partyBName;
                   const setName = isA ? setPartyAName : setPartyBName;
@@ -413,15 +442,15 @@ export default function IntakeWizard({
                   return (
                     <div key={side} className={`p-4 rounded-xl border ${accent} space-y-3`}>
                       <div className={`text-xs font-semibold uppercase tracking-wider ${isA ? "text-sky-400" : "text-violet-400"}`}>
-                        Party {side}
+                        {sessionModeLocal === "solo" && isA ? "You" : `Party ${side}`}
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className={labelCls}>Name *</label>
+                          <label className={labelCls}>{sessionModeLocal === "solo" && isA ? "Your name *" : "Name *"}</label>
                           <input
                             value={nameVal}
                             onChange={(e) => setName(e.target.value)}
-                            placeholder={`Party ${side} name`}
+                            placeholder={sessionModeLocal === "solo" && isA ? "Your name" : `Party ${side} name`}
                             className={inputCls}
                           />
                         </div>
@@ -435,6 +464,7 @@ export default function IntakeWizard({
                           />
                         </div>
                       </div>
+                      {sessionModeLocal !== "solo" && (
                       <div>
                         <label className={labelCls}>Relationship to other party</label>
                         <select
@@ -449,6 +479,7 @@ export default function IntakeWizard({
                           ))}
                         </select>
                       </div>
+                      )}
                     </div>
                   );
                 })}
@@ -512,11 +543,11 @@ export default function IntakeWizard({
                 </h3>
 
                 <div>
-                  <label className={labelCls}>Dispute Description (100–500 chars)</label>
+                  <label className={labelCls}>{sessionModeLocal === "solo" ? "Situation Description (100–500 chars)" : "Dispute Description (100–500 chars)"}</label>
                   <textarea
                     value={description}
                     onChange={(e) => setDescription(e.target.value.slice(0, 500))}
-                    placeholder="Briefly describe the dispute..."
+                    placeholder={sessionModeLocal === "solo" ? "Describe the situation you're working through..." : "Briefly describe the dispute..."}
                     rows={3}
                     className={inputCls + " resize-none"}
                   />
