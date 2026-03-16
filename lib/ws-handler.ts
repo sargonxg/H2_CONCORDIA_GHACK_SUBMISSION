@@ -399,14 +399,92 @@ export function handleWebSocketConnection(ws: WebSocket) {
         caucusConfig,
       );
     } catch (err: any) {
-      console.error("[Live] Failed to create session:", err);
+      const errMsg = String(err?.message || err);
+      console.error("[Live] Failed to create session:", errMsg);
+
+      // ── Graceful fallback: if 1008 policy violation, retry with minimal config ──
+      // This catches cases where a feature (like googleSearch combined with
+      // functionDeclarations) is rejected by the model version.
+      if (errMsg.includes("1008") || errMsg.includes("policy") || errMsg.includes("not supported")) {
+        console.warn("[Live] Session rejected — retrying with minimal config (no googleSearch)...");
+        try {
+          liveSession = await createLiveSession(
+            {
+              onopen: () => {
+                console.log("[Live] Session opened (fallback mode — no Google Search)");
+                reconnectAttempts = 0;
+                toolCallPending = false;
+                if (ws.readyState === WebSocket.OPEN) {
+                  ws.send(JSON.stringify({ type: "open" }));
+                  ws.send(JSON.stringify({ type: "featureUnavailable", feature: "googleSearch" }));
+                }
+              },
+              onmessage: (message: any) => {
+                if (sessionClosing) return;
+                if (message.sessionResumptionUpdate) {
+                  if (message.sessionResumptionUpdate.resumable && message.sessionResumptionUpdate.newHandle) {
+                    latestResumptionHandle = message.sessionResumptionUpdate.newHandle;
+                  }
+                }
+                if (message.goAway) { tryReconnect("goAway received"); return; }
+                if (message.toolCall) {
+                  toolCallPending = true;
+                  setTimeout(() => { if (toolCallPending) { toolCallPending = false; } }, 8000);
+                }
+                if (message.serverContent?.interrupted) {
+                  console.log("[Live] Barge-in: user interrupted model generation");
+                }
+                const types: string[] = [];
+                if (message.serverContent) types.push("serverContent");
+                if (message.toolCall) types.push("toolCall");
+                if (types.length > 0) console.log(`[Live] Gemini msg (fallback): ${types.join(", ")}`);
+                if (roomId) {
+                  const room = getRoom(roomId);
+                  if (room) broadcastToRoom(room, { type: "message", data: message });
+                } else if (ws.readyState === WebSocket.OPEN) {
+                  ws.send(JSON.stringify({ type: "message", data: message }));
+                }
+              },
+              onerror: (e: any) => {
+                console.error("[Live] Fallback session error:", e);
+                if (ws.readyState === WebSocket.OPEN) {
+                  ws.send(JSON.stringify({ type: "error", error: String(e?.message || e) }));
+                }
+              },
+              onclose: (e: any) => {
+                console.log(`[Live] Fallback session closed — code=${e?.code ?? "?"}`);
+                sessionClosing = true;
+                if (ws.readyState === WebSocket.OPEN) {
+                  ws.send(JSON.stringify({ type: "close" }));
+                }
+              },
+            },
+            params.context,
+            params.mediatorProfile,
+            params.partyNames,
+            resumptionHandle,
+            mode,
+            caucusConfig,
+            true, // skipGoogleSearch — fallback mode
+          );
+        } catch (fallbackErr: any) {
+          console.error("[Live] Fallback also failed:", fallbackErr);
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+              type: "error",
+              error: `Failed to connect to Live API (even after fallback): ${fallbackErr?.message || fallbackErr}`,
+            }));
+          }
+        }
+        return;
+      }
+
+      // Non-policy error — report directly
       if (ws.readyState === WebSocket.OPEN) {
-        ws.send(
-          JSON.stringify({
-            type: "error",
-            error: `Failed to connect to Live API: ${err?.message || err}`,
-          }),
-        );
+        ws.send(JSON.stringify({
+          type: "error",
+          error: `Failed to connect to Live API: ${errMsg}`,
+        }));
       }
     }
   };

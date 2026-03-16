@@ -66,6 +66,7 @@ import LiveStatusBar from "@/components/workspace/LiveStatusBar";
 import TranscriptPanel from "@/components/workspace/TranscriptPanel";
 import AgreementTracker from "@/components/workspace/AgreementTracker";
 import MediatorPlaybook from "@/components/workspace/MediatorPlaybook";
+import IntelligencePanel from "@/components/workspace/IntelligencePanel";
 import KeyboardShortcutsHelp from "@/components/workspace/KeyboardShortcutsHelp";
 import PowerMap from "@/components/workspace/PowerMap";
 import BlindBidding from "@/components/workspace/BlindBidding";
@@ -430,6 +431,7 @@ function WorkspaceInner() {
   const [agreements, setAgreements] = useState<Agreement[]>([]);
   const [escalationScore, setEscalationScore] = useState(0);
   const [activeProposal, setActiveProposal] = useState<SolutionProposal | null>(null);
+  const [solutions, setSolutions] = useState<SolutionProposal[]>([]);
   const [escalationBanner, setEscalationBanner] = useState<EscalationFlag | null>(null);
   const [caucusMode, setCaucusMode] = useState<'joint' | 'partyA' | 'partyB'>('joint');
   const [powerDynamics, setPowerDynamics] = useState<PowerDynamics | null>(null);
@@ -438,6 +440,7 @@ function WorkspaceInner() {
   const [impaseBanner, setImpaseBanner] = useState<ImpasseEvent | null>(null);
   const [showBlindBidding, setShowBlindBidding] = useState(false);
   const [mediatorThought, setMediatorThought] = useState<string>("");
+  const [groundingResults, setGroundingResults] = useState<any[]>([]);
   const [showAgreementModal, setShowAgreementModal] = useState(false);
   const [agreementHTML, setAgreementHTML] = useState<string | null>(null);
   const [agreementData, setAgreementData] = useState<any>(null);
@@ -1075,6 +1078,7 @@ function WorkspaceInner() {
                       timestamp: new Date().toISOString(),
                     };
                     setActiveProposal(proposal);
+                    setSolutions((prev) => [...prev, proposal]);
                     return {
                       id: call.id,
                       name: call.name,
@@ -1174,6 +1178,12 @@ function WorkspaceInner() {
           onthought: (text: string) => {
             // Store latest model thought for the Mediator Playbook display
             setMediatorThought?.(text);
+          },
+          onGroundingUpdate: (data: any) => {
+            setGroundingResults((prev) => [...prev.slice(-19), { ...data, timestamp: new Date().toISOString() }]);
+          },
+          onFeatureUnavailable: (feature: string) => {
+            console.warn(`[Live] Feature unavailable: ${feature}`);
           },
           onerror: (err: any) => {
             console.error("Live API Error:", err);
@@ -3062,6 +3072,21 @@ function WorkspaceInner() {
               (t) => !activeCase?.primitives.some((p) => p.type === t),
             )}
           />
+
+          {/* ── Intelligence Panel ── */}
+          <div className="h-[400px]">
+            <IntelligencePanel
+              emotionTimeline={activeCase?.emotionTimeline || []}
+              mediationState={liveMediationState}
+              escalationFlags={escalationFlags}
+              agreements={agreements}
+              solutions={solutions}
+              mediatorThought={mediatorThought}
+              groundingResults={groundingResults}
+              partyAName={activeCase?.partyAName || "Party A"}
+              partyBName={activeCase?.partyBName || "Party B"}
+            />
+          </div>
         </div>
 
         {/* ─── CENTER: Tabbed Content ─── */}

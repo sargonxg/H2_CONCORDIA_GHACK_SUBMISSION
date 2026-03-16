@@ -158,6 +158,8 @@ export const getLiveSession = (
           callbacks.onthought?.(msg.text);
         } else if (msg.type === "groundingUpdate") {
           callbacks.onGroundingUpdate?.(msg.data);
+        } else if (msg.type === "featureUnavailable") {
+          callbacks.onFeatureUnavailable?.(msg.feature);
         } else if (msg.type === "error") {
           console.error("[Live] Server error:", msg.error);
           if (!resolved) {
