@@ -433,6 +433,7 @@ function WorkspaceInner() {
   const [activeProposal, setActiveProposal] = useState<SolutionProposal | null>(null);
   const [solutions, setSolutions] = useState<SolutionProposal[]>([]);
   const [escalationBanner, setEscalationBanner] = useState<EscalationFlag | null>(null);
+  const [escalationFlags, setEscalationFlags] = useState<EscalationFlag[]>([]);
   const [caucusMode, setCaucusMode] = useState<'joint' | 'partyA' | 'partyB'>('joint');
   const [powerDynamics, setPowerDynamics] = useState<PowerDynamics | null>(null);
   const [impasseEvents, setImpasseEvents] = useState<ImpasseEvent[]>([]);
@@ -1059,6 +1060,7 @@ function WorkspaceInner() {
                     };
                     setEscalationScore((prev) => Math.min(100, prev + (args.severity ?? 5) * 10));
                     setEscalationBanner(flag);
+                    setEscalationFlags((prev) => [...prev, flag]);
                     setTimeout(() => setEscalationBanner(null), 8000);
                     return {
                       id: call.id,
