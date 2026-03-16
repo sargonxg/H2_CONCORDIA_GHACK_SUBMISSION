@@ -9,13 +9,9 @@ import {
   X,
   Clock,
   CheckCircle2,
-  Activity,
-  Circle,
   Zap,
 } from "lucide-react";
 import type { LiveMediationState, GapNotification, EscalationFlag } from "@/lib/types";
-
-const PHASES = ["Opening", "Discovery", "Exploration", "Negotiation", "Resolution", "Agreement"];
 
 interface Props {
   liveMediationState: LiveMediationState | null;
@@ -46,45 +42,8 @@ export default function LiveStatusBar({
   onOpenGraph,
   extractionNotice,
 }: Props) {
-  const currentPhaseIdx = PHASES.indexOf(liveMediationState?.phase || "Opening");
-
   return (
     <div className="flex flex-col gap-2 overflow-y-auto p-3">
-      {/* Phase progress bar */}
-      {(isRecording || liveMediationState) && (
-        <div className="flex items-center gap-1 shrink-0">
-          {PHASES.map((phase, idx) => (
-            <div key={phase} className="flex items-center flex-1">
-              <div
-                className={`flex items-center gap-1 px-2 py-1 rounded-full text-[9px] font-mono uppercase tracking-wider transition-all ${
-                  idx === currentPhaseIdx
-                    ? "bg-[var(--color-accent)] text-white shadow-md"
-                    : idx < currentPhaseIdx
-                    ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                    : "bg-[var(--color-bg)] text-[var(--color-text-muted)] border border-[var(--color-border)]"
-                }`}
-              >
-                {idx < currentPhaseIdx ? (
-                  <CheckCircle2 className="w-2.5 h-2.5" />
-                ) : idx === currentPhaseIdx ? (
-                  <Activity className="w-2.5 h-2.5 animate-pulse" />
-                ) : (
-                  <Circle className="w-2.5 h-2.5" />
-                )}
-                <span className="hidden sm:inline">{phase}</span>
-              </div>
-              {idx < PHASES.length - 1 && (
-                <div
-                  className={`flex-1 h-px mx-0.5 ${
-                    idx < currentPhaseIdx ? "bg-emerald-500/30" : "bg-[var(--color-border)]"
-                  }`}
-                />
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-
       {/* Mediator action banner */}
       <AnimatePresence>
         {isRecording && liveMediationState && (

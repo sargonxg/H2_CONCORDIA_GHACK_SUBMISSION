@@ -36,6 +36,27 @@ export function handleWebSocketConnection(ws: WebSocket) {
   // ── Interruption mode ────────────────────────────────────────────────────
   let currentInterruptionMode: 'normal' | 'crisis' = 'normal';
 
+  // ── Output deduplication (prevents repetition loops) ──
+  const recentOutputs: string[] = [];
+  const MAX_RECENT_OUTPUTS = 5;
+
+  const isDuplicateOutput = (text: string): boolean => {
+    if (!text || text.length < 20) return false;
+    // Normalize: lowercase, remove extra spaces, take first 80 chars
+    const normalized = text.toLowerCase().replace(/\s+/g, ' ').trim().slice(0, 80);
+    // Check if any recent output starts with the same 80 chars
+    const isDupe = recentOutputs.some((recent) => {
+      const recentNorm = recent.toLowerCase().replace(/\s+/g, ' ').trim().slice(0, 80);
+      return normalized === recentNorm ||
+              (normalized.length > 30 && recentNorm.startsWith(normalized.slice(0, 30)));
+    });
+    if (!isDupe) {
+      recentOutputs.push(normalized);
+      if (recentOutputs.length > MAX_RECENT_OUTPUTS) recentOutputs.shift();
+    }
+    return isDupe;
+  };
+
   // ── Speaker balance tracking ─────────────────────────────────────────────
   const speakerTurns: SpeakerTurn[] = [];
   let currentSpeaker: string | null = null;
@@ -300,6 +321,21 @@ export function handleWebSocketConnection(ws: WebSocket) {
             if (message.serverContent?.outputTranscription?.text) {
               const outText = message.serverContent.outputTranscription.text;
               lastModelOutputHadQuestion = outText.includes("?");
+
+              // Check for repetition loop — if model is repeating, inject correction
+              if (isDuplicateOutput(outText) && outText.length > 30) {
+                console.warn("[Live] Repetition loop detected — injecting correction");
+                try {
+                  liveSession.sendClientContent({
+                    turns: [{ role: "user", parts: [{
+                       text: "[SYSTEM ALERT: You are repeating yourself. You already said this. STOP and ask a completely NEW question you have not asked before. Do NOT repeat ground rules, greetings, or previous questions.]"
+                     }] }],
+                    turnComplete: true,
+                  });
+                } catch (e) {
+                  console.warn("[Live] Failed to inject repetition correction:", e);
+                }
+              }
             }
 
             // ── Speaker identification from tool calls ──

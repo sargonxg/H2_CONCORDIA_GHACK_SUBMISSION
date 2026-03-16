@@ -407,6 +407,7 @@ export type IntakeData = {
   partyAStatement?: string;
   partyBStatement?: string;
   context: string;
+  sessionMode?: 'solo' | 'two-party' | 'multi-party';
 };
 
 // ── Prompt 1: Core Conversation Engine Types ──
