@@ -321,7 +321,7 @@ export function handleWebSocketConnection(ws: WebSocket) {
                 try {
                   liveSession.sendClientContent({
                     turns: [{ role: "user", parts: [{
-                      text: "[SYSTEM ALERT: You are repeating yourself. STOP. Say something completely new. Ask a NEW question you have not asked before. Do NOT repeat ground rules or greetings.]"
+                      text: "[SYSTEM ALERT: You are repeating yourself. STOP. Say something completely new. Ask a NEW question you have not asked before. Do NOT repeat ground rules, greetings, or previous questions.]"
                     }] }],
                     turnComplete: true,
                   });

@@ -76,12 +76,12 @@ import BlindBidding from "@/components/workspace/BlindBidding";
 import EmotionTimeline from "@/components/workspace/EmotionTimeline";
 import WorkspaceLayout from "@/components/workspace/WorkspaceLayout";
 import PhaseTimeline from "@/components/workspace/PhaseTimeline";
+import MediatorControls from "@/components/workspace/MediatorControls";
+import type { SessionMode } from "@/components/workspace/MediatorControls";
 import MediationTimer from "@/components/workspace/MediationTimer";
 import ConnectionStatus from "@/components/workspace/ConnectionStatus";
 import PartyCardNew from "@/components/workspace/PartyCard";
 import QuickActions from "@/components/workspace/QuickActions";
-import MediatorControls from "@/components/workspace/MediatorControls";
-import type { SessionMode } from "@/components/workspace/MediatorControls";
 
 const PRIMITIVE_TYPES: PrimitiveType[] = [
   "Actor",
@@ -460,13 +460,15 @@ function WorkspaceInner() {
   const [joinLoading, setJoinLoading] = useState(false);
   const [joinError, setJoinError] = useState("");
 
+  // ── Mediator session controls ──────────────────────────────────────────────
+  const [sessionMode, setSessionMode] = useState<SessionMode>("two-party");
+  const [mediatorPaused, setMediatorPaused] = useState(false);
+  const [partyCount, setPartyCount] = useState(2);
+
   const [demoMode, setDemoMode] = useState(false);
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
   const [showIntake, setShowIntake] = useState(false);
   const [intakeData, setIntakeData] = useState<IntakeData | null>(null);
-  const [sessionMode, setSessionMode] = useState<SessionMode>("two-party");
-  const [mediatorPaused, setMediatorPaused] = useState(false);
-  const [partyCount, setPartyCount] = useState(2);
   const [connectionLostBanner, setConnectionLostBanner] = useState(false);
   const [micDenied, setMicDenied] = useState(false);
   // Mediator state tracking for visual indicators
