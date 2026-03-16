@@ -33,22 +33,17 @@ export function handleWebSocketConnection(ws: WebSocket) {
   let mainSession: any = null; // stores the shared session while caucus is active
   let mainResumptionHandle: string | null = null;
 
-  // ── Interruption mode ────────────────────────────────────────────────────
-  let currentInterruptionMode: 'normal' | 'crisis' = 'normal';
-
   // ── Output deduplication (prevents repetition loops) ──
   const recentOutputs: string[] = [];
   const MAX_RECENT_OUTPUTS = 5;
 
   const isDuplicateOutput = (text: string): boolean => {
     if (!text || text.length < 20) return false;
-    // Normalize: lowercase, remove extra spaces, take first 80 chars
     const normalized = text.toLowerCase().replace(/\s+/g, ' ').trim().slice(0, 80);
-    // Check if any recent output starts with the same 80 chars
     const isDupe = recentOutputs.some((recent) => {
       const recentNorm = recent.toLowerCase().replace(/\s+/g, ' ').trim().slice(0, 80);
       return normalized === recentNorm ||
-              (normalized.length > 30 && recentNorm.startsWith(normalized.slice(0, 30)));
+             (normalized.length > 30 && recentNorm.startsWith(normalized.slice(0, 30)));
     });
     if (!isDupe) {
       recentOutputs.push(normalized);
@@ -227,11 +222,9 @@ export function handleWebSocketConnection(ws: WebSocket) {
 
   const connectLiveSession = async (
     resumptionHandle?: string,
-    interruptionMode?: 'normal' | 'crisis',
     caucusConfig?: { partyId: 'A' | 'B' },
   ) => {
     const params = sessionParams!;
-    const mode = interruptionMode || currentInterruptionMode;
     try {
       liveSession = await createLiveSession(
         {
@@ -322,14 +315,14 @@ export function handleWebSocketConnection(ws: WebSocket) {
               const outText = message.serverContent.outputTranscription.text;
               lastModelOutputHadQuestion = outText.includes("?");
 
-              // Check for repetition loop — if model is repeating, inject correction
+              // Detect repetition loop and break it
               if (isDuplicateOutput(outText) && outText.length > 30) {
                 console.warn("[Live] Repetition loop detected — injecting correction");
                 try {
                   liveSession.sendClientContent({
                     turns: [{ role: "user", parts: [{
-                       text: "[SYSTEM ALERT: You are repeating yourself. You already said this. STOP and ask a completely NEW question you have not asked before. Do NOT repeat ground rules, greetings, or previous questions.]"
-                     }] }],
+                      text: "[SYSTEM ALERT: You are repeating yourself. STOP. Say something completely new. Ask a NEW question you have not asked before. Do NOT repeat ground rules, greetings, or previous questions.]"
+                    }] }],
                     turnComplete: true,
                   });
                 } catch (e) {
@@ -431,7 +424,6 @@ export function handleWebSocketConnection(ws: WebSocket) {
         params.mediatorProfile,
         params.partyNames,
         resumptionHandle,
-        mode,
         caucusConfig,
       );
     } catch (err: any) {
@@ -499,7 +491,6 @@ export function handleWebSocketConnection(ws: WebSocket) {
             params.mediatorProfile,
             params.partyNames,
             resumptionHandle,
-            mode,
             caucusConfig,
             true, // skipGoogleSearch — fallback mode
           );
@@ -636,7 +627,7 @@ export function handleWebSocketConnection(ws: WebSocket) {
           }
 
           // Open a new Gemini Live session with caucus instruction
-          await connectLiveSession(undefined, currentInterruptionMode, { partyId });
+          await connectLiveSession(undefined, { partyId });
         } else if (msg.action === "end" && caucusState.active) {
           console.log(`[Live] Ending caucus with Party ${caucusState.partyId}`);
 
@@ -677,31 +668,6 @@ export function handleWebSocketConnection(ws: WebSocket) {
           caucusState = { active: false, partyId: null, startedAt: null };
           if (ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: "caucusEnded" }));
-          }
-        }
-      } else if (msg.type === "setInterruptionMode" && !sessionClosing) {
-        // ── Switch interruption mode (normal / crisis) ──
-        const newMode: 'normal' | 'crisis' = msg.mode === 'crisis' ? 'crisis' : 'normal';
-        if (newMode !== currentInterruptionMode) {
-          console.log(`[Live] Switching interruption mode: ${currentInterruptionMode} → ${newMode}`);
-          currentInterruptionMode = newMode;
-
-          // Close current session and reconnect with new config using resumption handle
-          if (liveSession) {
-            try { liveSession.close(); } catch (e) { /* ignore */ }
-            liveSession = null;
-          }
-
-          if (ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: "interruptionModeChanged", mode: newMode }));
-          }
-
-          // Reconnect with new mode, using resumption handle if available
-          if (sessionParams) {
-            const caucusConfig = caucusState.active && caucusState.partyId
-              ? { partyId: caucusState.partyId }
-              : undefined;
-            await connectLiveSession(latestResumptionHandle || undefined, newMode, caucusConfig);
           }
         }
       } else if (msg.type === "correctSpeaker" && liveSession && !sessionClosing) {

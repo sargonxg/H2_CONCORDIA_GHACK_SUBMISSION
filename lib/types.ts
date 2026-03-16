@@ -391,6 +391,7 @@ export type IntakeData = {
   caseType: string;
   mediatorStyle: 'professional' | 'empathic';
   language: string;
+  sessionMode?: 'solo' | 'two-party' | 'multi-party';
   languageCode?: string;
   partyALanguage?: string;
   partyALanguageCode?: string;
@@ -407,7 +408,6 @@ export type IntakeData = {
   partyAStatement?: string;
   partyBStatement?: string;
   context: string;
-  sessionMode?: 'solo' | 'two-party' | 'multi-party';
 };
 
 // ── Prompt 1: Core Conversation Engine Types ──

@@ -6,7 +6,6 @@ export type SessionMode = "two-party" | "solo" | "multi-party";
 
 interface Props {
   isRecording: boolean;
-  currentPhase: string;
   sessionMode: SessionMode;
   onSetSessionMode: (mode: SessionMode) => void;
   onSkipPhase: () => void;
@@ -20,7 +19,6 @@ interface Props {
 
 export default function MediatorControls({
   isRecording,
-  currentPhase,
   sessionMode,
   onSetSessionMode,
   onSkipPhase,
@@ -70,7 +68,6 @@ export default function MediatorControls({
 
       {/* Mediator pace controls */}
       <div className="flex items-center gap-1">
-        {/* Pause/Resume mediator */}
         <button
           onClick={mediatorPaused ? onResumeMediator : onPauseMediator}
           className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium text-[var(--color-text-muted)] hover:text-white hover:bg-[var(--color-bg)] transition-colors"
@@ -80,7 +77,6 @@ export default function MediatorControls({
           {mediatorPaused ? "Resume" : "Pause AI"}
         </button>
 
-        {/* Skip to next phase */}
         <button
           onClick={onSkipPhase}
           className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium text-[var(--color-text-muted)] hover:text-white hover:bg-[var(--color-bg)] transition-colors"
@@ -90,7 +86,6 @@ export default function MediatorControls({
           Skip phase
         </button>
 
-        {/* Ask mediator to move to next question */}
         <button
           onClick={onSkipToQuestion}
           className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium text-[var(--color-text-muted)] hover:text-white hover:bg-[var(--color-bg)] transition-colors"

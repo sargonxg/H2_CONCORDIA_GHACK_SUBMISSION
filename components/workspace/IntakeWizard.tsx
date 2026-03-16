@@ -153,7 +153,7 @@ export default function IntakeWizard({
   const step2Valid =
     partyAName.trim().length > 0 &&
     (sessionModeLocal === "solo" || partyBName.trim().length > 0) &&
-    (powerBalance !== "no" || powerDetail.trim().length > 0);
+    (sessionModeLocal === "solo" || powerBalance !== "no" || powerDetail.trim().length > 0);
   const step4Valid = consentGoodFaith && consentAI;
 
   const canNext = () => {
@@ -231,9 +231,10 @@ export default function IntakeWizard({
       caseType,
       mediatorStyle,
       language,
-      partyA: { name: partyAName || "Me", role: partyARole || undefined, relationship: partyARelationship },
-      partyB: { name: sessionModeLocal === "solo" ? "Self" : partyBName, role: partyBRole || undefined, relationship: partyBRelationship },
-      powerBalance,
+      sessionMode: sessionModeLocal,
+      partyA: { name: partyAName || "Me", role: partyARole || undefined, relationship: sessionModeLocal === "solo" ? "self" : partyARelationship },
+      partyB: { name: sessionModeLocal === "solo" ? partyAName : partyBName, role: (sessionModeLocal === "solo" ? undefined : partyBRole) || undefined, relationship: sessionModeLocal === "solo" ? "self" : partyBRelationship },
+      powerBalance: sessionModeLocal === "solo" ? "yes" : powerBalance,
       powerDetail: powerDetail || undefined,
       description: description || undefined,
       partyAGoal: partyAGoal || undefined,
@@ -242,7 +243,6 @@ export default function IntakeWizard({
       partyAStatement: partyAStatement || undefined,
       partyBStatement: sessionModeLocal === "solo" ? undefined : (partyBStatement || undefined),
       context,
-      sessionMode: sessionModeLocal,
     };
 
     onComplete(data);
