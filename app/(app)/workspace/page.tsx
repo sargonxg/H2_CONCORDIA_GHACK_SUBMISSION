@@ -644,11 +644,10 @@ function WorkspaceInner() {
         setShowShortcutsHelp(true);
       }
       if (!e.ctrlKey && !e.metaKey && !e.altKey) {
-        if (e.key === "1") setActiveTab("transcript");
-        if (e.key === "2") setActiveTab("structure");
-        if (e.key === "3") setActiveTab("pathways");
-        if (e.key === "4") setActiveTab("graph");
-        if (e.key === "5") setActiveTab("timeline");
+        if (e.key === "1") setActiveTab("structure");
+        if (e.key === "2") setActiveTab("pathways");
+        if (e.key === "3") setActiveTab("graph");
+        if (e.key === "4") setActiveTab("timeline");
       }
     };
     window.addEventListener("keydown", handler);
