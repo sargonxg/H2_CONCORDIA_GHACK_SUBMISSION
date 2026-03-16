@@ -258,13 +258,28 @@ export function handleWebSocketConnection(ws: WebSocket) {
               }, 8000);
             }
 
-            // Handle thinking content — log for debugging, don't forward to client
+            // Handle thinking content — log and forward thought summaries to frontend
             if (message.serverContent?.modelTurn?.parts) {
               for (const part of message.serverContent.modelTurn.parts) {
                 if (part.thought) {
                   console.log('[Live] Model thought:', part.text?.substring(0, 200));
+                  // Forward thought summaries to frontend for the Mediator Playbook panel
+                  if (part.text && ws.readyState === WebSocket.OPEN) {
+                    const thoughtMsg = { type: "thought", text: part.text };
+                    if (roomId) {
+                      const room = getRoom(roomId);
+                      if (room) broadcastToRoom(room, thoughtMsg);
+                    } else {
+                      ws.send(JSON.stringify(thoughtMsg));
+                    }
+                  }
                 }
               }
+            }
+
+            // Log barge-in events for debugging
+            if (message.serverContent?.interrupted) {
+              console.log("[Live] Barge-in: user interrupted model generation");
             }
 
             // ── Speaker tracking from input transcription ──
@@ -324,6 +339,13 @@ export function handleWebSocketConnection(ws: WebSocket) {
             if (message.sessionResumptionUpdate) types.push("sessionResumption");
             if (message.goAway) types.push("goAway");
             if (message.serverContent?.groundingMetadata) types.push("grounding");
+            // Log activity/speech detection events for VAD tuning
+            if (message.serverContent?.interrupted) {
+              types.push("interrupted");
+            }
+            if (message.serverContent?.turnComplete) {
+              types.push("turnComplete");
+            }
             if (types.length > 0) console.log(`[Live] Gemini msg: ${types.join(", ")}`);
 
             // In room mode: broadcast to ALL room clients; otherwise 1:1

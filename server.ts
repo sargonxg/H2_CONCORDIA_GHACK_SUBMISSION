@@ -31,6 +31,15 @@ function validateEnvironment() {
     }
   }
 
+  // Warn about deprecated model strings
+  const modelLive = process.env.MODEL_LIVE || "";
+  if (modelLive.includes("09-2025") || modelLive.includes("preview-native-audio-09")) {
+    errors.push(
+      `MODEL_LIVE is set to deprecated model "${modelLive}" which is being removed March 19, 2026. ` +
+      `Update to "gemini-live-2.5-flash-native-audio" (Vertex AI) or "gemini-2.5-flash-native-audio-preview-12-2025" (API key).`
+    );
+  }
+
   if (errors.length > 0) {
     console.error("❌ Configuration errors:");
     errors.forEach((e) => console.error(`   ${e}`));
