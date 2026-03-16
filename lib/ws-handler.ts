@@ -8,6 +8,7 @@ import {
   broadcastToRoom,
 } from "./room-manager";
 import { randomUUID } from "crypto";
+import type { CaucusState, SpeakerTurn, SilenceEvent } from "./types";
 
 export function handleWebSocketConnection(ws: WebSocket) {
   let liveSession: any = null;
@@ -26,6 +27,158 @@ export function handleWebSocketConnection(ws: WebSocket) {
   // ── Room mode state ──────────────────────────────────────────────────────
   let roomId: string | null = null;
   const clientId = randomUUID();
+
+  // ── Caucus mode state ────────────────────────────────────────────────────
+  let caucusState: CaucusState = { active: false, partyId: null, startedAt: null };
+  let mainSession: any = null; // stores the shared session while caucus is active
+  let mainResumptionHandle: string | null = null;
+
+  // ── Interruption mode ────────────────────────────────────────────────────
+  let currentInterruptionMode: 'normal' | 'crisis' = 'normal';
+
+  // ── Speaker balance tracking ─────────────────────────────────────────────
+  const speakerTurns: SpeakerTurn[] = [];
+  let currentSpeaker: string | null = null;
+  let currentSpeakerStart: number = 0;
+  const SPEAKER_BALANCE_RATIO = 3; // warn if one party speaks 3x more
+
+  const trackSpeakerTurn = (speaker: string) => {
+    const now = Date.now();
+    if (currentSpeaker && currentSpeaker !== speaker) {
+      // End the previous speaker's turn
+      const turn: SpeakerTurn = {
+        speaker: currentSpeaker,
+        startTime: currentSpeakerStart,
+        endTime: now,
+        durationMs: now - currentSpeakerStart,
+      };
+      speakerTurns.push(turn);
+      checkSpeakerBalance();
+    }
+    if (currentSpeaker !== speaker) {
+      currentSpeaker = speaker;
+      currentSpeakerStart = now;
+    }
+  };
+
+  const checkSpeakerBalance = () => {
+    if (!sessionParams?.partyNames || !liveSession) return;
+    const { partyA, partyB } = sessionParams.partyNames;
+    const aDuration = speakerTurns
+      .filter((t) => t.speaker === partyA)
+      .reduce((sum, t) => sum + t.durationMs, 0);
+    const bDuration = speakerTurns
+      .filter((t) => t.speaker === partyB)
+      .reduce((sum, t) => sum + t.durationMs, 0);
+
+    if (aDuration === 0 || bDuration === 0) return;
+    const ratio = Math.max(aDuration, bDuration) / Math.min(aDuration, bDuration);
+
+    if (ratio >= SPEAKER_BALANCE_RATIO) {
+      const dominant = aDuration > bDuration ? partyA : partyB;
+      const quiet = aDuration > bDuration ? partyB : partyA;
+      console.log(`[Live] Speaker imbalance: ${dominant} has spoken ${ratio.toFixed(1)}x more than ${quiet}`);
+      try {
+        liveSession.sendClientContent({
+          turns: [{
+            role: "user",
+            parts: [{
+              text: `[SYSTEM CONTEXT UPDATE] Speaker balance alert: ${dominant} has spoken approximately ${ratio.toFixed(1)}x more than ${quiet}. Consider directing your next question to ${quiet} to ensure balanced participation.`,
+            }],
+          }],
+          turnComplete: true,
+        });
+      } catch (e) {
+        console.warn("[Live] Failed to inject speaker balance note:", e);
+      }
+      // Send balance update to client
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          type: "speakerBalance",
+          data: {
+            [partyA]: aDuration,
+            [partyB]: bDuration,
+            ratio: ratio.toFixed(1),
+            dominant,
+          },
+        }));
+      }
+    }
+  };
+
+  // ── Silence tracking ─────────────────────────────────────────────────────
+  let lastAudioTime: number = Date.now();
+  let lastModelOutputHadQuestion = false;
+  let silenceTimer5s: ReturnType<typeof setTimeout> | null = null;
+  let silenceTimer15s: ReturnType<typeof setTimeout> | null = null;
+
+  const resetSilenceTracking = () => {
+    lastAudioTime = Date.now();
+    if (silenceTimer5s) { clearTimeout(silenceTimer5s); silenceTimer5s = null; }
+    if (silenceTimer15s) { clearTimeout(silenceTimer15s); silenceTimer15s = null; }
+
+    // Start new silence timers
+    silenceTimer5s = setTimeout(() => {
+      if (sessionClosing || !liveSession) return;
+      const silenceDuration = Date.now() - lastAudioTime;
+      if (silenceDuration >= 5000) {
+        const event: SilenceEvent = {
+          durationMs: silenceDuration,
+          afterQuestion: lastModelOutputHadQuestion,
+          suggestedAction: lastModelOutputHadQuestion
+            ? "Party may be reflecting — hold space"
+            : "Consider a gentle prompt to re-engage",
+        };
+        console.log(`[Live] Silence detected: ${silenceDuration}ms (afterQuestion=${event.afterQuestion})`);
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: "silenceDetected", data: event }));
+        }
+      }
+    }, 5000);
+
+    silenceTimer15s = setTimeout(() => {
+      if (sessionClosing || !liveSession) return;
+      const silenceDuration = Date.now() - lastAudioTime;
+      if (silenceDuration >= 15000) {
+        console.log(`[Live] Extended silence (${silenceDuration}ms) — injecting gentle prompt`);
+        try {
+          liveSession.sendClientContent({
+            turns: [{
+              role: "user",
+              parts: [{
+                text: `[SYSTEM CONTEXT UPDATE] Extended silence detected (${Math.round(silenceDuration / 1000)}s). The parties may need a gentle prompt or the conversation may have reached a natural pause. Consider checking in with a brief, warm prompt like "Take your time" or redirecting to the next topic.`,
+              }],
+            }],
+            turnComplete: true,
+          });
+        } catch (e) {
+          console.warn("[Live] Failed to inject silence prompt:", e);
+        }
+      }
+    }, 15000);
+  };
+
+  // ── Audio level monitoring (RMS) ─────────────────────────────────────────
+  const LOW_AUDIO_THRESHOLD = 0.005; // RMS threshold for "too quiet"
+  let lowAudioWarningCount = 0;
+  const MAX_LOW_AUDIO_WARNINGS = 3; // Don't spam warnings
+
+  const computeRMS = (base64Audio: string): number => {
+    try {
+      const buffer = Buffer.from(base64Audio, "base64");
+      // Assume 16-bit PCM audio
+      let sumSquares = 0;
+      const sampleCount = Math.floor(buffer.length / 2);
+      if (sampleCount === 0) return 0;
+      for (let i = 0; i < buffer.length - 1; i += 2) {
+        const sample = buffer.readInt16LE(i) / 32768; // normalize to -1..1
+        sumSquares += sample * sample;
+      }
+      return Math.sqrt(sumSquares / sampleCount);
+    } catch {
+      return 0;
+    }
+  };
 
   const tryReconnect = (reason: string) => {
     if (sessionClosing || !latestResumptionHandle) return false;
@@ -51,13 +204,18 @@ export function handleWebSocketConnection(ws: WebSocket) {
     return true;
   };
 
-  const connectLiveSession = async (resumptionHandle?: string) => {
+  const connectLiveSession = async (
+    resumptionHandle?: string,
+    interruptionMode?: 'normal' | 'crisis',
+    caucusConfig?: { partyId: 'A' | 'B' },
+  ) => {
     const params = sessionParams!;
+    const mode = interruptionMode || currentInterruptionMode;
     try {
       liveSession = await createLiveSession(
         {
           onopen: () => {
-            console.log("[Live] Session opened" + (resumptionHandle ? " (resumed)" : ""));
+            console.log("[Live] Session opened" + (resumptionHandle ? " (resumed)" : "") + (caucusConfig ? ` (caucus party${caucusConfig.partyId})` : ""));
             reconnectAttempts = 0;
             toolCallPending = false;
             if (ws.readyState === WebSocket.OPEN) {
@@ -109,12 +267,63 @@ export function handleWebSocketConnection(ws: WebSocket) {
               }
             }
 
+            // ── Speaker tracking from input transcription ──
+            if (message.serverContent?.inputTranscription?.text) {
+              const transcript = message.serverContent.inputTranscription.text;
+              // Try to detect speaker from transcript content (model often prefixes with name)
+              if (sessionParams?.partyNames) {
+                const { partyA, partyB } = sessionParams.partyNames;
+                if (transcript.toLowerCase().includes(partyA.toLowerCase())) {
+                  trackSpeakerTurn(partyA);
+                } else if (transcript.toLowerCase().includes(partyB.toLowerCase())) {
+                  trackSpeakerTurn(partyB);
+                }
+              }
+            }
+
+            // ── Track if model output contains a question (for silence detection) ──
+            if (message.serverContent?.outputTranscription?.text) {
+              const outText = message.serverContent.outputTranscription.text;
+              lastModelOutputHadQuestion = outText.includes("?");
+            }
+
+            // ── Speaker identification from tool calls ──
+            if (message.toolCall?.functionCalls) {
+              for (const fc of message.toolCall.functionCalls) {
+                if (fc.name === "speakerIdentified" && fc.args?.speaker) {
+                  trackSpeakerTurn(fc.args.speaker);
+                }
+              }
+            }
+
+            // ── Google Search grounding metadata ──
+            if (message.serverContent?.groundingMetadata) {
+              const { webSearchQueries, groundingChunks, groundingSupports } =
+                message.serverContent.groundingMetadata;
+              const groundingMsg = {
+                type: "groundingUpdate",
+                data: {
+                  queries: webSearchQueries,
+                  sources: groundingChunks,
+                  supports: groundingSupports,
+                },
+              };
+              // Send to frontend alongside the regular message
+              if (roomId) {
+                const room = getRoom(roomId);
+                if (room) broadcastToRoom(room, groundingMsg);
+              } else if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify(groundingMsg));
+              }
+            }
+
             // Log message types for debugging
             const types = [];
             if (message.serverContent) types.push("serverContent");
             if (message.toolCall) types.push("toolCall");
             if (message.sessionResumptionUpdate) types.push("sessionResumption");
             if (message.goAway) types.push("goAway");
+            if (message.serverContent?.groundingMetadata) types.push("grounding");
             if (types.length > 0) console.log(`[Live] Gemini msg: ${types.join(", ")}`);
 
             // In room mode: broadcast to ALL room clients; otherwise 1:1
@@ -164,6 +373,8 @@ export function handleWebSocketConnection(ws: WebSocket) {
         params.mediatorProfile,
         params.partyNames,
         resumptionHandle,
+        mode,
+        caucusConfig,
       );
     } catch (err: any) {
       console.error("[Live] Failed to create session:", err);
@@ -243,12 +454,138 @@ export function handleWebSocketConnection(ws: WebSocket) {
       } else if (msg.type === "audio" && !sessionClosing) {
         // Drop audio frames while a tool call is pending to prevent 1008 errors
         if (!liveSession || toolCallPending) return;
+
+        // Reset silence tracking on each audio frame
+        resetSilenceTracking();
+
+        // Audio level monitoring (RMS)
+        if (msg.audio && lowAudioWarningCount < MAX_LOW_AUDIO_WARNINGS) {
+          const rms = computeRMS(msg.audio);
+          if (rms > 0 && rms < LOW_AUDIO_THRESHOLD) {
+            lowAudioWarningCount++;
+            console.log(`[Live] Low audio level detected: RMS=${rms.toFixed(4)} (warning ${lowAudioWarningCount}/${MAX_LOW_AUDIO_WARNINGS})`);
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({
+                type: "lowAudio",
+                data: { rms, warningCount: lowAudioWarningCount },
+              }));
+            }
+          } else if (rms >= LOW_AUDIO_THRESHOLD) {
+            // Reset warning count when audio is good
+            lowAudioWarningCount = 0;
+          }
+        }
+
         try {
           liveSession.sendRealtimeInput({
             audio: msg.audio,
           });
         } catch (e) {
           // Session may have closed
+        }
+      } else if (msg.type === "caucus" && liveSession && !sessionClosing) {
+        // ── Caucus mode: start or end private session ──
+        if (msg.action === "start" && !caucusState.active) {
+          const partyId: 'A' | 'B' = msg.partyId || 'A';
+          console.log(`[Live] Starting caucus with Party ${partyId}`);
+          caucusState = { active: true, partyId, startedAt: new Date().toISOString() };
+
+          // Save main session and its resumption handle
+          mainSession = liveSession;
+          mainResumptionHandle = latestResumptionHandle;
+
+          // Notify client
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: "caucusStarted", partyId }));
+          }
+
+          // Open a new Gemini Live session with caucus instruction
+          await connectLiveSession(undefined, currentInterruptionMode, { partyId });
+        } else if (msg.action === "end" && caucusState.active) {
+          console.log(`[Live] Ending caucus with Party ${caucusState.partyId}`);
+
+          // Collect caucus summary to inject back into main session
+          const caucusSummary = msg.summary || "Caucus session completed. No specific summary provided.";
+
+          // Close caucus session
+          try { liveSession.close(); } catch (e) { /* ignore */ }
+
+          // Restore main session
+          liveSession = mainSession;
+          latestResumptionHandle = mainResumptionHandle;
+          mainSession = null;
+          mainResumptionHandle = null;
+
+          // If main session was lost, reconnect
+          if (!liveSession && latestResumptionHandle) {
+            await connectLiveSession(latestResumptionHandle);
+          }
+
+          // Inject caucus summary into main session
+          if (liveSession) {
+            try {
+              liveSession.sendClientContent({
+                turns: [{
+                  role: "user",
+                  parts: [{
+                    text: `[SYSTEM CONTEXT UPDATE] Private caucus with Party ${caucusState.partyId} has concluded. Summary: ${caucusSummary}. You are now back in the joint session with both parties.`,
+                  }],
+                }],
+                turnComplete: true,
+              });
+            } catch (e) {
+              console.warn("[Live] Failed to inject caucus summary:", e);
+            }
+          }
+
+          caucusState = { active: false, partyId: null, startedAt: null };
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: "caucusEnded" }));
+          }
+        }
+      } else if (msg.type === "setInterruptionMode" && !sessionClosing) {
+        // ── Switch interruption mode (normal / crisis) ──
+        const newMode: 'normal' | 'crisis' = msg.mode === 'crisis' ? 'crisis' : 'normal';
+        if (newMode !== currentInterruptionMode) {
+          console.log(`[Live] Switching interruption mode: ${currentInterruptionMode} → ${newMode}`);
+          currentInterruptionMode = newMode;
+
+          // Close current session and reconnect with new config using resumption handle
+          if (liveSession) {
+            try { liveSession.close(); } catch (e) { /* ignore */ }
+            liveSession = null;
+          }
+
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: "interruptionModeChanged", mode: newMode }));
+          }
+
+          // Reconnect with new mode, using resumption handle if available
+          if (sessionParams) {
+            const caucusConfig = caucusState.active && caucusState.partyId
+              ? { partyId: caucusState.partyId }
+              : undefined;
+            await connectLiveSession(latestResumptionHandle || undefined, newMode, caucusConfig);
+          }
+        }
+      } else if (msg.type === "correctSpeaker" && liveSession && !sessionClosing) {
+        // ── Speaker correction from frontend ──
+        const speakerName = msg.name;
+        if (speakerName) {
+          trackSpeakerTurn(speakerName);
+          try {
+            liveSession.sendClientContent({
+              turns: [{
+                role: "user",
+                parts: [{
+                  text: `[SYSTEM CONTEXT UPDATE] Speaker correction: The current speaker is ${speakerName}. Please update your speaker tracking accordingly.`,
+                }],
+              }],
+              turnComplete: true,
+            });
+          } catch (e) {
+            console.warn("[Live] Failed to send speaker correction:", e);
+          }
         }
       } else if (
         msg.type === "toolResponse" &&
@@ -298,6 +635,14 @@ export function handleWebSocketConnection(ws: WebSocket) {
 
   ws.on("close", () => {
     sessionClosing = true;
+    // Clean up silence timers
+    if (silenceTimer5s) { clearTimeout(silenceTimer5s); silenceTimer5s = null; }
+    if (silenceTimer15s) { clearTimeout(silenceTimer15s); silenceTimer15s = null; }
+    // Clean up caucus session if active
+    if (caucusState.active && mainSession) {
+      try { mainSession.close(); } catch (e) { /* ignore */ }
+      mainSession = null;
+    }
     // Room mode: leave room (room manager handles cleanup)
     if (roomId) {
       leaveRoom(roomId, clientId);

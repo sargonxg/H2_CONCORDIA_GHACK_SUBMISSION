@@ -1,9 +1,10 @@
-import type { Case, CaseSummary, PathwaysResult } from "./types";
+import type { Case, CaseSummary, PathwaysResult, AuditEntry } from "./types";
 
 export function exportAsMarkdown(
   caseData: Case,
   pathways?: PathwaysResult,
   summaryData?: CaseSummary,
+  auditTrail?: AuditEntry[],
 ): string {
   const lines: string[] = [];
   lines.push(`# Mediation Case: ${caseData.title}`);
@@ -83,6 +84,45 @@ export function exportAsMarkdown(
     }
   }
 
+  // ── Phase-by-phase timeline breakdown ──
+  if (caseData.timeline?.length) {
+    lines.push(`\n## Session Timeline`);
+    const phases = new Map<string, typeof caseData.timeline>();
+    caseData.timeline.forEach((t) => {
+      const list = phases.get(t.phase) || [];
+      list.push(t);
+      phases.set(t.phase, list);
+    });
+    phases.forEach((events, phase) => {
+      lines.push(`\n### Phase: ${phase}`);
+      events.forEach((t) => {
+        const time = new Date(t.timestamp).toLocaleTimeString();
+        lines.push(`- **${time}** [${t.type}] ${t.content}${t.actor ? ` *(${t.actor})*` : ''}`);
+      });
+    });
+  }
+
+  // ── Emotion summary ──
+  if (caseData.emotionTimeline?.length) {
+    lines.push(`\n## Emotion Timeline`);
+    lines.push(`| Time | Phase | ${caseData.partyAName} | ${caseData.partyBName} | Escalation |`);
+    lines.push(`|------|-------|${'-'.repeat(caseData.partyAName.length + 2)}|${'-'.repeat(caseData.partyBName.length + 2)}|------------|`);
+    caseData.emotionTimeline.forEach((e) => {
+      const time = new Date(e.timestamp).toLocaleTimeString();
+      lines.push(
+        `| ${time} | ${e.phase} | ${e.partyA.emotionalState} (${e.partyA.emotionalIntensity}/10 ${e.partyA.emotionalTrajectory}) | ${e.partyB.emotionalState} (${e.partyB.emotionalIntensity}/10 ${e.partyB.emotionalTrajectory}) | ${e.escalationScore} |`,
+      );
+    });
+  }
+
+  // ── Audit trail ──
+  if (auditTrail?.length) {
+    lines.push(`\n## Audit Trail`);
+    auditTrail.forEach((a) => {
+      lines.push(`- **${a.timestamp}** [${a.actor}] ${a.action}: ${JSON.stringify(a.details)}`);
+    });
+  }
+
   return lines.join("\n");
 }
 
@@ -90,8 +130,21 @@ export function exportAsJSON(
   caseData: Case,
   pathways?: PathwaysResult | null,
   summary?: CaseSummary | null,
+  auditTrail?: AuditEntry[] | null,
 ): string {
-  return JSON.stringify({ case: caseData, pathways, summary }, null, 2);
+  return JSON.stringify(
+    {
+      case: caseData,
+      pathways: pathways ?? undefined,
+      summary: summary ?? undefined,
+      timeline: caseData.timeline ?? [],
+      emotionTimeline: caseData.emotionTimeline ?? [],
+      auditTrail: auditTrail ?? [],
+      exportedAt: new Date().toISOString(),
+    },
+    null,
+    2,
+  );
 }
 
 export function downloadFile(

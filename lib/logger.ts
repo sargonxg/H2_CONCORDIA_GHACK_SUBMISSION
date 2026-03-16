@@ -41,4 +41,16 @@ export const logger = {
     log("warn", component, msg, data),
   error: (component: string, msg: string, data?: unknown) =>
     log("error", component, msg, data),
+
+  // Session lifecycle logging
+  sessionEvent: (sessionId: string, event: string, details?: unknown) =>
+    log("info", "Session", `${event} [${sessionId}]`, details),
+
+  // Tool call logging with duration
+  toolCall: (toolName: string, durationMs: number, success: boolean) =>
+    log("info", "ToolCall", `${toolName} ${success ? "✓" : "✗"} ${durationMs}ms`),
+
+  // Reconnection logging
+  reconnect: (attempt: number, maxAttempts: number, reason: string) =>
+    log("warn", "Reconnect", `Attempt ${attempt}/${maxAttempts}: ${reason}`),
 };
