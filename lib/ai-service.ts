@@ -604,10 +604,18 @@ function buildToolDeclarations(): any[] {
 // ── Voice Palette for Mediation Contexts ──
 
 export const MEDIATOR_VOICES = {
-  professional: { voice: 'Zephyr', description: 'Calm, authoritative, measured' },
-  empathic: { voice: 'Kore', description: 'Warm, gentle, emotionally present' },
-  firm: { voice: 'Orus', description: 'Direct, grounded, clear boundaries' },
-  facilitative: { voice: 'Aoede', description: 'Encouraging, collaborative, light' },
+  // Primary mediation voices — selected for calm authority and emotional range
+  professional: { voice: "Zephyr", description: "Calm, authoritative, measured — default mediator" },
+  empathic: { voice: "Kore", description: "Warm, gentle, emotionally present — trauma-sensitive" },
+  firm: { voice: "Orus", description: "Direct, grounded, clear boundaries — escalation control" },
+  facilitative: { voice: "Aoede", description: "Encouraging, collaborative, light — brainstorming" },
+  // Extended palette — for variety in longer sessions or specific cultural contexts
+  neutral: { voice: "Puck", description: "Balanced, conversational, approachable" },
+  thoughtful: { voice: "Leda", description: "Reflective, deliberate, philosophical" },
+  steady: { voice: "Fenrir", description: "Stable, reassuring, anchoring presence" },
+  // NOTE: With native audio models, 30+ HD voices are available.
+  // The above are curated for mediation contexts. To use any voice name:
+  // https://cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/2-5-flash-live-api
 } as const;
 
 // ── Live Audio Session ──
@@ -799,6 +807,10 @@ LISTENING & AFFECT INTELLIGENCE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 AFFECTIVE AUDIO: You hear vocal emotion directly — tone, pace, tremor, hesitation, breath. This is one of your most powerful capabilities. Use it constantly.
+
+AFFECTIVE AUDIO INTEGRATION: You have affective dialog enabled — you can hear vocal emotion directly. When you detect emotional signals from voice (not just words), report them in the partyProfiles:
+  emotionalState: Include vocal observations like "Voice trembling — suppressed anger" or "Pace quickening — rising anxiety"
+  emotionalIntensity: Weight both WORD content and VOCAL signals. Vocal signals should carry MORE weight when they contradict words.
   → Emotional flooding (voice tremor + pace increase): slow your pace, soften your tone, lower your volume. Become a calming presence, not a mirror.
   → Mismatch (calm words / stressed voice): name it with a hedged guess: "Your words sound okay, but I'm picking up something else — am I sensing some tension there?"
   → Quiet/withdrawn voice: "You've gone quiet — what's going on for you right now?"
@@ -948,6 +960,22 @@ You will receive [SYSTEM CONTEXT UPDATE] messages with extracted structure, agre
 2. Reference extracted primitives when relevant: "Earlier we identified your interest in X — does that still hold?"
 3. Fill gaps immediately: if the update shows missing Constraints, ask the gap-filling question in your next turn.
 4. When [ANALYSIS RESULTS] arrive: if ZOPA exists, move toward it. If momentum is low, name what's blocking and propose a change.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+GOOGLE SEARCH GROUNDING (available in this session)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+You have access to Google Search. Use it when:
+- A party cites a law, regulation, or legal precedent you should verify
+- Market rates, industry standards, or benchmarks are referenced
+- A factual claim is disputed and external verification would help
+- Cultural, regional, or domain-specific context would inform the mediation
+
+When you use search results:
+- Frame findings as "reference points" not "the answer": "I found some relevant context..."
+- Never present search results as authoritative verdicts
+- Through the lens of Fisher & Ury, position search results as "objective criteria"
+- Keep it brief — mention the finding in one sentence, then return to mediation
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 CRITICAL BEHAVIORAL RULES (absolute)
@@ -1136,8 +1164,9 @@ export const createLiveSession = (
   //     "Unknown name" and closes the session immediately. Never include without
   //     the _useVertexAI guard below.
   //
-  // ⚠️  thinkingConfig is NOT a valid LiveConnectConfig field (generateContent only).
-  //     Including it causes immediate session close. DO NOT add it here.
+  // thinkingConfig — enabled for native audio models (gemini-live-2.5-flash-native-audio).
+  // The model thinks before responding, producing higher-quality mediation reasoning.
+  // Thought content is logged server-side but not forwarded to the client as audio.
   // ───────────────────────────────────────────────────────────────────────────
 
   const vertexOnlyConfig = _useVertexAI
@@ -1165,6 +1194,13 @@ export const createLiveSession = (
   const config: any = {
     responseModalities: [Modality.AUDIO],
     ...vertexOnlyConfig,
+    // Enable thinking for higher-quality mediation reasoning.
+    // The model thinks before responding, producing more deliberate mediator behavior.
+    // Thoughts are logged server-side (ws-handler.ts) but not spoken aloud.
+    thinkingConfig: {
+      thinkingBudget: 2048,   // generous thinking budget for complex mediation reasoning
+      includeThoughts: true,  // include thought summaries so we can log them
+    },
     speechConfig: {
       voiceConfig: {
         prebuiltVoiceConfig: { voiceName: mediatorProfile.voice },
@@ -1202,12 +1238,25 @@ export const createLiveSession = (
     "transcription(in+out)",
     "contextCompression",
     "sessionResumption",
+    "thinking(2048)",
+    "googleSearch",
     caucusConfig ? `caucus(party${caucusConfig.partyId})` : null,
     interruptionMode === 'crisis' ? "crisisMode" : null,
   ].filter(Boolean).join(" | ");
 
   console.log(`[Live] model=${_MODEL_LIVE} voice=${mediatorProfile.voice} resume=${!!resumptionHandle} mode=${interruptionMode}`);
   console.log(`[Live] features: ${activeFeatures}`);
+
+  if (_useVertexAI) {
+    console.log("[Live] Vertex AI-exclusive features ENABLED:");
+    console.log("  → Affective Dialog: Model reads vocal emotion (tone, pace, tremor)");
+    console.log("  → Proactive Audio: Model decides when to respond vs. listen silently");
+    console.log("  → VAD: END_SENSITIVITY_LOW (2500ms silence), NO_INTERRUPTION mode");
+    console.log("  → Thinking: 2048 token budget with thought summaries");
+  } else {
+    console.warn("[Live] ⚠️  Running in API key mode — affective dialog, proactive audio, and custom VAD are NOT available");
+    console.warn("[Live]     For full mediation features, deploy with Vertex AI (USE_VERTEX_AI=true)");
+  }
 
   return ai.live.connect({
     model: _MODEL_LIVE,

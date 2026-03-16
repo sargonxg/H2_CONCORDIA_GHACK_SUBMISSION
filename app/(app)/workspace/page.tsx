@@ -437,6 +437,7 @@ function WorkspaceInner() {
   const [zopaHints, setZopaHints] = useState<string[]>([]);
   const [impaseBanner, setImpaseBanner] = useState<ImpasseEvent | null>(null);
   const [showBlindBidding, setShowBlindBidding] = useState(false);
+  const [mediatorThought, setMediatorThought] = useState<string>("");
   const [showAgreementModal, setShowAgreementModal] = useState(false);
   const [agreementHTML, setAgreementHTML] = useState<string | null>(null);
   const [agreementData, setAgreementData] = useState<any>(null);
@@ -803,6 +804,24 @@ function WorkspaceInner() {
           onmessage: async (message: any) => {
             if (sessionClosingRef.current) return;
 
+            // ── Handle barge-in (user interrupted model) ──
+            // When the user speaks while the model is generating audio,
+            // Gemini sends interrupted:true. We must immediately flush
+            // the playback queue so stale audio doesn't keep playing.
+            if (message.serverContent?.interrupted) {
+              // Reset the playback scheduler so queued audio chunks are skipped
+              playbackTimeRef.current = 0;
+              if (playbackContextRef.current && playbackContextRef.current.state !== "closed") {
+                // Close and recreate the playback context to cancel all scheduled buffers
+                playbackContextRef.current.close().catch(() => {});
+                playbackContextRef.current = null;
+              }
+              // Clear any buffered AI transcript since the generation was cancelled
+              aiTranscriptBuffer.current = "";
+              console.log("[Live] Barge-in detected — flushed audio playback queue");
+              // Don't return — continue processing the message for other fields
+            }
+
             const base64Audio =
               message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
             if (base64Audio) {
@@ -868,6 +887,47 @@ function WorkspaceInner() {
                 );
                 userTranscriptBuffer.current = "";
               }
+              // Capture a lightweight emotion snapshot even without a tool call,
+              // using the latest partyProfiles from the mediation state
+              if (liveMediationStateRef.current?.partyProfiles?.partyA &&
+                  liveMediationStateRef.current?.partyProfiles?.partyB) {
+                const elapsedEmo = Math.floor((Date.now() - sessionStartTimeRef.current) / 1000);
+                const snapshot: EmotionSnapshot = {
+                  timestamp: new Date().toISOString(),
+                  elapsedSeconds: elapsedEmo,
+                  partyA: {
+                    emotionalState: liveMediationStateRef.current.partyProfiles.partyA?.emotionalState || "Unknown",
+                    emotionalIntensity: liveMediationStateRef.current.partyProfiles.partyA?.emotionalIntensity ?? 5,
+                    emotionalTrajectory: liveMediationStateRef.current.partyProfiles.partyA?.emotionalTrajectory || "stable",
+                    conflictStyle: liveMediationStateRef.current.partyProfiles.partyA?.conflictStyle || "Unknown",
+                    cooperativeness: liveMediationStateRef.current.partyProfiles.partyA?.cooperativeness ?? 50,
+                    defensiveness: liveMediationStateRef.current.partyProfiles.partyA?.defensiveness ?? 50,
+                  },
+                  partyB: {
+                    emotionalState: liveMediationStateRef.current.partyProfiles.partyB?.emotionalState || "Unknown",
+                    emotionalIntensity: liveMediationStateRef.current.partyProfiles.partyB?.emotionalIntensity ?? 5,
+                    emotionalTrajectory: liveMediationStateRef.current.partyProfiles.partyB?.emotionalTrajectory || "stable",
+                    conflictStyle: liveMediationStateRef.current.partyProfiles.partyB?.conflictStyle || "Unknown",
+                    cooperativeness: liveMediationStateRef.current.partyProfiles.partyB?.cooperativeness ?? 50,
+                    defensiveness: liveMediationStateRef.current.partyProfiles.partyB?.defensiveness ?? 50,
+                  },
+                  phase: liveMediationStateRef.current.phase || "Opening",
+                  escalationScore: liveMediationStateRef.current.partyProfiles.partyA?.riskAssessment?.escalation ?? 0,
+                };
+                // Debounce: only add if last snapshot is >15s old
+                const caseForEmotion = casesRef.current.find((c) => c.id === activeCaseIdRef.current);
+                const lastSnapshot = caseForEmotion?.emotionTimeline?.slice(-1)[0];
+                if (!lastSnapshot || elapsedEmo - lastSnapshot.elapsedSeconds >= 15) {
+                  setCases((prev) =>
+                    prev.map((c) =>
+                      c.id === activeCaseIdRef.current
+                        ? { ...c, emotionTimeline: [...(c.emotionTimeline || []), snapshot] }
+                        : c,
+                    ),
+                  );
+                }
+              }
+
               // Debounce extraction — 12s after last turn
               if (extractionTimerRef.current) clearTimeout(extractionTimerRef.current);
               extractionTimerRef.current = setTimeout(() => {
@@ -1110,6 +1170,10 @@ function WorkspaceInner() {
               safeLocalStorageSet("concordia_cases", casesRef.current);
               setConnectionLostBanner(true);
             }
+          },
+          onthought: (text: string) => {
+            // Store latest model thought for the Mediator Playbook display
+            setMediatorThought?.(text);
           },
           onerror: (err: any) => {
             console.error("Live API Error:", err);

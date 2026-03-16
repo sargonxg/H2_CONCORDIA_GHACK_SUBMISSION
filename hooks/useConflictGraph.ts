@@ -233,6 +233,18 @@ export function useConflictGraph(
       {} as OntologyStats,
     );
 
-    return { nodes, edges, stats };
+    // Safety: remove any edges referencing non-existent nodes
+    const validNodeIds = new Set(nodes.map((n) => n.id));
+    const safeEdges = edges.filter(
+      (e) =>
+        validNodeIds.has(
+          typeof e.source === "string" ? e.source : (e.source as GraphNode).id,
+        ) &&
+        validNodeIds.has(
+          typeof e.target === "string" ? e.target : (e.target as GraphNode).id,
+        ),
+    );
+
+    return { nodes, edges: safeEdges, stats };
   }, [actors, primitives, liveMediationState]);
 }

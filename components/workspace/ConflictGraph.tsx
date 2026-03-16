@@ -25,6 +25,18 @@ function edgeColor(type: EdgeType): string {
   return "#374151";
 }
 
+/** Safely extract x coordinate — guards against string/null/undefined nodes */
+function safeX(node: any): number {
+  if (node == null || typeof node === "string") return 0;
+  return typeof node.x === "number" ? node.x : 0;
+}
+
+/** Safely extract y coordinate — guards against string/null/undefined nodes */
+function safeY(node: any): number {
+  if (node == null || typeof node === "string") return 0;
+  return typeof node.y === "number" ? node.y : 0;
+}
+
 function nodeRadius(type: string): number {
   if (type === "Actor") return 28;
   if (type === "Claim" || type === "Interest") return 16;
@@ -150,10 +162,10 @@ export default function ConflictGraph({ nodes, edges, highlightActorId }: Props)
     const simEdges: any[] = edges
       .map((e) => ({
         ...e,
-        source: nodeById.get(typeof e.source === "string" ? e.source : (e.source as GraphNode).id) ?? e.source,
-        target: nodeById.get(typeof e.target === "string" ? e.target : (e.target as GraphNode).id) ?? e.target,
+        source: nodeById.get(typeof e.source === "string" ? e.source : (e.source as GraphNode).id),
+        target: nodeById.get(typeof e.target === "string" ? e.target : (e.target as GraphNode).id),
       }))
-      .filter((e) => e.source && e.target);
+      .filter((e) => e.source != null && e.target != null && typeof e.source === "object" && typeof e.target === "object");
 
     svg.select("g.root").remove();
     const root = svg.append("g").attr("class", "root");
@@ -187,10 +199,10 @@ export default function ConflictGraph({ nodes, edges, highlightActorId }: Props)
         if (c === "#10b981") return "url(#arrow-green)";
         return "url(#arrow-gray)";
       })
-      .attr("x1", (d) => (d.source as GraphNode).x ?? 0)
-      .attr("y1", (d) => (d.source as GraphNode).y ?? 0)
-      .attr("x2", (d) => (d.target as GraphNode).x ?? 0)
-      .attr("y2", (d) => (d.target as GraphNode).y ?? 0)
+      .attr("x1", (d) => safeX(d.source))
+      .attr("y1", (d) => safeY(d.source))
+      .attr("x2", (d) => safeX(d.target))
+      .attr("y2", (d) => safeY(d.target))
       .style("cursor", "pointer")
       .on("mouseover", function (event, d) {
         setHoveredEdge(d.type + String((d.source as any).id) + String((d.target as any).id));
@@ -321,15 +333,15 @@ export default function ConflictGraph({ nodes, edges, highlightActorId }: Props)
       .force("collide", d3.forceCollide<GraphNode>((d) => nodeRadius(d.type) + 8))
       .on("tick", () => {
         linkSel
-          .attr("x1", (d) => (d.source as any).x ?? 0)
-          .attr("y1", (d) => (d.source as any).y ?? 0)
-          .attr("x2", (d) => (d.target as any).x ?? 0)
-          .attr("y2", (d) => (d.target as any).y ?? 0);
+          .attr("x1", (d) => safeX(d.source))
+          .attr("y1", (d) => safeY(d.source))
+          .attr("x2", (d) => safeX(d.target))
+          .attr("y2", (d) => safeY(d.target));
 
         // Edge labels follow midpoint, shown on hover
         linkLabelSel
-          .attr("x", (d) => (((d.source as any).x ?? 0) + ((d.target as any).x ?? 0)) / 2)
-          .attr("y", (d) => (((d.source as any).y ?? 0) + ((d.target as any).y ?? 0)) / 2)
+          .attr("x", (d) => (safeX(d.source) + safeX(d.target)) / 2)
+          .attr("y", (d) => (safeY(d.source) + safeY(d.target)) / 2)
           .attr("opacity", (d) => {
             const key = d.type + String((d.source as any).id) + String((d.target as any).id);
             return key === hoveredEdge ? 1 : 0;

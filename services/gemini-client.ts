@@ -154,6 +154,8 @@ export const getLiveSession = (
           callbacks.onLowAudio?.(msg.data);
         } else if (msg.type === "speakerBalance") {
           callbacks.onSpeakerBalance?.(msg.data);
+        } else if (msg.type === "thought") {
+          callbacks.onthought?.(msg.text);
         } else if (msg.type === "groundingUpdate") {
           callbacks.onGroundingUpdate?.(msg.data);
         } else if (msg.type === "error") {
