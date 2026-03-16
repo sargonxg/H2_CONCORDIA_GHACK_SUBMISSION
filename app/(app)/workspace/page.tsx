@@ -64,6 +64,9 @@ import { ErrorPanel } from "@/components/ErrorPanel";
 import SessionControls from "@/components/workspace/SessionControls";
 import LiveStatusBar from "@/components/workspace/LiveStatusBar";
 import TranscriptPanel from "@/components/workspace/TranscriptPanel";
+import MediatorStatus from "@/components/workspace/MediatorStatus";
+import type { MediatorState } from "@/components/workspace/MediatorStatus";
+import TextInput from "@/components/workspace/TextInput";
 import AgreementTracker from "@/components/workspace/AgreementTracker";
 import MediatorPlaybook from "@/components/workspace/MediatorPlaybook";
 import IntelligencePanel from "@/components/workspace/IntelligencePanel";
@@ -461,6 +464,10 @@ function WorkspaceInner() {
   const [intakeData, setIntakeData] = useState<IntakeData | null>(null);
   const [connectionLostBanner, setConnectionLostBanner] = useState(false);
   const [micDenied, setMicDenied] = useState(false);
+  // Mediator state tracking for visual indicators
+  const [mediatorState, setMediatorState] = useState<MediatorState>("idle");
+  const [waitingSeconds, setWaitingSeconds] = useState(0);
+  const waitingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const demoTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   const sessionRef = useRef<any>(null);
@@ -512,6 +519,22 @@ function WorkspaceInner() {
   const lastContextInjectionRef = useRef<number>(0);
   const MIN_INJECTION_INTERVAL = 60000; // inject at most once per minute
   const lastCgRunRef = useRef<number>(0); // debounce common ground background analysis
+
+  const startWaitingTimer = useCallback(() => {
+    setWaitingSeconds(0);
+    if (waitingTimerRef.current) clearInterval(waitingTimerRef.current);
+    waitingTimerRef.current = setInterval(() => {
+      setWaitingSeconds((s) => s + 1);
+    }, 1000);
+  }, []);
+
+  const stopWaitingTimer = useCallback(() => {
+    if (waitingTimerRef.current) {
+      clearInterval(waitingTimerRef.current);
+      waitingTimerRef.current = null;
+    }
+    setWaitingSeconds(0);
+  }, []);
 
   useEffect(() => {
     const saved = localStorage.getItem("concordia_cases");
@@ -830,6 +853,8 @@ function WorkspaceInner() {
               message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
             if (base64Audio) {
               playAudio(base64Audio);
+              setMediatorState("speaking");
+              stopWaitingTimer();
             }
 
             // Buffer AI transcription fragments (arrive word-by-word)
@@ -846,11 +871,17 @@ function WorkspaceInner() {
             // Buffer user transcription fragments (arrive word-by-word)
             if (message.serverContent?.inputTranscription?.text) {
               userTranscriptBuffer.current += message.serverContent.inputTranscription.text;
+              setMediatorState("listening");
+              stopWaitingTimer();
             }
 
             // FLUSH buffers when a turn completes or a tool call arrives
             const shouldFlush = message.serverContent?.turnComplete || message.toolCall;
             if (shouldFlush && activeCaseIdRef.current) {
+              if (message.serverContent?.turnComplete) {
+                setMediatorState("waiting");
+                startWaitingTimer();
+              }
               const elapsed = Math.floor((Date.now() - sessionStartTimeRef.current) / 1000);
               const mm = String(Math.floor(elapsed / 60)).padStart(2, "0");
               const ss = String(elapsed % 60).padStart(2, "0");
@@ -941,6 +972,7 @@ function WorkspaceInner() {
 
             if (message.toolCall) {
               toolCallPendingRef.current = true;
+              setMediatorState("processing");
               const functionCalls = message.toolCall.functionCalls;
               if (functionCalls && functionCalls.length > 0) {
                 const responses = functionCalls.map((call: any) => {
@@ -1170,6 +1202,8 @@ function WorkspaceInner() {
             }
             setStatus("DISCONNECTED");
             setIsRecording(false);
+            setMediatorState("idle");
+            stopWaitingTimer();
             stopAudioCapture();
             // If closed unexpectedly, save transcript and show banner
             if (wasLive) {
@@ -1223,6 +1257,9 @@ function WorkspaceInner() {
 
   const stopSession = () => {
     sessionClosingRef.current = true;
+    setMediatorState("idle");
+    stopWaitingTimer();
+    if (waitingTimerRef.current) clearInterval(waitingTimerRef.current);
     if (autoExtractionIntervalRef.current) {
       clearInterval(autoExtractionIntervalRef.current);
       autoExtractionIntervalRef.current = null;
@@ -3121,6 +3158,37 @@ function WorkspaceInner() {
             })}
           </div>
 
+          {/* ── MEDIATOR STATUS & CONTROLS ── */}
+          {isRecording && (
+            <MediatorStatus
+              state={mediatorState}
+              targetParty={liveMediationState?.targetActor || activeCase?.partyAName || "Party A"}
+              secondsWaiting={waitingSeconds}
+            />
+          )}
+          {isRecording && (
+            <div className="flex items-center justify-center gap-2 py-1.5">
+              <span className="text-[10px] text-[var(--color-text-muted)] uppercase tracking-wider">Speaking:</span>
+              {[
+                { name: activeCase?.partyAName || "Party A", color: "#4ECDC4" },
+                { name: activeCase?.partyBName || "Party B", color: "#A78BFA" },
+              ].map(({ name, color }) => (
+                <button
+                  key={name}
+                  onClick={() => {
+                    sessionRef.current?.sendContext(
+                      `[SPEAKER IDENTIFICATION: The person currently speaking is ${name}. Update your speaker tracking and address them by name.]`
+                    );
+                  }}
+                  className="px-3 py-1 rounded-full text-[11px] font-medium border transition-colors hover:brightness-110"
+                  style={{ color, borderColor: color + "35", backgroundColor: color + "10" }}
+                >
+                  {name}
+                </button>
+              ))}
+            </div>
+          )}
+
           {/* ── TRANSCRIPT TAB ── */}
           {activeTab === "transcript" && (
             <TranscriptPanel
@@ -3141,6 +3209,38 @@ function WorkspaceInner() {
               isAnalyzing={status === "ANALYZING"}
               isRecording={isRecording}
             />
+          )}
+          {isRecording && (
+            <div className="flex justify-center py-2">
+              <TextInput
+                partyAName={activeCase?.partyAName || "Party A"}
+                partyBName={activeCase?.partyBName || "Party B"}
+                disabled={!isRecording}
+                onSendMessage={(text, party) => {
+                  if (!sessionRef.current) return;
+                  sessionRef.current.sendContext(
+                    `[${party} says (typed input)]: "${text}"`
+                  );
+                  const elapsed = Math.floor((Date.now() - sessionStartTimeRef.current) / 1000);
+                  const mm = String(Math.floor(elapsed / 60)).padStart(2, "0");
+                  const ss = String(elapsed % 60).padStart(2, "0");
+                  setCases((prev) =>
+                    prev.map((c) =>
+                      c.id === activeCaseIdRef.current
+                        ? {
+                            ...c,
+                            transcript:
+                              c.transcript +
+                              (c.transcript ? "\n\n" : "") +
+                              `[${mm}:${ss}] [${party} — typed]: ${text}`,
+                          }
+                        : c,
+                    ),
+                  );
+                  setMediatorState("processing");
+                }}
+              />
+            </div>
           )}
 
           {/* ── STRUCTURE TAB ── */}
