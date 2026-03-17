@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback, Suspense } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -56,10 +56,9 @@ import { safeJsonParse } from "@/lib/utils";
 import { exportAsMarkdown, exportAsJSON, downloadFile, generateAgreementHTML, formatAgreementAsText } from "@/lib/export";
 import IntakeWizard from "@/components/workspace/IntakeWizard";
 import { useConflictGraph } from "@/hooks/useConflictGraph";
-import ConflictGraph from "@/components/workspace/ConflictGraph";
-import OntologyHealthCheck from "@/components/workspace/OntologyHealthCheck";
-import EnhancedPartyProfile from "@/components/workspace/EnhancedPartyProfile";
-import EscalationMeter from "@/components/workspace/EscalationMeter";
+import { buildConflictGraph } from "@/lib/graph-builder";
+import EscalationAlert from "@/components/workspace/EscalationAlert";
+import IntelligenceSidebar from "@/components/workspace/IntelligenceSidebar";
 import { ErrorPanel } from "@/components/ErrorPanel";
 import SessionControls from "@/components/workspace/SessionControls";
 import LiveStatusBar from "@/components/workspace/LiveStatusBar";
@@ -67,21 +66,15 @@ import TranscriptPanel from "@/components/workspace/TranscriptPanel";
 import MediatorStatus from "@/components/workspace/MediatorStatus";
 import type { MediatorState } from "@/components/workspace/MediatorStatus";
 import TextInput from "@/components/workspace/TextInput";
-import AgreementTracker from "@/components/workspace/AgreementTracker";
-import MediatorPlaybook from "@/components/workspace/MediatorPlaybook";
-import IntelligencePanel from "@/components/workspace/IntelligencePanel";
 import KeyboardShortcutsHelp from "@/components/workspace/KeyboardShortcutsHelp";
-import PowerMap from "@/components/workspace/PowerMap";
-import BlindBidding from "@/components/workspace/BlindBidding";
-import EmotionTimeline from "@/components/workspace/EmotionTimeline";
 import WorkspaceLayout from "@/components/workspace/WorkspaceLayout";
 import PhaseTimeline from "@/components/workspace/PhaseTimeline";
 import MediatorControls from "@/components/workspace/MediatorControls";
 import type { SessionMode } from "@/components/workspace/MediatorControls";
 import MediationTimer from "@/components/workspace/MediationTimer";
 import ConnectionStatus from "@/components/workspace/ConnectionStatus";
-import PartyCardNew from "@/components/workspace/PartyCard";
 import QuickActions from "@/components/workspace/QuickActions";
+import BlindBidding from "@/components/workspace/BlindBidding";
 
 const PRIMITIVE_TYPES: PrimitiveType[] = [
   "Actor",
@@ -416,9 +409,6 @@ function WorkspaceInner() {
     style: "professional" as "professional" | "empathic",
   });
   const [showSettings, setShowSettings] = useState(false);
-  const [activeTab, setActiveTab] = useState<
-    "structure" | "pathways" | "graph" | "timeline"
-  >("structure");
   const [selectedFramework, setSelectedFramework] = useState("");
   const [expandedPathways, setExpandedPathways] = useState<Set<number>>(new Set([0]));
   const [showSummary, setShowSummary] = useState(false);
@@ -642,12 +632,6 @@ function WorkspaceInner() {
       // ?: show shortcuts help
       if (e.key === "?" && !isInputFocused()) {
         setShowShortcutsHelp(true);
-      }
-      if (!e.ctrlKey && !e.metaKey && !e.altKey) {
-        if (e.key === "1") setActiveTab("structure");
-        if (e.key === "2") setActiveTab("pathways");
-        if (e.key === "3") setActiveTab("graph");
-        if (e.key === "4") setActiveTab("timeline");
       }
     };
     window.addEventListener("keydown", handler);
@@ -2016,7 +2000,6 @@ function WorkspaceInner() {
       }
 
       setStatus("IDLE");
-      setActiveTab("pathways");
       // Run parallel background common ground analysis (non-blocking)
       runBackgroundCommonGround();
     } catch (err) {
@@ -2386,7 +2369,6 @@ function WorkspaceInner() {
       if (parsed) {
         setPathways(parsed);
         setExpandedPathways(new Set([0]));
-        setActiveTab("pathways");
       } else {
         console.error("[Pathways] Could not parse framework analysis result:", resultStr);
       }
@@ -2494,6 +2476,12 @@ function WorkspaceInner() {
     activeCase?.actors ?? [],
     activeCase?.primitives ?? [],
     liveMediationState,
+  );
+
+  // Full conflict graph for IntelligenceSidebar
+  const graph = useMemo(
+    () => buildConflictGraph(activeCase?.actors ?? [], activeCase?.primitives ?? []),
+    [activeCase?.actors, activeCase?.primitives],
   );
 
   // ─── INTAKE WIZARD ───
@@ -2836,7 +2824,7 @@ function WorkspaceInner() {
             sessionToast={sessionToast}
             setSessionToast={setSessionToast}
             healthScore={healthScore}
-            onOpenGraph={() => setActiveTab("graph")}
+            onOpenGraph={() => {}}
             extractionNotice={extractionNotice}
           />
         </div>
@@ -2939,1230 +2927,192 @@ function WorkspaceInner() {
 
       {/* ─── MOBILE LAYOUT ─── */}
       <div className="flex lg:hidden flex-col flex-1 overflow-hidden">
-        {isRecording ? (
-          /* LIVE SESSION: Full-screen transcript with floating controls */
-          <div className="flex flex-col flex-1 overflow-hidden relative">
-            {/* Status bar */}
-            <div className="shrink-0 px-3 py-1.5 bg-[var(--color-surface)] border-b border-[var(--color-border)]">
+        {/* Mobile tab bar */}
+        <div className="flex shrink-0 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-3 gap-1 py-2">
+          {([
+            { id: "center" as const, label: "Conversation" },
+            { id: "right" as const, label: "Intelligence" },
+          ]).map((p) => (
+            <button
+              key={p.id}
+              onClick={() => setMobilePanel(p.id)}
+              className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                mobilePanel === p.id
+                  ? "bg-[var(--color-accent)] text-white"
+                  : "text-[var(--color-text-muted)] hover:text-white bg-[var(--color-bg)] border border-[var(--color-border)]"
+              }`}
+            >
+              {p.label}
+            </button>
+          ))}
+          {/* Mini duration + phase */}
+          <div className="ml-auto flex items-center gap-2 text-[10px] font-mono text-[var(--color-text-muted)] whitespace-nowrap">
+            <span className="hidden sm:block">{liveMediationState?.phase || "Opening"}</span>
+            {(isRecording || status === "LIVE") && sessionDuration > 0 && (
+              <MediationTimer
+                startTime={sessionStartTimeRef.current}
+                sessionDuration={sessionDuration}
+                currentPhase={liveMediationState?.phase || "Opening"}
+              />
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ─── MAIN CONTENT AREA (2-zone 60/40) ─── */}
+      <div className="flex-1 flex overflow-hidden p-4 gap-4">
+        {/* ─── LEFT ZONE: Conversation Hero (60%) ─── */}
+        <div className={`w-full lg:w-[60%] flex flex-col overflow-hidden ${mobilePanel === "center" ? "flex" : "hidden"} lg:flex`}>
+          {/* Mediator Controls */}
+          <div className="shrink-0 mb-2">
+            <MediatorControls
+              isRecording={isRecording}
+              sessionMode={sessionMode}
+              onSetSessionMode={handleSetSessionMode}
+              onSkipPhase={handleSkipPhase}
+              onPauseMediator={handlePauseMediator}
+              onResumeMediator={handleResumeMediator}
+              onSkipToQuestion={handleSkipToQuestion}
+              mediatorPaused={mediatorPaused}
+              partyCount={partyCount}
+              onAddParty={handleAddParty}
+            />
+          </div>
+
+          {/* Escalation Alert */}
+          {escalationBanner && (
+            <div className="shrink-0 mb-2">
+              <EscalationAlert
+                flag={escalationBanner}
+                onDismiss={() => setEscalationBanner(null)}
+                onDeEscalate={() => { setEscalationBanner(null); }}
+              />
+            </div>
+          )}
+
+          {/* Mediator Status */}
+          {isRecording && (
+            <div className="shrink-0">
               <MediatorStatus
                 state={mediatorState}
                 targetParty={liveMediationState?.targetActor || activeCase?.partyAName || "Party A"}
                 secondsWaiting={waitingSeconds}
               />
             </div>
+          )}
 
-            {/* Scrollable transcript (main area) */}
-            <div className="flex-1 overflow-y-auto">
-              <TranscriptPanel
-                transcript={activeCase?.transcript ?? ""}
-                isLive={true}
-                extractionNotice={extractionNotice}
-                autoScrollEnabled={autoScrollEnabled}
-                setAutoScrollEnabled={setAutoScrollEnabled}
-                transcriptEndRef={transcriptEndRef}
-                partyAName={activeCase?.partyAName ?? "Party A"}
-                partyBName={activeCase?.partyBName ?? "Party B"}
-                onTranscriptChange={(val) => updateActiveCase({ transcript: val })}
-                onScrollToLatest={() => {
-                  setAutoScrollEnabled(true);
-                  transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
-                }}
-                onAnalyze={handleSimulateExtraction}
-                isAnalyzing={status === "ANALYZING"}
-                isRecording={isRecording}
-              />
+          {/* Transcript Panel */}
+          <div className="flex-1 overflow-y-auto">
+            <TranscriptPanel
+              transcript={activeCase?.transcript ?? ""}
+              isLive={isRecording || status === "LIVE" || status === "RECONNECTING"}
+              extractionNotice={extractionNotice}
+              autoScrollEnabled={autoScrollEnabled}
+              setAutoScrollEnabled={setAutoScrollEnabled}
+              transcriptEndRef={transcriptEndRef}
+              partyAName={activeCase?.partyAName ?? "Party A"}
+              partyBName={activeCase?.partyBName ?? "Party B"}
+              onTranscriptChange={(val) => updateActiveCase({ transcript: val })}
+              onScrollToLatest={() => {
+                setAutoScrollEnabled(true);
+                transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
+              }}
+              onAnalyze={handleSimulateExtraction}
+              isAnalyzing={status === "ANALYZING"}
+              isRecording={isRecording}
+            />
+          </div>
+
+          {/* Speaker ID buttons */}
+          {isRecording && (
+            <div className="shrink-0 flex items-center justify-center gap-2 py-2 border-t border-[var(--color-border)]">
+              <span className="text-[9px] text-[var(--color-text-muted)] uppercase">Speaking:</span>
+              {[
+                { name: activeCase?.partyAName || "Party A", color: "#4ECDC4" },
+                { name: activeCase?.partyBName || "Party B", color: "#A78BFA" },
+              ].map(({ name, color }) => (
+                <button
+                  key={name}
+                  onClick={() => sessionRef.current?.sendContext(`[SPEAKER IDENTIFICATION: Current speaker is ${name}]`)}
+                  className="px-3 py-1 rounded-full text-[11px] font-medium border transition-colors hover:brightness-125"
+                  style={{ color, borderColor: color + "35", backgroundColor: color + "10" }}
+                >
+                  {name}
+                </button>
+              ))}
             </div>
+          )}
 
-            {/* Fixed bottom: speaker buttons + text input */}
-            <div className="shrink-0 border-t border-[var(--color-border)] bg-[var(--color-surface)] p-2 safe-area-bottom">
-              {/* Speaker buttons */}
-              <div className="flex items-center justify-center gap-2 pb-2">
-                <span className="text-[9px] text-[var(--color-text-muted)] uppercase">Speaking:</span>
-                {[
-                  { name: activeCase?.partyAName || "Party A", color: "#4ECDC4" },
-                  { name: activeCase?.partyBName || "Party B", color: "#A78BFA" },
-                ].map(({ name, color }) => (
-                  <button key={name}
-                    onClick={() => sessionRef.current?.sendContext(`[SPEAKER IDENTIFICATION: Current speaker is ${name}]`)}
-                    className="px-3 py-1 rounded-full text-[11px] font-medium border"
-                    style={{ color, borderColor: color + "35", backgroundColor: color + "10" }}>
-                    {name}
-                  </button>
-                ))}
-              </div>
-              {/* Text input */}
+          {/* Text Input */}
+          {isRecording && (
+            <div className="shrink-0 border-t border-[var(--color-border)]">
               <TextInput
                 partyAName={activeCase?.partyAName || "Party A"}
                 partyBName={activeCase?.partyBName || "Party B"}
-                disabled={false}
+                disabled={!isRecording}
                 onSendMessage={(text, party) => {
                   if (!sessionRef.current) return;
-                  sessionRef.current.sendContext(`[${party} says (typed)]: "${text}"`);
+                  sessionRef.current.sendContext(`[${party} says (typed input)]: "${text}"`);
                   const elapsed = Math.floor((Date.now() - sessionStartTimeRef.current) / 1000);
                   const mm = String(Math.floor(elapsed / 60)).padStart(2, "0");
                   const ss = String(elapsed % 60).padStart(2, "0");
                   setCases((prev) =>
-                    prev.map((c) => c.id === activeCaseIdRef.current
-                      ? { ...c, transcript: c.transcript + `\n\n[${mm}:${ss}] [${party} — typed]: ${text}` }
-                      : c));
+                    prev.map((c) =>
+                      c.id === activeCaseIdRef.current
+                        ? { ...c, transcript: c.transcript + (c.transcript ? "\n\n" : "") + `[${mm}:${ss}] [${party} — typed]: ${text}` }
+                        : c,
+                    ),
+                  );
                   setMediatorState("processing");
                 }}
               />
             </div>
-
-            {/* Floating access to other panels */}
-            <div className="absolute bottom-20 right-3 flex flex-col gap-2 z-20">
-              {[
-                { panel: "left" as const, label: "Profiles", icon: "👤" },
-                { panel: "right" as const, label: "Findings", icon: "📊" },
-              ].map(({ panel, icon, label }) => (
-                <button key={panel}
-                  onClick={() => setMobilePanel(mobilePanel === panel ? "center" : panel)}
-                  className={`w-10 h-10 rounded-full flex items-center justify-center text-sm shadow-lg border transition-all ${
-                    mobilePanel === panel
-                      ? "bg-[var(--color-accent)] border-[var(--color-accent)] text-white"
-                      : "bg-[var(--color-surface)] border-[var(--color-border)] text-[var(--color-text-muted)]"
-                  }`}
-                  title={label}>
-                  {icon}
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : (
-          /* NON-LIVE: Original tab-based mobile layout */
-          <>
-            <div className="flex shrink-0 overflow-x-auto border-b border-[var(--color-border)] bg-[var(--color-surface)] px-3 gap-1 py-2">
-              {([
-                { id: "left" as const,   label: "Profiles" },
-                { id: "center" as const, label: "Workspace" },
-                { id: "right" as const,  label: "Tools" },
-              ]).map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => setMobilePanel(p.id)}
-                  className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                    mobilePanel === p.id
-                      ? "bg-[var(--color-accent)] text-white"
-                      : "text-[var(--color-text-muted)] hover:text-white bg-[var(--color-bg)] border border-[var(--color-border)]"
-                  }`}
-                >
-                  {p.label}
-                </button>
-              ))}
-              {/* Mini duration + phase */}
-              <div className="ml-auto flex items-center gap-2 text-[10px] font-mono text-[var(--color-text-muted)] whitespace-nowrap">
-                <span className="hidden sm:block">{liveMediationState?.phase || "Opening"}</span>
-                {(isRecording || status === "LIVE") && sessionDuration > 0 && (
-                  <MediationTimer
-                    startTime={sessionStartTimeRef.current}
-                    sessionDuration={sessionDuration}
-                    currentPhase={liveMediationState?.phase || "Opening"}
-                  />
-                )}
-              </div>
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* ─── MAIN CONTENT AREA ─── */}
-      <div className="flex-1 flex overflow-hidden p-4 gap-4">
-        {/* ─── LEFT: Party Profiles ─── */}
-        <div className={`w-full lg:w-72 shrink-0 flex flex-col gap-4 overflow-y-auto pr-1 ${mobilePanel === "left" ? "flex" : "hidden"} lg:flex`}>
-          {activeCase?.profilingEnabled !== false ? (
-            <>
-              <ErrorPanel fallbackMessage="Profile unavailable">
-              <EnhancedPartyProfile
-                name={activeCase?.partyAName || "Party A"}
-                profile={liveMediationState?.partyProfiles?.partyA || null}
-                side="A"
-              />
-              </ErrorPanel>
-              <ErrorPanel fallbackMessage="Profile unavailable">
-              <EnhancedPartyProfile
-                name={activeCase?.partyBName || "Party B"}
-                profile={liveMediationState?.partyProfiles?.partyB || null}
-                side="B"
-              />
-              </ErrorPanel>
-              {/* ── Escalation Meter ── */}
-              <EscalationMeter
-                escalationScore={Math.max(
-                  liveMediationState?.partyProfiles?.partyA?.riskAssessment?.escalation ?? 0,
-                  liveMediationState?.partyProfiles?.partyB?.riskAssessment?.escalation ?? 0,
-                )}
-              />
-              {/* ── Emotion Timeline (compact, live) ── */}
-              {activeCase?.emotionTimeline && activeCase.emotionTimeline.length > 0 && (
-                <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-3">
-                  <EmotionTimeline
-                    timeline={activeCase.emotionTimeline}
-                    partyAName={activeCase.partyAName || "Party A"}
-                    partyBName={activeCase.partyBName || "Party B"}
-                  />
-                </div>
-              )}
-            </>
-          ) : (
-            <>
-              {/* Simple party cards when profiling is disabled */}
-              {[
-                { name: activeCase?.partyAName || "Party A", profile: liveMediationState?.partyProfiles?.partyA, color: "blue" },
-                { name: activeCase?.partyBName || "Party B", profile: liveMediationState?.partyProfiles?.partyB, color: "violet" },
-              ].map(({ name, profile, color }) => (
-                <div key={name} className={`bg-[var(--color-surface)] border border-${color}-500/20 rounded-xl p-4`}>
-                  <div className="font-semibold text-sm text-white mb-2">{name}</div>
-                  {profile ? (
-                    <div className="space-y-1.5">
-                      <div className="text-[11px] text-[var(--color-text-muted)]">
-                        Emotion: <span className="text-white">{profile.emotionalState || "—"}</span>
-                      </div>
-                      <div className="text-[11px] text-[var(--color-text-muted)]">
-                        Engagement: <span className="text-white">{profile.engagementLevel || "—"}</span>
-                      </div>
-                      {profile.keyNeeds?.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-1">
-                          {profile.keyNeeds.slice(0, 3).map((n, i) => (
-                            <span key={i} className="text-[10px] px-1.5 py-0.5 bg-[var(--color-bg)] rounded text-[var(--color-text-muted)]">{n}</span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <p className="text-[11px] text-[var(--color-text-muted)] italic">Waiting for session…</p>
-                  )}
-                </div>
-              ))}
-              <button
-                onClick={() => updateActiveCase({ profilingEnabled: true })}
-                className="text-[11px] text-[var(--color-text-muted)] hover:text-[var(--color-accent)] text-center py-2 border border-dashed border-[var(--color-border)] rounded-xl transition-colors"
-              >
-                Enable psychological profiling for deeper analysis →
-              </button>
-            </>
           )}
+        </div>
 
-          {/* Common Ground */}
-          {liveMediationState &&
-            liveMediationState.commonGround.length > 0 && (
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="bg-[var(--color-surface)] border border-emerald-500/20 rounded-xl p-4"
-              >
-                <h3 className="text-[10px] font-mono uppercase tracking-wider text-emerald-400 mb-2 flex items-center gap-1.5">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> Common Ground
-                </h3>
-                <ul className="space-y-1.5">
-                  {liveMediationState.commonGround.map((item, i) => (
-                    <li
-                      key={i}
-                      className="text-[11px] text-emerald-100 flex items-start gap-1.5"
-                    >
-                      <CheckCircle2 className="w-3 h-3 text-emerald-500 mt-0.5 shrink-0" />
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-              </motion.div>
+        {/* ─── RIGHT ZONE: Intelligence Sidebar (40%) ─── */}
+        <div className={`w-full lg:w-[40%] flex flex-col overflow-hidden ${mobilePanel !== "center" ? "flex" : "hidden"} lg:flex`}>
+          <IntelligenceSidebar
+            partyAName={activeCase?.partyAName || "Party A"}
+            partyBName={activeCase?.partyBName || "Party B"}
+            partyAProfile={liveMediationState?.partyProfiles?.partyA || null}
+            partyBProfile={liveMediationState?.partyProfiles?.partyB || null}
+            escalationScore={Math.max(
+              liveMediationState?.partyProfiles?.partyA?.riskAssessment?.escalation ?? 0,
+              liveMediationState?.partyProfiles?.partyB?.riskAssessment?.escalation ?? 0,
             )}
-
-          {/* Tension Points */}
-          {liveMediationState &&
-            liveMediationState.tensionPoints.length > 0 && (
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="bg-[var(--color-surface)] border border-red-500/20 rounded-xl p-4"
-              >
-                <h3 className="text-[10px] font-mono uppercase tracking-wider text-red-400 mb-2 flex items-center gap-1.5">
-                  <Zap className="w-3.5 h-3.5" /> Tension Points
-                </h3>
-                <ul className="space-y-1.5">
-                  {liveMediationState.tensionPoints.map((item, i) => (
-                    <li
-                      key={i}
-                      className="text-[11px] text-red-100 flex items-start gap-1.5"
-                    >
-                      <AlertTriangle className="w-3 h-3 text-red-500 mt-0.5 shrink-0" />
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-              </motion.div>
-            )}
-
-          {/* Missing Items */}
-          {liveMediationState &&
-            liveMediationState.missingItems.length > 0 && (
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="bg-[var(--color-surface)] border border-amber-500/20 rounded-xl p-4"
-              >
-                <h3 className="text-[10px] font-mono uppercase tracking-wider text-amber-400 mb-2 flex items-center gap-1.5">
-                  <Search className="w-3.5 h-3.5" /> Still Needed
-                </h3>
-                <ul className="space-y-1.5">
-                  {liveMediationState.missingItems.map((item, i) => (
-                    <li
-                      key={i}
-                      className="text-[11px] text-amber-100 flex items-start gap-1.5"
-                    >
-                      <Circle className="w-3 h-3 text-amber-500 mt-0.5 shrink-0" />
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-              </motion.div>
-            )}
-
-          {/* ── Active Proposal Card ── */}
-          <AnimatePresence>
-            {activeProposal && (
-              <motion.div
-                key={activeProposal.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="bg-gradient-to-b from-indigo-500/10 to-transparent border border-indigo-500/30 rounded-xl p-4"
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-[10px] font-mono uppercase tracking-wider text-indigo-400 flex items-center gap-1.5">
-                    <Lightbulb className="w-3.5 h-3.5" /> Proposal
-                  </h3>
-                  <button onClick={() => setActiveProposal(null)} className="text-indigo-400/50 hover:text-white transition-colors">
-                    <X className="w-3 h-3" />
-                  </button>
-                </div>
-                <p className="text-xs font-bold text-white mb-1">{activeProposal.title}</p>
-                {activeProposal.framework && (
-                  <span className="text-[9px] font-mono uppercase text-indigo-400/70">{activeProposal.framework}</span>
-                )}
-                <p className="text-[11px] text-[var(--color-text-muted)] mt-1 leading-relaxed">{activeProposal.description}</p>
-                {activeProposal.addressesPartyANeeds.length > 0 && (
-                  <div className="mt-2">
-                    <div className="text-[9px] uppercase tracking-wider text-sky-400 mb-1">Addresses Party A</div>
-                    <ul className="space-y-0.5">
-                      {activeProposal.addressesPartyANeeds.map((n, i) => (
-                        <li key={i} className="text-[10px] text-sky-200 flex items-start gap-1">
-                          <CheckCircle2 className="w-2.5 h-2.5 text-sky-500 mt-0.5 shrink-0" />{n}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-                {activeProposal.addressesPartyBNeeds.length > 0 && (
-                  <div className="mt-2">
-                    <div className="text-[9px] uppercase tracking-wider text-violet-400 mb-1">Addresses Party B</div>
-                    <ul className="space-y-0.5">
-                      {activeProposal.addressesPartyBNeeds.map((n, i) => (
-                        <li key={i} className="text-[10px] text-violet-200 flex items-start gap-1">
-                          <CheckCircle2 className="w-2.5 h-2.5 text-violet-500 mt-0.5 shrink-0" />{n}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* ── Blind Bidding ── */}
-          {(currentPhaseIdx >= PHASES.indexOf("Negotiation")) && (
-            <div className="bg-[var(--color-surface)] border border-emerald-500/20 rounded-xl p-4">
-              <div className="text-[10px] font-mono uppercase tracking-wider text-emerald-400 mb-2 flex items-center gap-1.5">
-                <Target className="w-3.5 h-3.5" /> Blind Bidding
-              </div>
-              <p className="text-[11px] text-[var(--color-text-muted)] mb-3 leading-relaxed">
-                Resolve numerical issues (amounts, timelines, %) with secret concurrent bids. Overlap = settlement via RCB algorithm.
-              </p>
-              <button
-                onClick={() => setShowBlindBidding(true)}
-                aria-label="Open blind bidding negotiation widget"
-                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/20 hover:text-emerald-200 text-xs font-medium transition-colors"
-              >
-                <Target className="w-3.5 h-3.5" />
-                Launch Blind Bidding
-              </button>
-            </div>
-          )}
-
-          {/* ── Agreements Panel ── */}
-          <AgreementTracker agreements={agreements} />
-
-          {/* ── Mediator Playbook ── */}
-          <MediatorPlaybook
-            phase={liveMediationState?.phase || "Opening"}
+            emotionTimeline={activeCase?.emotionTimeline || []}
+            ontologyStats={ontologyStats}
+            partyAClaims={partyAClaims}
+            partyBClaims={partyBClaims}
+            primitives={activeCase?.primitives || []}
+            actors={activeCase?.actors || []}
+            graph={graph}
+            onPinPrimitive={(id) => updatePrimitive(id, { pinned: true })}
+            onResolvePrimitive={(id) => updatePrimitive(id, { resolved: true })}
+            onDeletePrimitive={deletePrimitive}
+            onUpdatePrimitiveType={(id, type) => updatePrimitive(id, { type })}
+            onUpdatePrimitiveDescription={(id, description) => updatePrimitive(id, { description })}
+            onAddPrimitive={addPrimitive}
+            graphNodes={graphNodes}
+            graphEdges={graphEdges}
+            highlightActorId={highlightActorId}
+            powerDynamics={powerDynamics}
+            mediationState={liveMediationState}
+            escalationFlags={escalationFlags}
+            agreements={agreements}
+            solutions={solutions}
+            mediatorThought={mediatorThought}
+            groundingResults={groundingResults}
             gapNotifications={gapNotifications}
             missingPrimitives={PRIMITIVE_TYPES.filter(
               (t) => !activeCase?.primitives.some((p) => p.type === t),
             )}
+            phase={liveMediationState?.phase || "Opening"}
+            showBlindBidding={showBlindBidding}
+            onCloseBlindBidding={() => setShowBlindBidding(false)}
           />
-
-          {/* ── Intelligence Panel ── */}
-          <div className="h-[400px]">
-            <IntelligencePanel
-              emotionTimeline={activeCase?.emotionTimeline || []}
-              mediationState={liveMediationState}
-              escalationFlags={escalationFlags}
-              agreements={agreements}
-              solutions={solutions}
-              mediatorThought={mediatorThought}
-              groundingResults={groundingResults}
-              partyAName={activeCase?.partyAName || "Party A"}
-              partyBName={activeCase?.partyBName || "Party B"}
-            />
-          </div>
         </div>
-
-        {/* ─── CENTER: Split — Transcript + Tabs ─── */}
-        <div className={`flex-1 flex flex-col overflow-hidden ${mobilePanel === "center" ? "flex" : "hidden"} lg:flex`}>
-
-          {/* ── TOP: Always-visible transcript (during live session) ── */}
-          {(isRecording || status === "LIVE" || status === "RECONNECTING" || activeCase?.transcript) && (
-            <div className="flex flex-col min-h-[200px] max-h-[55%] border-b border-[var(--color-border)]">
-              {/* Transcript header with MediatorStatus + Speaker buttons */}
-              <div className="flex items-center justify-between px-3 py-1.5 bg-[var(--color-surface)] border-b border-[var(--color-border)] shrink-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-[11px] font-semibold text-[var(--color-text)] uppercase tracking-wider">Live Transcript</span>
-                  {isRecording && (
-                    <span className="flex items-center gap-1 text-[10px] text-red-400">
-                      <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
-                      LIVE
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-1.5">
-                  {/* Speaker ID buttons */}
-                  {isRecording && (
-                    <>
-                      <span className="text-[9px] text-[var(--color-text-muted)] uppercase tracking-wider">Speaking:</span>
-                      {[
-                        { name: activeCase?.partyAName || "Party A", color: "#4ECDC4" },
-                        { name: activeCase?.partyBName || "Party B", color: "#A78BFA" },
-                      ].map(({ name, color }) => (
-                        <button
-                          key={name}
-                          onClick={() => sessionRef.current?.sendContext(`[SPEAKER IDENTIFICATION: Current speaker is ${name}]`)}
-                          className="px-2 py-0.5 rounded-full text-[10px] font-medium border transition-colors hover:brightness-125"
-                          style={{ color, borderColor: color + "35", backgroundColor: color + "10" }}
-                        >
-                          {name}
-                        </button>
-                      ))}
-                    </>
-                  )}
-                </div>
-              </div>
-
-              {/* MediatorStatus bar */}
-              {isRecording && (
-                <MediatorStatus
-                  state={mediatorState}
-                  targetParty={liveMediationState?.targetActor || activeCase?.partyAName || "Party A"}
-                  secondsWaiting={waitingSeconds}
-                />
-              )}
-
-              {/* Transcript content — scrollable */}
-              <div className="flex-1 overflow-y-auto">
-                <TranscriptPanel
-                  transcript={activeCase?.transcript ?? ""}
-                  isLive={isRecording || status === "LIVE" || status === "RECONNECTING"}
-                  extractionNotice={extractionNotice}
-                  autoScrollEnabled={autoScrollEnabled}
-                  setAutoScrollEnabled={setAutoScrollEnabled}
-                  transcriptEndRef={transcriptEndRef}
-                  partyAName={activeCase?.partyAName ?? "Party A"}
-                  partyBName={activeCase?.partyBName ?? "Party B"}
-                  onTranscriptChange={(val) => updateActiveCase({ transcript: val })}
-                  onScrollToLatest={() => {
-                    setAutoScrollEnabled(true);
-                    transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
-                  }}
-                  onAnalyze={handleSimulateExtraction}
-                  isAnalyzing={status === "ANALYZING"}
-                  isRecording={isRecording}
-                />
-              </div>
-
-              {/* Text input at bottom of transcript */}
-              {isRecording && (
-                <div className="shrink-0 border-t border-[var(--color-border)]">
-                  <TextInput
-                    partyAName={activeCase?.partyAName || "Party A"}
-                    partyBName={activeCase?.partyBName || "Party B"}
-                    disabled={!isRecording}
-                    onSendMessage={(text, party) => {
-                      if (!sessionRef.current) return;
-                      sessionRef.current.sendContext(`[${party} says (typed input)]: "${text}"`);
-                      const elapsed = Math.floor((Date.now() - sessionStartTimeRef.current) / 1000);
-                      const mm = String(Math.floor(elapsed / 60)).padStart(2, "0");
-                      const ss = String(elapsed % 60).padStart(2, "0");
-                      setCases((prev) =>
-                        prev.map((c) =>
-                          c.id === activeCaseIdRef.current
-                            ? { ...c, transcript: c.transcript + (c.transcript ? "\n\n" : "") + `[${mm}:${ss}] [${party} — typed]: ${text}` }
-                            : c,
-                        ),
-                      );
-                      setMediatorState("processing");
-                    }}
-                  />
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ── BOTTOM: Tabbed analysis panels ── */}
-          <div className="flex-1 flex flex-col overflow-hidden">
-            {/* Tab bar */}
-            <div className="flex gap-1 mb-3 shrink-0 flex-wrap p-2">
-              {(
-                [
-                  { id: "structure" as const, label: `Case Structure${activeCase?.primitives.length ? ` (${activeCase.primitives.length})` : ""}`, icon: Database },
-                  { id: "pathways" as const, label: "Resolution Pathways", icon: Lightbulb },
-                  { id: "graph" as const, label: "Knowledge Graph", icon: Network },
-                  { id: "timeline" as const, label: "Timeline", icon: History },
-                ] as const
-              ).map((tab) => {
-                const Icon = tab.icon;
-                return (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                      activeTab === tab.id
-                        ? "bg-[var(--color-accent)] text-white shadow-md shadow-[var(--color-accent)]/20"
-                        : "bg-[var(--color-surface)] text-[var(--color-text-muted)] hover:text-white border border-[var(--color-border)]"
-                    }`}
-                  >
-                    <Icon className="w-4 h-4" />
-                    {tab.label}
-                  </button>
-                );
-              })}
-            </div>
-
-          {/* ── STRUCTURE TAB ── */}
-          {activeTab === "structure" && (
-            <div className="flex-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-4 flex flex-col overflow-hidden">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-3 bg-[var(--color-bg)] border border-[var(--color-border)] px-3 py-1.5 rounded-full">
-                  <div className="text-xs font-mono text-[var(--color-text-muted)]">
-                    Ontology Health
-                  </div>
-                  <div className="flex gap-1">
-                    {PRIMITIVE_TYPES.map((type) => (
-                      <div
-                        key={type}
-                        title={type}
-                        className="flex items-center justify-center"
-                      >
-                        {presentTypes.has(type) ? (
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                        ) : (
-                          <Circle className="w-3.5 h-3.5 text-[var(--color-border)]" />
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                  <div className="text-xs font-mono font-bold text-[var(--color-accent)]">
-                    {healthScore}%
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={autoGroupPrimitives}
-                    disabled={!activeCase || activeCase.primitives.length < 2}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-[var(--color-bg)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:text-white hover:border-[var(--color-accent)] transition-colors disabled:opacity-40"
-                    title="Auto-group primitives by topic"
-                  >
-                    <GitMerge className="w-3.5 h-3.5" /> Auto-Group
-                  </button>
-                  <button
-                    onClick={() => {
-                      const pairs = findMergeDuplicates();
-                      if (pairs.length === 0) return;
-                      // Remove the second duplicate in each pair
-                      const toRemove = new Set(pairs.map(([, b]) => b));
-                      updateActiveCase({ primitives: activeCase!.primitives.filter((p) => !toRemove.has(p.id)) });
-                    }}
-                    disabled={!activeCase || activeCase.primitives.length < 2}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-[var(--color-bg)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:text-white hover:border-amber-500 transition-colors disabled:opacity-40"
-                    title="Merge near-duplicate primitives"
-                  >
-                    <Filter className="w-3.5 h-3.5" /> Merge Dupes
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex-1 overflow-y-auto pr-2 space-y-4">
-                {activeCase?.actors.map((actor) => (
-                  <div
-                    key={actor.id}
-                    className="bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg p-4"
-                  >
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex gap-2 flex-1 mr-4">
-                        <input
-                          value={actor.name}
-                          onChange={(e) =>
-                            updateActor(actor.id, {
-                              name: e.target.value,
-                            })
-                          }
-                          className="bg-transparent font-semibold text-white focus:outline-none border-b border-transparent focus:border-[var(--color-accent)] px-1 w-1/3"
-                          placeholder="Name"
-                        />
-                        <input
-                          value={actor.role}
-                          onChange={(e) =>
-                            updateActor(actor.id, {
-                              role: e.target.value,
-                            })
-                          }
-                          className="bg-transparent text-sm text-[var(--color-text-muted)] focus:outline-none border-b border-transparent focus:border-[var(--color-accent)] px-1 flex-1"
-                          placeholder="Role / Stance"
-                        />
-                      </div>
-                      <button
-                        onClick={() => deleteActor(actor.id)}
-                        className="text-[var(--color-text-muted)] hover:text-[var(--color-danger)] p-1 rounded transition-colors"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-
-                    <div className="space-y-2 pl-4 border-l-2 border-[var(--color-surface-hover)]">
-                      {activeCase.primitives
-                        .filter((p) => p.actorId === actor.id)
-                        .sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0))
-                        .map((prim) => (
-                          <div
-                            key={prim.id}
-                            className={`flex items-start gap-2 group rounded-lg px-2 py-1 transition-colors ${prim.resolved ? "opacity-50" : ""} ${prim.pinned ? "bg-amber-500/5 border border-amber-500/20" : ""}`}
-                          >
-                            <select
-                              value={prim.type}
-                              onChange={(e) =>
-                                updatePrimitive(prim.id, {
-                                  type: e.target.value as PrimitiveType,
-                                })
-                              }
-                              className="bg-[var(--color-surface)] text-xs font-mono p-1 rounded border border-[var(--color-border)] text-[var(--color-accent)] focus:outline-none cursor-pointer"
-                            >
-                              {PRIMITIVE_TYPES.map((t) => (
-                                <option key={t} value={t}>
-                                  {t}
-                                </option>
-                              ))}
-                            </select>
-                            <input
-                              value={prim.description}
-                              onChange={(e) =>
-                                updatePrimitive(prim.id, {
-                                  description: e.target.value,
-                                })
-                              }
-                              className={`bg-transparent text-sm flex-1 focus:outline-none border-b border-transparent focus:border-[var(--color-accent)] px-1 ${prim.resolved ? "line-through text-[var(--color-text-muted)]" : "text-white"}`}
-                              placeholder="Description..."
-                            />
-                            <button
-                              onClick={() => updatePrimitive(prim.id, { pinned: !prim.pinned })}
-                              className={`opacity-0 group-hover:opacity-100 p-1 transition-opacity ${prim.pinned ? "text-amber-400 opacity-100" : "text-[var(--color-text-muted)] hover:text-amber-400"}`}
-                              title={prim.pinned ? "Unpin" : "Pin"}
-                            >
-                              <Star className="w-3 h-3" />
-                            </button>
-                            <button
-                              onClick={() => updatePrimitive(prim.id, { resolved: !prim.resolved })}
-                              className={`opacity-0 group-hover:opacity-100 p-1 transition-opacity ${prim.resolved ? "text-emerald-400 opacity-100" : "text-[var(--color-text-muted)] hover:text-emerald-400"}`}
-                              title={prim.resolved ? "Reopen" : "Mark resolved"}
-                            >
-                              <CheckCircle2 className="w-3 h-3" />
-                            </button>
-                            <button
-                              onClick={() => deletePrimitive(prim.id)}
-                              className="opacity-0 group-hover:opacity-100 text-[var(--color-text-muted)] hover:text-[var(--color-danger)] p-1 transition-opacity"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
-                          </div>
-                        ))}
-                      <button
-                        onClick={() => addPrimitive(actor.id)}
-                        className="text-xs text-[var(--color-text-muted)] hover:text-white flex items-center gap-1 mt-3 py-1 px-2 rounded hover:bg-[var(--color-surface-hover)] transition-colors"
-                      >
-                        <Plus className="w-3 h-3" /> Add Primitive
-                      </button>
-                    </div>
-                  </div>
-                ))}
-
-                <button
-                  onClick={addActor}
-                  className="w-full py-4 border border-dashed border-[var(--color-border)] hover:border-[var(--color-accent)] rounded-lg text-sm text-[var(--color-text-muted)] hover:text-white flex items-center justify-center gap-2 transition-colors"
-                >
-                  <UserPlus className="w-4 h-4" /> Add Actor
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* ── PATHWAYS TAB ── */}
-          {activeTab === "pathways" && (
-            <div className="flex-1 flex flex-col gap-3 overflow-hidden">
-              {/* Framework selector toolbar */}
-              <div className="flex items-center gap-2 shrink-0">
-                <select
-                  value={selectedFramework}
-                  onChange={(e) => setSelectedFramework(e.target.value)}
-                  className="flex-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg text-sm p-2 focus:outline-none focus:border-[var(--color-accent)] text-[var(--color-text-muted)]"
-                >
-                  <option value="">All Frameworks</option>
-                  <option value="Fisher & Ury">Fisher &amp; Ury (Principled Negotiation)</option>
-                  <option value="Transformative">Transformative Mediation (Bush &amp; Folger)</option>
-                  <option value="Narrative">Narrative Mediation (Winslade &amp; Monk)</option>
-                  <option value="Glasl">Glasl Escalation Model</option>
-                  <option value="Lederach">Lederach Conflict Transformation</option>
-                  <option value="Zartman">Zartman Ripeness Theory</option>
-                </select>
-                <button
-                  onClick={() => handleAnalyzeWithFramework()}
-                  disabled={!activeCase?.transcript || status === "ANALYZING"}
-                  className="bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-white px-4 py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-50 flex items-center gap-2"
-                >
-                  {status === "ANALYZING" ? <Activity className="w-4 h-4 animate-spin" /> : <TrendingUp className="w-4 h-4" />}
-                  {selectedFramework ? "Re-analyze" : "Analyze"}
-                </button>
-              </div>
-
-              {/* Emotion Timeline — always visible when data exists */}
-              {activeCase?.emotionTimeline && activeCase.emotionTimeline.length > 0 && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="shrink-0 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-4"
-                >
-                  <EmotionTimeline
-                    timeline={activeCase.emotionTimeline}
-                    partyAName={activeCase.partyAName || "Party A"}
-                    partyBName={activeCase.partyBName || "Party B"}
-                  />
-                </motion.div>
-              )}
-
-              {/* ZOPA Hints from background analysis — always visible when data exists */}
-              {zopaHints.length > 0 && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="shrink-0 bg-amber-500/5 border border-amber-500/25 rounded-xl p-4"
-                >
-                  <h3 className="text-xs font-bold text-amber-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-                    <Zap className="w-3.5 h-3.5" />
-                    Background ZOPA Hints
-                    <span className="ml-auto text-[10px] font-normal text-amber-500/70 normal-case tracking-normal">
-                      Detected automatically · {zopaHints.length} hint{zopaHints.length !== 1 ? "s" : ""}
-                    </span>
-                  </h3>
-                  <div className="space-y-2">
-                    {zopaHints.map((hint, i) => (
-                      <div
-                        key={i}
-                        className="flex items-start gap-2.5 bg-amber-500/5 border border-amber-500/15 rounded-lg p-3"
-                      >
-                        <span className="text-amber-400 font-bold shrink-0 mt-0.5">→</span>
-                        <p className="text-sm text-amber-100/90 leading-relaxed">{hint}</p>
-                      </div>
-                    ))}
-                  </div>
-                  <button
-                    onClick={() => setZopaHints([])}
-                    className="mt-3 text-[10px] text-amber-600 hover:text-amber-400 transition-colors"
-                  >
-                    Dismiss hints
-                  </button>
-                </motion.div>
-              )}
-
-              {/* Content */}
-              <div className="flex-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-4 overflow-y-auto">
-                {status === "ANALYZING" ? (
-                  <AnalysisSkeleton />
-                ) : pathways ? (
-                  <div className="space-y-8">
-                    {/* Power Map */}
-                    {powerDynamics && activeCase && (
-                      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-                        className="p-4 bg-[var(--color-surface-hover)] border border-[var(--color-border)] rounded-xl">
-                        <PowerMap
-                          dimensions={powerDynamics.dimensions}
-                          overallBalance={powerDynamics.overallBalance}
-                          rebalancingStrategy={powerDynamics.rebalancingStrategy}
-                          partyAName={activeCase.actors[0]?.name ?? 'Party A'}
-                          partyBName={activeCase.actors[1]?.name ?? 'Party B'}
-                        />
-                      </motion.div>
-                    )}
-
-                    {/* Executive Summary */}
-                    {pathways.executiveSummary && (
-                      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-                        className="p-4 bg-blue-500/5 border border-blue-500/20 rounded-xl">
-                        <h3 className="text-xs font-bold text-blue-400 uppercase tracking-wider mb-2 flex items-center gap-2">
-                          <BookOpen className="w-3.5 h-3.5" /> Executive Summary
-                        </h3>
-                        <p className="text-sm text-white leading-relaxed">{pathways.executiveSummary}</p>
-                      </motion.div>
-                    )}
-
-                    {/* Common Ground */}
-                    {pathways.commonGround?.length > 0 && (
-                      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
-                        <h3 className="text-sm font-bold text-emerald-400 mb-3 flex items-center gap-2 uppercase tracking-wider">
-                          <CheckCircle2 className="w-4 h-4" /> Common Ground
-                        </h3>
-                        <div className="space-y-2">
-                          {pathways.commonGround.map((item: any, i: number) => {
-                            const text = typeof item === "string" ? item : item.item;
-                            const strength = typeof item === "object" ? item.strength : null;
-                            const evidence = typeof item === "object" ? item.evidence : null;
-                            return (
-                              <div key={i} className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-3">
-                                <div className="flex items-start gap-2">
-                                  <CheckCircle2 className="w-4 h-4 text-emerald-500 mt-0.5 shrink-0" />
-                                  <div className="flex-1 text-sm text-white">
-                                    <span>{text}</span>
-                                    {strength && (
-                                      <span className={`ml-2 text-[10px] px-1.5 py-0.5 rounded font-mono ${strength === "strong" ? "bg-emerald-500/20 text-emerald-300" : strength === "moderate" ? "bg-amber-500/20 text-amber-300" : "bg-gray-500/20 text-gray-400"}`}>{strength}</span>
-                                    )}
-                                    {evidence && <p className="text-[11px] text-[var(--color-text-muted)] mt-1">{evidence}</p>}
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </motion.div>
-                    )}
-
-                    {/* Critical Questions */}
-                    {pathways.criticalQuestions?.length > 0 && (
-                      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
-                        <h3 className="text-sm font-bold text-amber-400 mb-3 flex items-center gap-2 uppercase tracking-wider">
-                          <Target className="w-4 h-4" /> Critical Questions
-                        </h3>
-                        <div className="space-y-2">
-                          {pathways.criticalQuestions.map((item: any, i: number) => {
-                            const text = typeof item === "string" ? item : item.question;
-                            const fw = typeof item === "object" ? item.framework : null;
-                            const target = typeof item === "object" ? item.target : null;
-                            return (
-                              <div key={i} className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-3">
-                                <div className="flex items-start gap-2">
-                                  <span className="text-amber-500 font-bold shrink-0 text-sm">Q{i + 1}.</span>
-                                  <div className="flex-1 text-sm text-white">
-                                    <p>{text}</p>
-                                    {(target || fw) && (
-                                      <div className="flex gap-2 mt-1.5 flex-wrap">
-                                        {target && <span className="text-[10px] px-1.5 py-0.5 bg-amber-500/10 text-amber-300 rounded font-mono">→ {target}</span>}
-                                        {fw && <span className="text-[10px] px-1.5 py-0.5 bg-violet-500/10 text-violet-300 rounded font-mono">{fw}</span>}
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </motion.div>
-                    )}
-
-                    {/* Resolution Pathways */}
-                    {pathways.pathways?.length > 0 && (
-                      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
-                        <h3 className="text-sm font-bold text-[var(--color-accent)] mb-3 flex items-center gap-2 uppercase tracking-wider">
-                          <TrendingUp className="w-4 h-4" /> Resolution Pathways
-                        </h3>
-                        <div className="space-y-3">
-                          {pathways.pathways.map((pathway: any, i: number) => {
-                            if (typeof pathway === "string") {
-                              return (
-                                <div key={i} className="bg-[var(--color-accent)]/5 border border-[var(--color-accent)]/20 rounded-lg p-3 text-sm text-white flex items-start gap-2">
-                                  <Lightbulb className="w-4 h-4 text-[var(--color-accent)] mt-0.5 shrink-0" />{pathway}
-                                </div>
-                              );
-                            }
-                            const isExpanded = expandedPathways.has(i);
-                            const feasColor = pathway.feasibility === "high" ? "text-emerald-400 bg-emerald-500/10" : pathway.feasibility === "medium" ? "text-amber-400 bg-amber-500/10" : "text-red-400 bg-red-500/10";
-                            return (
-                              <div key={i} className="bg-[var(--color-accent)]/5 border border-[var(--color-accent)]/20 rounded-xl overflow-hidden">
-                                <button
-                                  onClick={() => setExpandedPathways((prev) => { const next = new Set(prev); if (next.has(i)) next.delete(i); else next.add(i); return next; })}
-                                  className="w-full p-4 flex items-center gap-3 text-left hover:bg-[var(--color-accent)]/10 transition-colors"
-                                >
-                                  <Lightbulb className="w-4 h-4 text-[var(--color-accent)] shrink-0" />
-                                  <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
-                                    <span className="font-semibold text-sm text-white">{pathway.title}</span>
-                                    {pathway.framework && <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-500/10 text-violet-300 border border-violet-500/20 font-mono">{pathway.framework}</span>}
-                                    {pathway.feasibility && <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${feasColor}`}>{pathway.feasibility} feasibility</span>}
-                                  </div>
-                                  <ChevronLeft className={`w-4 h-4 text-[var(--color-text-muted)] shrink-0 transition-transform ${isExpanded ? "-rotate-90" : "rotate-180"}`} />
-                                </button>
-                                {isExpanded && (
-                                  <div className="px-4 pb-4 space-y-3 border-t border-[var(--color-accent)]/10 pt-3">
-                                    <p className="text-sm text-[var(--color-text-muted)] leading-relaxed">{pathway.description}</p>
-                                    {(pathway.tradeoffsForA || pathway.tradeoffsForB) && (
-                                      <div className="grid grid-cols-2 gap-3">
-                                        <div className="p-3 bg-blue-500/5 border border-blue-500/10 rounded-lg">
-                                          <div className="text-[10px] font-mono uppercase text-blue-400 mb-1">For {activeCase?.partyAName || "Party A"}</div>
-                                          <p className="text-xs text-white">{pathway.tradeoffsForA}</p>
-                                        </div>
-                                        <div className="p-3 bg-violet-500/5 border border-violet-500/10 rounded-lg">
-                                          <div className="text-[10px] font-mono uppercase text-violet-400 mb-1">For {activeCase?.partyBName || "Party B"}</div>
-                                          <p className="text-xs text-white">{pathway.tradeoffsForB}</p>
-                                        </div>
-                                      </div>
-                                    )}
-                                    {pathway.implementationSteps?.length > 0 && (
-                                      <div>
-                                        <div className="text-[10px] font-mono uppercase text-[var(--color-text-muted)] mb-2">Implementation Steps</div>
-                                        <ol className="space-y-1.5">
-                                          {pathway.implementationSteps.map((step: string, j: number) => (
-                                            <li key={j} className="flex items-start gap-2 text-xs text-white">
-                                              <span className="w-5 h-5 rounded-full bg-[var(--color-accent)]/20 text-[var(--color-accent)] text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">{j + 1}</span>
-                                              {step}
-                                            </li>
-                                          ))}
-                                        </ol>
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </motion.div>
-                    )}
-
-                    {/* ZOPA Analysis */}
-                    {pathways.zopaAnalysis && (
-                      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-                        <h3 className="text-sm font-bold text-cyan-400 mb-3 flex items-center gap-2 uppercase tracking-wider">
-                          <Zap className="w-4 h-4" /> Zone of Possible Agreement (ZOPA)
-                        </h3>
-                        {pathways.zopaAnalysis.exists ? (
-                          <div className="bg-cyan-500/5 border border-cyan-500/20 rounded-xl p-4 space-y-3">
-                            <p className="text-sm text-white">{pathways.zopaAnalysis.description}</p>
-                            <div className="space-y-2">
-                              <div className="flex items-center gap-3">
-                                <span className="text-[10px] text-blue-300 w-20 shrink-0 font-mono truncate">{activeCase?.partyAName || "Party A"}</span>
-                                <div className="flex-1 h-7 bg-blue-500/20 rounded-lg flex items-center px-3"><span className="text-[10px] text-blue-200">{pathways.zopaAnalysis.partyARange}</span></div>
-                              </div>
-                              <div className="flex items-center gap-3">
-                                <span className="text-[10px] text-violet-300 w-20 shrink-0 font-mono truncate">{activeCase?.partyBName || "Party B"}</span>
-                                <div className="flex-1 h-7 bg-violet-500/20 rounded-lg flex items-center px-3"><span className="text-[10px] text-violet-200">{pathways.zopaAnalysis.partyBRange}</span></div>
-                              </div>
-                              <div className="flex items-center gap-3">
-                                <span className="text-[10px] text-cyan-300 w-20 shrink-0 font-mono">Overlap</span>
-                                <div className="flex-1 h-7 bg-cyan-500/30 border border-cyan-500/40 rounded-lg flex items-center px-3"><span className="text-[10px] text-cyan-200 font-semibold">{pathways.zopaAnalysis.overlapArea}</span></div>
-                              </div>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="bg-red-500/5 border border-red-500/20 rounded-xl p-4">
-                            <p className="text-sm text-red-200 mb-2">No ZOPA currently identified.</p>
-                            <p className="text-xs text-[var(--color-text-muted)]">{pathways.zopaAnalysis.description}</p>
-                          </div>
-                        )}
-                      </motion.div>
-                    )}
-
-                    {/* Framework Fit */}
-                    {pathways.frameworkFit?.length > 0 && (
-                      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
-                        <h3 className="text-sm font-bold text-violet-400 mb-3 flex items-center gap-2 uppercase tracking-wider">
-                          <BookOpen className="w-4 h-4" /> Framework Fit
-                        </h3>
-                        <div className="space-y-2">
-                          {[...pathways.frameworkFit].sort((a: any, b: any) => b.score - a.score).slice(0, 4).map((fit: any, i: number) => (
-                            <div key={i} className="bg-violet-500/5 border border-violet-500/20 rounded-lg p-3 flex items-center gap-3">
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 mb-1 flex-wrap">
-                                  <span className="text-sm font-semibold text-white">{fit.framework}</span>
-                                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${fit.score >= 70 ? "bg-emerald-500/20 text-emerald-300" : fit.score >= 40 ? "bg-amber-500/20 text-amber-300" : "bg-red-500/20 text-red-300"}`}>{fit.score}/100</span>
-                                </div>
-                                <p className="text-xs text-[var(--color-text-muted)]">{fit.rationale}</p>
-                              </div>
-                              <button
-                                onClick={() => { setSelectedFramework(fit.framework); handleAnalyzeWithFramework(fit.framework); }}
-                                className="shrink-0 text-xs px-3 py-1.5 rounded-lg bg-violet-500/10 hover:bg-violet-500/20 text-violet-300 border border-violet-500/20 transition-colors"
-                              >Apply</button>
-                            </div>
-                          ))}
-                        </div>
-                      </motion.div>
-                    )}
-
-                    {/* Psychological Dynamics */}
-                    {pathways.psychologicalDynamics?.length > 0 && (
-                      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
-                        <h3 className="text-sm font-bold text-violet-400 mb-3 flex items-center gap-2 uppercase tracking-wider">
-                          <Brain className="w-4 h-4" /> Psychological Dynamics
-                        </h3>
-                        <div className="space-y-2">
-                          {pathways.psychologicalDynamics.map((item: string, i: number) => (
-                            <div key={i} className="bg-violet-500/5 border border-violet-500/20 rounded-lg p-3 text-sm text-white flex items-start gap-2">
-                              <Activity className="w-4 h-4 text-violet-400 mt-0.5 shrink-0" />{item}
-                            </div>
-                          ))}
-                        </div>
-                      </motion.div>
-                    )}
-
-                    {/* Momentum Assessment */}
-                    {pathways.momentumAssessment && (
-                      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }}>
-                        <h3 className="text-sm font-bold text-emerald-400 mb-3 flex items-center gap-2 uppercase tracking-wider">
-                          <TrendingUp className="w-4 h-4" /> Momentum Assessment
-                        </h3>
-                        <div className="space-y-3">
-                          {/* Readiness bar */}
-                          <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-4">
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-xs text-[var(--color-text-muted)] uppercase tracking-wider">Readiness to Resolve</span>
-                              <span className="text-lg font-bold text-emerald-400 font-mono">{pathways.momentumAssessment.readinessToResolve}/100</span>
-                            </div>
-                            <div className="h-2 bg-[var(--color-bg)] rounded-full overflow-hidden">
-                              <motion.div
-                                initial={{ width: 0 }}
-                                animate={{ width: `${pathways.momentumAssessment.readinessToResolve}%` }}
-                                transition={{ duration: 0.8, ease: "easeOut" }}
-                                className="h-full rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400"
-                              />
-                            </div>
-                            {pathways.momentumAssessment.recommendedNextMove && (
-                              <p className="text-xs text-emerald-300 mt-3 font-medium">
-                                <span className="text-[var(--color-text-muted)]">Recommended next move: </span>
-                                {pathways.momentumAssessment.recommendedNextMove}
-                              </p>
-                            )}
-                          </div>
-                          {/* Blockers & Catalysts */}
-                          <div className="grid grid-cols-2 gap-3">
-                            {pathways.momentumAssessment.blockers?.length > 0 && (
-                              <div className="bg-red-500/5 border border-red-500/20 rounded-lg p-3">
-                                <h4 className="text-[10px] font-bold text-red-400 uppercase tracking-wider mb-2">Blockers</h4>
-                                <ul className="space-y-1">
-                                  {pathways.momentumAssessment.blockers.map((b: string, i: number) => (
-                                    <li key={i} className="text-xs text-red-200 flex items-start gap-1.5">
-                                      <span className="text-red-500 mt-0.5 shrink-0">▪</span>{b}
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-                            {pathways.momentumAssessment.catalysts?.length > 0 && (
-                              <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-3">
-                                <h4 className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider mb-2">Catalysts</h4>
-                                <ul className="space-y-1">
-                                  {pathways.momentumAssessment.catalysts.map((c: string, i: number) => (
-                                    <li key={i} className="text-xs text-emerald-200 flex items-start gap-1.5">
-                                      <span className="text-emerald-500 mt-0.5 shrink-0">▪</span>{c}
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </motion.div>
-                    )}
-                  </div>
-                ) : research ? (
-                  <div className="space-y-4">
-                    <p className="text-sm text-white leading-relaxed">{research.text}</p>
-                    {research.chunks?.length > 0 && (
-                      <div className="mt-4 pt-4 border-t border-[var(--color-border)]">
-                        <h4 className="text-xs font-semibold uppercase mb-2 text-[var(--color-text-muted)]">Sources</h4>
-                        <ul className="space-y-1">
-                          {research.chunks.map((chunk: any, idx: number) => (
-                            <li key={idx} className="text-xs text-[var(--color-accent)] hover:underline cursor-pointer truncate">
-                              {chunk.web?.title || chunk.web?.uri}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <EmptyState
-                    icon={Lightbulb}
-                    title="No analysis yet"
-                    description="Run a live session or enter transcript context and click Analyze to generate resolution pathways, ZOPA, and framework recommendations."
-                  />
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* ── KNOWLEDGE GRAPH TAB ── */}
-          {activeTab === "graph" && (
-            <div className="flex-1 flex gap-4 overflow-hidden">
-              {/* Graph canvas */}
-              <div className="flex-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl flex flex-col overflow-hidden">
-                {/* Party highlight selector */}
-                <div className="flex items-center gap-2 px-3 pt-3 shrink-0">
-                  <span className="text-[10px] text-[var(--color-text-muted)] uppercase tracking-wider">Highlight:</span>
-                  <div className="flex gap-1">
-                    <button
-                      onClick={() => setHighlightActorId(null)}
-                      className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${!highlightActorId ? "bg-[var(--color-accent)] text-white" : "bg-[var(--color-bg)] text-[var(--color-text-muted)] border border-[var(--color-border)] hover:text-white"}`}
-                    >All</button>
-                    {activeCase?.actors.map((actor) => (
-                      <button
-                        key={actor.id}
-                        onClick={() => setHighlightActorId(highlightActorId === actor.id ? null : actor.id)}
-                        className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${highlightActorId === actor.id ? "bg-[var(--color-accent)] text-white" : "bg-[var(--color-bg)] text-[var(--color-text-muted)] border border-[var(--color-border)] hover:text-white"}`}
-                      >{actor.name}</button>
-                    ))}
-                  </div>
-                </div>
-                {graphNodes.length === 0 ? (
-                  <EmptyState
-                    icon={Network}
-                    title="Knowledge graph empty"
-                    description="Start a live session or run Analyze to populate the conflict graph with actors, claims, interests, and events."
-                  />
-                ) : (
-                  <ErrorPanel fallbackMessage="Graph rendering failed">
-                    <ConflictGraph nodes={graphNodes} edges={graphEdges} highlightActorId={highlightActorId} />
-                  </ErrorPanel>
-                )}
-              </div>
-              {/* Health check + Power Map sidebar */}
-              <div className="w-72 shrink-0 overflow-y-auto space-y-4">
-                <OntologyHealthCheck
-                  stats={ontologyStats}
-                  partyAName={activeCase?.partyAName || "Party A"}
-                  partyBName={activeCase?.partyBName || "Party B"}
-                  partyAClaims={partyAClaims}
-                  partyBClaims={partyBClaims}
-                />
-                {powerDynamics && activeCase && (
-                  <div className="p-4 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl">
-                    <PowerMap
-                      dimensions={powerDynamics.dimensions}
-                      overallBalance={powerDynamics.overallBalance}
-                      rebalancingStrategy={powerDynamics.rebalancingStrategy}
-                      partyAName={activeCase.actors[0]?.name ?? 'Party A'}
-                      partyBName={activeCase.actors[1]?.name ?? 'Party B'}
-                    />
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-          {/* ── TIMELINE TAB ── */}
-          {activeTab === "timeline" && (
-            <div className="flex-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-4 flex flex-col overflow-hidden">
-              <div className="flex items-center gap-2 mb-4 shrink-0">
-                <Filter className="w-4 h-4 text-[var(--color-text-muted)]" />
-                <div className="flex gap-1 flex-wrap">
-                  {["all", "utterance", "extraction", "phase-change", "escalation", "common-ground"].map((f) => (
-                    <button
-                      key={f}
-                      onClick={() => setTimelineFilter(f)}
-                      className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${timelineFilter === f ? "bg-[var(--color-accent)] text-white" : "bg-[var(--color-bg)] text-[var(--color-text-muted)] border border-[var(--color-border)] hover:text-white"}`}
-                    >{f === "all" ? "All Events" : f.replace(/-/g, " ")}</button>
-                  ))}
-                </div>
-              </div>
-              <div className="flex-1 overflow-y-auto pr-2">
-                {(activeCase?.timeline?.filter((e) => timelineFilter === "all" || e.type === timelineFilter) || []).length === 0 ? (
-                  <EmptyState
-                    icon={History}
-                    title="No timeline events yet"
-                    description="Timeline entries are populated automatically during live sessions as phases change and extractions occur."
-                  />
-                ) : (
-                  <div className="relative">
-                    <div className="absolute left-4 top-0 bottom-0 w-px bg-[var(--color-border)]" />
-                    <div className="space-y-3 pl-12">
-                      {activeCase!.timeline!
-                        .filter((e) => timelineFilter === "all" || e.type === timelineFilter)
-                        .map((entry) => {
-                          const mm = String(Math.floor(entry.elapsedSeconds / 60)).padStart(2, "0");
-                          const ss = String(entry.elapsedSeconds % 60).padStart(2, "0");
-                          const typeColors: Record<string, string> = {
-                            utterance: "bg-indigo-500/20 border-indigo-500/40 text-indigo-300",
-                            extraction: "bg-emerald-500/20 border-emerald-500/40 text-emerald-300",
-                            "phase-change": "bg-violet-500/20 border-violet-500/40 text-violet-300",
-                            escalation: "bg-red-500/20 border-red-500/40 text-red-300",
-                            "common-ground": "bg-teal-500/20 border-teal-500/40 text-teal-300",
-                            reflection: "bg-amber-500/20 border-amber-500/40 text-amber-300",
-                          };
-                          return (
-                            <div key={entry.id} className="relative">
-                              <div className={`absolute -left-8 w-4 h-4 rounded-full border-2 ${typeColors[entry.type] || "bg-gray-500/20 border-gray-500/40 text-gray-300"} flex items-center justify-center`} style={{ top: "4px" }}>
-                                <div className="w-1.5 h-1.5 rounded-full bg-current" />
-                              </div>
-                              <div className={`rounded-lg border px-3 py-2 ${typeColors[entry.type] || "border-[var(--color-border)] text-[var(--color-text-muted)]"}`}>
-                                <div className="flex items-center gap-2 mb-1">
-                                  <span className="text-[10px] font-mono">{mm}:{ss}</span>
-                                  <span className="text-[10px] uppercase tracking-wider font-semibold opacity-80">{entry.type.replace(/-/g, " ")}</span>
-                                  {entry.actor && <span className="text-[10px] opacity-60">· {entry.actor}</span>}
-                                </div>
-                                <p className="text-xs text-white">{entry.content}</p>
-                              </div>
-                            </div>
-                          );
-                        })}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-          </div>{/* end BOTTOM tabbed panels */}
-        </div>
-
-        {/* ─── RIGHT: Live Structured Items ─── */}
-        {liveMediationState &&
-          liveMediationState.structuredItems.length > 0 && (
-            <div className="w-64 shrink-0 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-xl p-4 overflow-y-auto">
-              <h3 className="text-[10px] font-mono uppercase tracking-wider text-emerald-400 mb-3 flex items-center gap-1.5 sticky top-0 bg-[var(--color-surface)] pb-2">
-                <CheckCircle2 className="w-3.5 h-3.5" /> Live Findings
-              </h3>
-              <div className="space-y-2">
-                {liveMediationState.structuredItems.map((item, idx) => (
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    key={idx}
-                    className="bg-[var(--color-bg)] p-3 rounded-lg border border-[var(--color-border)]"
-                  >
-                    <div className="flex justify-between items-start mb-1">
-                      <span className="text-[11px] font-semibold text-white">
-                        {item.topic}
-                      </span>
-                      <span className="text-[9px] px-1.5 py-0.5 bg-[var(--color-surface-hover)] rounded text-[var(--color-text-muted)]">
-                        {item.actor}
-                      </span>
-                    </div>
-                    <p className="text-[10px] text-[var(--color-text-muted)] leading-relaxed">
-                      {item.summary}
-                    </p>
-                  </motion.div>
-                ))}
-              </div>
-            </div>
-          )}
       </div>
 
       {/* ─── CASE SUMMARY MODAL ─── */}
