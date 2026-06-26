@@ -1,5 +1,11 @@
 # CONCORDIA — Real-Time AI Mediation Platform
 
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](package.json)
+[![Next.js](https://img.shields.io/badge/Next.js-App%20Router-000000?logo=nextdotjs)](next.config.mjs)
+![Gemini Live](https://img.shields.io/badge/Gemini-Live%20Audio-4285F4)
+![Deploy](https://img.shields.io/badge/deploy-Cloud%20Run-4285F4)
+![Status](https://img.shields.io/badge/status-hackathon%20prototype-yellow)
+
 > **CONCORDIA by TACITUS** is a hackathon prototype for real-time voice AI mediation. It decomposes conflict into a typed ontology, applies structured resolution frameworks, detects affective signals from voice, and guides parties toward a draft settlement workflow.
 
 Built for the Google Gemini API Developer Competition by **Giulio Catanzariti** — [TACITUS](https://tacitus.me) — [hello@tacitus.me](mailto:hello@tacitus.me)
