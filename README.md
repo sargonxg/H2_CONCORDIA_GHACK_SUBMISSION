@@ -1,8 +1,17 @@
 # CONCORDIA — Real-Time AI Mediation Platform
 
-> **CONCORDIA by TACITUS◳** is the first real-time voice AI mediation platform that decomposes conflict into a typed ontology, applies 38 peer-reviewed resolution frameworks, detects emotion from vocal tone, and guides parties to resolution — producing a formal settlement agreement.
+> **CONCORDIA by TACITUS** is a hackathon prototype for real-time voice AI mediation. It decomposes conflict into a typed ontology, applies structured resolution frameworks, detects affective signals from voice, and guides parties toward a draft settlement workflow.
 
 Built for the Google Gemini API Developer Competition by **Giulio Catanzariti** — [TACITUS](https://tacitus.me) — [hello@tacitus.me](mailto:hello@tacitus.me)
+
+---
+
+## 30-Second Read
+
+- **What it is**: a Next.js and Cloud Run prototype for Gemini Live voice mediation.
+- **What it proves today**: real-time room orchestration, intake flow, document-assisted mediation context, ontology extraction, live graph UI, and agreement generation workflow.
+- **What it is not**: legal advice, a deployed mediation service, or a substitute for trained human mediators.
+- **Best place to start**: read [ARCHITECTURE.md](ARCHITECTURE.md), then inspect `server.ts`, `app/`, and `components/`.
 
 ---
 
