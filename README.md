@@ -1,5 +1,20 @@
 # CONCORDIA — voice-AI mediation prototype
 
+<!-- tacitus-practical-entry -->
+## Purpose, code and a playable introduction
+
+Explore a voice-assisted dialogue workspace that makes discussion context available for subsequent structured review.
+
+**Research prototype.** Hackathon/research prototype. Voice processing, realtime transport, consent and deployment configuration are separate from passing local unit tests; no mediation-outcome claim is made.
+
+[Setup, code walkthrough, research & verification](TACITUS_GUIDE.md) · [Play the original 8-bit teaching adventure](tacitus-demo/index.html) · [Demo credits](tacitus-demo/CREDITS.md)
+
+![The original House of Evidence teaching adventure; synthetic case, separate from this project’s runtime](tacitus-demo/mansion.png)
+
+Research: [RAG](https://arxiv.org/abs/2005.11401), [long-context evidence use](https://arxiv.org/abs/2307.03172), [GraphRAG](https://arxiv.org/abs/2404.16130). [What TACITUS borrows, adds and still needs to measure](https://github.com/sargonxg/sargonxg/blob/main/docs/RESEARCH_AND_DESIGN.md).
+<!-- /tacitus-practical-entry -->
+
+
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](package.json)
 [![Next.js](https://img.shields.io/badge/Next.js-App%20Router-000000?logo=nextdotjs)](next.config.mjs)
 ![Gemini](https://img.shields.io/badge/Gemini-Live%20Audio-4285F4)
